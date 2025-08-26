@@ -1,0 +1,48 @@
+{
+  "$schema": "https://cdn.statically.io/gh/nguyenngoclongdev/cdn/main/schema/v10/terminal-keeper.json",
+  "theme": "inkwell",
+  "active": "default",
+  "activateOnStartup": false,
+  "keepExistingTerminals": false,
+  "sessions": {
+    "default": [
+      {
+        "name": "Budget_App",
+        "autoExecuteCommands": false,
+        "icon": "person",
+        "color": "terminal.ansiGreen",
+        "commands": [
+          "bun --version"
+        ]
+      },
+      [
+        {
+          "name": "install",
+          "commands": [
+            "bun --version"
+          ]
+        },
+        {
+          "name": "server",
+          "commands": [
+            "bun --version"
+          ]
+        },
+        {
+          "name": "test",
+          "commands": [
+            "bun --version"
+          ]
+        }
+      ]
+    ],
+    "saved-session": [
+      {
+        "name": "Old_session",
+        "commands": [
+          "bun --version"
+        ]
+      }
+    ]
+  }
+}

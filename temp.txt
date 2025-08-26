@@ -1,0 +1,348 @@
+async processExcelFile(inputFilePath: string): Promise<ProcessingResult> {
+  const workbook = new ExcelJS.Workbook();
+  console.log("Reading Excel file:", inputFilePath);
+  await workbook.xlsx.readFile(inputFilePath);
+
+  if (workbook.worksheets.length === 0) {
+    throw new Error("No worksheets found in Excel file");
+  }
+  if (workbook.worksheets.length > 1) {
+    throw new Error("Excel file contains multiple worksheets; only one is allowed");
+  }
+
+  const worksheet = workbook.worksheets[0];
+  console.log("Worksheet loaded:", worksheet.name);
+
+  // Find column indices by header names
+  const headerRow = worksheet.getRow(1);
+  const requiredHeaders = ["id_fund", "id_trtype", "id_ihno", "id_path", "id_acno"];
+  const headerIndices: { [key: string]: number } = {};
+  headerRow.eachCell((cell, colNumber) => {
+    const header = cell.text.trim().toLowerCase();
+    if (requiredHeaders.includes(header)) {
+      headerIndices[header] = colNumber;
+    }
+  });
+
+  // Verify all required headers exist
+  const missingHeaders = requiredHeaders.filter(h => !(h in headerIndices));
+  if (missingHeaders.length > 0) {
+    throw new Error(`Missing required headers: ${missingHeaders.join(", ")}`);
+  }
+
+  let totalRows = 0;
+  let successfulRows = 0;
+  let errors = 0;
+  let notFound = 0;
+  const files: { row: number; sourcePath: string; destinationPath: string; pageCount: number }[] = [];
+  const processedRows: { id_fund: string; id_trtype: string; id_ihno: string; id_path: string; id_acno: string; page_count: string | number }[] = [];
+
+  const lastRow = worksheet.rowCount;
+  console.log("Total rows to process:", lastRow);
+
+  for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
+    const row = worksheet.getRow(rowNumber);
+    if (!row.getCell(headerIndices["id_fund"]).value) continue;
+
+    totalRows++;
+    console.log(`Processing row ${rowNumber}`);
+
+    try {
+      const serverId = row.getCell(headerIndices["id_acno"]).text.trim();
+      const pathVal = row.getCell(headerIndices["id_path"]).text.trim();
+      const folder = row.getCell(headerIndices["id_acno"]).text.trim();
+      const fund = row.getCell(headerIndices["id_fund"]).text.trim();
+      const ihNo = row.getCell(headerIndices["id_ihno"]).text.trim();
+      const trxnType = row.getCell(headerIndices["id_trtype"]).text.trim();
+      console.log(`Row ${rowNumber} data: serverId=${serverId}, pathVal=${pathVal}, folder=${folder}, fund=${fund}, ihNo=${ihNo}, trxnType=${trxnType}`);
+
+      if (!serverId || !pathVal) {
+        processedRows.push({
+          id_fund: fund,
+          id_trtype: trxnType,
+          id_ihno: ihNo,
+          id_path: pathVal,
+          id_acno: serverId,
+          page_count: "Missing Data",
+        });
+        errors++;
+        console.log(`Row ${rowNumber}: Missing data`);
+        continue;
+      }
+
+      const sourceFilePath = this.buildSourceFilePath(serverId, pathVal, folder);
+      console.log(`Row ${rowNumber}: Source file path: ${sourceFilePath}`);
+
+      const fileExt = this.getFileExtension(pathVal);
+      console.log(`Row ${rowNumber}: File extension: ${fileExt}`);
+
+      if (await fs.access(sourceFilePath).then(() => true).catch(() => false)) {
+        console.log(`Row ${rowNumber}: Reading file: ${sourceFilePath}`);
+        const sourceData = await fs.readFile(sourceFilePath);
+
+        const trxn = this.trxnMap[trxnType] || "Unknown";
+        let destinationFilePath: string;
+        try {
+          destinationFilePath = await this.buildDestinationFilePath(trxn, fund, ihNo, fileExt, rowNumber);
+        } catch (err) {
+          console.error(`Row ${rowNumber}: Path error:`, err);
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            id_path: pathVal,
+            id_acno: serverId,
+            page_count: "Path Error",
+          });
+          errors++;
+          continue;
+        }
+        console.log(`Row ${rowNumber}: Copying to: ${destinationFilePath}`);
+        await fs.writeFile(destinationFilePath, sourceData);
+        console.log(`Row ${rowNumber}: Copied to: ${destinationFilePath}`);
+
+        let pageCount = 0;
+        try {
+          pageCount = await this.getPageCount(sourceData, fileExt, rowNumber);
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            id_path: pathVal,
+            id_acno: serverId,
+            page_count: pageCount,
+          });
+          successfulRows++;
+          console.log(`✅ Row ${rowNumber}: ${pageCount} pages`);
+          files.push({ row: rowNumber, sourcePath: sourceFilePath, destinationPath: destinationFilePath, pageCount });
+        } catch (err) {
+          console.error(`Row ${rowNumber}: Page count error:`, err);
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            id_path: pathVal,
+            id_acno: serverId,
+            page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
+          });
+          errors++;
+          continue;
+        }
+      } else {
+        console.log(`File not found: ${sourceFilePath}`);
+        processedRows.push({
+          id_fund: fund,
+          id_trtype: trxnType,
+          id_ihno: ihNo,
+          id_path: pathVal,
+          id_acno: serverId,
+          page_count: "Not Found",
+        });
+        notFound++;
+      }
+    } catch (err) {
+      console.error(`Error processing row ${rowNumber}:`, err);
+      processedRows.push({
+        id_fund: row.getCell(headerIndices["id_fund"]).text.trim(),
+        id_trtype: row.getCell(headerIndices["id_trtype"]).text.trim(),
+        id_ihno: row.getCell(headerIndices["id_ihno"]).text.trim(),
+        id_path: row.getCell(headerIndices["id_path"]).text.trim(),
+        id_acno: row.getCell(headerIndices["id_acno"]).text.trim(),
+        page_count: "Error",
+      });
+      errors++;
+    }
+  }
+
+  // Create new CSV workbook
+  const csvWorkbook = new ExcelJS.Workbook();
+  const csvWorksheet = csvWorkbook.addWorksheet("Processed");
+  csvWorksheet.columns = [
+    { header: "id_fund", key: "id_fund" },
+    { header: "id_trtype", key: "id_trtype" },
+    { header: "id_ihno", key: "id_ihno" },
+    { header: "id_path", key: "id_path" },
+    { header: "id_acno", key: "id_acno" },
+    { header: "page_count", key: "page_count" },
+  ];
+
+  // Add processed rows to CSV worksheet
+  processedRows.forEach(row => {
+    csvWorksheet.addRow(row);
+  });
+
+  console.log("Finished processing rows");
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const outputFileName = `processed_${timestamp}.csv`;
+  const outputPath = path.join("processed", outputFileName);
+  console.log(`Saving processed file to: ${outputPath}`);
+  const csvBuffer = await csvWorkbook.csv.writeBuffer();
+  await fs.writeFile(outputPath, csvBuffer);
+  console.log("Processed file saved");
+
+  console.log("Deleting input file:", inputFilePath);
+  await fs.unlink(inputFilePath);
+  console.log("Input file deleted");
+
+  console.log("Returning result");
+  return {
+    outputFileName,
+    summary: { totalRows, successfulRows, errors, notFound },
+    files,
+  };
+}
+
+
+
+  async processExcelFile(inputFilePath: string): Promise<ProcessingResult> {
+    const workbook = new ExcelJS.Workbook();
+    console.log("Reading Excel file:", inputFilePath);
+    await workbook.xlsx.readFile(inputFilePath);
+
+    if (workbook.worksheets.length === 0) {
+      throw new Error("No worksheets found in Excel file");
+    }
+    if (workbook.worksheets.length > 1) {
+      throw new Error(
+        "Excel file contains multiple worksheets; only one is allowed"
+      );
+    }
+
+    const worksheet = workbook.worksheets[0];
+    console.log("Worksheet loaded:", worksheet.name);
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.getCell(24).value = "page_count";
+    headerRow.commit();
+
+    let totalRows = 0;
+    let successfulRows = 0;
+    let errors = 0;
+    let notFound = 0;
+    const files: {
+      row: number;
+      sourcePath: string;
+      destinationPath: string;
+      pageCount: number;
+    }[] = [];
+
+    const lastRow = worksheet.rowCount;
+    console.log("Total rows to process:", lastRow);
+
+    for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+      if (!row.getCell(1).value) continue;
+
+      totalRows++;
+      console.log(`Processing row ${rowNumber}`);
+
+      try {
+        const serverId = row.getCell(15).text.trim();
+        const pathVal = row.getCell(7).text.trim();
+        const folder = row.getCell(16).text.trim();
+        const fund = row.getCell(1).text.trim();
+        const ihNo = row.getCell(5).text.trim();
+        const trxnType = row.getCell(4).text.trim();
+        console.log(
+          `Row ${rowNumber} data: serverId=${serverId}, pathVal=${pathVal}, folder=${folder}, fund=${fund}, ihNo=${ihNo}, trxnType=${trxnType}`
+        );
+
+        if (!serverId || !pathVal) {
+          row.getCell(24).value = "Missing Data";
+          errors++;
+          console.log(`Row ${rowNumber}: Missing data`);
+          continue;
+        }
+
+        const sourceFilePath = this.buildSourceFilePath(
+          serverId,
+          pathVal,
+          folder
+        );
+        console.log(`Row ${rowNumber}: Source file path: ${sourceFilePath}`);
+
+        const fileExt = this.getFileExtension(pathVal);
+        console.log(`Row ${rowNumber}: File extension: ${fileExt}`);
+
+        if (
+          await fs
+            .access(sourceFilePath)
+            .then(() => true)
+            .catch(() => false)
+        ) {
+          console.log(`Row ${rowNumber}: Reading file: ${sourceFilePath}`);
+          const sourceData = await fs.readFile(sourceFilePath);
+
+          const trxn = this.trxnMap[trxnType] || "Unknown";
+          let destinationFilePath: string;
+          try {
+            destinationFilePath = await this.buildDestinationFilePath(
+              trxn,
+              fund,
+              ihNo,
+              fileExt,
+              rowNumber
+            );
+          } catch (err) {
+            console.error(`Row ${rowNumber}: Path error:`, err);
+            row.getCell(24).value = "Path Error";
+            errors++;
+            continue;
+          }
+          console.log(`Row ${rowNumber}: Copying to: ${destinationFilePath}`);
+          await fs.writeFile(destinationFilePath, sourceData);
+          console.log(`Row ${rowNumber}: Copied to: ${destinationFilePath}`);
+
+          let pageCount = 0;
+          try {
+            pageCount = await this.getPageCount(sourceData, fileExt, rowNumber);
+            row.getCell(24).value = pageCount;
+            successfulRows++;
+            console.log(`✅ Row ${rowNumber}: ${pageCount} pages`);
+            files.push({
+              row: rowNumber,
+              sourcePath: sourceFilePath,
+              destinationPath: destinationFilePath,
+              pageCount,
+            });
+          } catch (err) {
+            console.error(`Row ${rowNumber}: Page count error:`, err);
+            row.getCell(24).value =
+              fileExt === ".pdf" ? "PDF Error" : "Unsupported";
+            errors++;
+            continue;
+          }
+        } else {
+          console.log(`File not found: ${sourceFilePath}`);
+          row.getCell(24).value = "Not Found";
+          notFound++;
+        }
+      } catch (err) {
+        console.error(`Error processing row ${rowNumber}:`, err);
+        row.getCell(24).value = "Error";
+        errors++;
+      }
+
+      row.commit();
+      console.log(`Row ${rowNumber}: Committed`);
+    }
+
+    console.log("Finished processing rows");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outputFileName = `processed_${timestamp}.csv`;
+    const outputPath = path.join("processed", outputFileName);
+    console.log(`Saving processed file to: ${outputPath}`);
+    await workbook.csv.writeFile(outputPath);
+    console.log("Processed file saved");
+
+    console.log(`Deleting input file: ${inputFilePath}`);
+    await fs.unlink(inputFilePath);
+    console.log("Input file deleted");
+
+    console.log("Returning result");
+    return {
+      outputFileName,
+      summary: { totalRows, successfulRows, errors, notFound },
+      files,
+    };
+  }

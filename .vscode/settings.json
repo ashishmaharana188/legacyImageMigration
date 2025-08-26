@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionWidget.includeNearbyQuickFixes": false,
+  "editor.codeActionWidget.showHeaders": false,
+  "editor.codeLens": true,
+  "workbench.localHistory.enabled": false,
+  "workbench.startupEditor": "none",
+  "workbench.editor.restoreViewState": false
+}

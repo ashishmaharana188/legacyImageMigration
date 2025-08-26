@@ -1,0 +1,137 @@
+{"inputFilePath":"uploads\\excel-1756201897182-131567834.xlsx","level":"info","message":"Reading Excel file:"}
+{"level":"info","message":"Worksheet loaded:","name":"Sheet1"}
+{"lastRow":4,"level":"info","message":"Total rows to process:"}
+{"level":"info","message":"Processing row 2"}
+{"drivePath":"\\plaza_63\\","folder":"\\plaza_63\\","fund":"142","ihNo":"2711954","image":"image","level":"info","message":"Row 2 data","pathVal":"image\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF","serverId":"\\\\10.41.14.52","trxnType":"NCT"}
+{"level":"info","message":"Row 2: Source file path: \\\\10.41.14.52\\\\plaza_63\\\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF"}
+{"level":"info","message":"Row 2: File extension: .tif"}
+{"level":"info","message":"Row 2: Reading file: \\\\10.41.14.52\\\\plaza_63\\\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF"}
+{"level":"info","message":"Row 2: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 2: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954"}
+{"level":"info","message":"Row 2: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954.tif"}
+{"level":"info","message":"Row 2: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954.tif"}
+{"level":"info","message":"Row 2: Processing TIFF"}
+{"level":"info","message":"Row 2: 14 pages"}
+{"level":"info","message":"Processing row 3"}
+{"drivePath":"\\plaza_60\\","folder":"\\plaza_60\\","fund":"142","ihNo":"2689373","image":"image","level":"info","message":"Row 3 data","pathVal":"image\\142\\NCT\\02-2024\\1-10000\\121422689373.tif","serverId":"\\\\10.41.14.52","trxnType":"NCT"}
+{"level":"info","message":"Row 3: Source file path: \\\\10.41.14.52\\\\plaza_60\\\\142\\NCT\\02-2024\\1-10000\\121422689373.tif"}
+{"level":"info","message":"Row 3: File extension: .tif"}
+{"level":"info","message":"Row 3: Reading file: \\\\10.41.14.52\\\\plaza_60\\\\142\\NCT\\02-2024\\1-10000\\121422689373.tif"}
+{"level":"info","message":"Row 3: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 3: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373"}
+{"level":"info","message":"Row 3: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373.tif"}
+{"level":"info","message":"Row 3: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373.tif"}
+{"level":"info","message":"Row 3: Processing TIFF"}
+{"level":"info","message":"Row 3: 12 pages"}
+{"level":"info","message":"Processing row 4"}
+{"drivePath":"\\Plaza_56\\","folder":"\\Plaza_56\\","fund":"142","ihNo":"2674561","image":"image","level":"info","message":"Row 4 data","pathVal":"image\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif","serverId":"\\\\10.41.14.50","trxnType":"NEW"}
+{"level":"info","message":"Row 4: Source file path: \\\\10.41.14.50\\\\Plaza_56\\\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif"}
+{"level":"info","message":"Row 4: File extension: .tif"}
+{"level":"info","message":"Row 4: Reading file: \\\\10.41.14.50\\\\Plaza_56\\\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif"}
+{"level":"info","message":"Row 4: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 4: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561"}
+{"level":"info","message":"Row 4: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561.tif"}
+{"level":"info","message":"Row 4: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561.tif"}
+{"level":"info","message":"Row 4: Processing TIFF"}
+{"level":"info","message":"Row 4: 47 pages"}
+{"level":"info","message":"Finished processing rows"}
+{"level":"info","message":"Saving processed file to: processed\\processed_2025-08-26T09-51-44-476Z.csv"}
+{"level":"info","message":"Processed file saved"}
+{"inputFilePath":"uploads\\excel-1756201897182-131567834.xlsx","level":"info","message":"Deleting input file:"}
+{"level":"info","message":"Input file deleted"}
+{"level":"info","message":"Generated multi-row SQL","sql":"INSERT INTO investor.aif_document_details(\n      document_process, document_activity, document_type, document_format, document_path,\n      folio_id, transaction_reference_id, document_status, mime_type,\n      user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,\n      user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,\n      approval_status, approved_by, approved_on, comments, audit_code,\n      del_flag, last_update_tms, last_updated_by, creation_date, created_by,\n      page_count, client_id\n     ) VALUES (\n          'NCT', 'Image Upload', 'NCT Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2711954/CLIENT_CODE_142_TRANSACTION_NUMBER_2711954..tif',\n          null, '2711954', 'A', 'application/octet-stream',\n          null, '2711954', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          14, 495250\n         ), (\n          'NCT', 'Image Upload', 'NCT Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2689373/CLIENT_CODE_142_TRANSACTION_NUMBER_2689373..tif',\n          null, '2689373', 'A', 'application/octet-stream',\n          null, '2689373', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          12, 495250\n         ), (\n          'IC', 'Image Upload', 'New Application Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2674561/CLIENT_CODE_142_TRANSACTION_NUMBER_2674561..tif',\n          null, '2674561', 'A', 'application/octet-stream',\n          null, '2674561', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          47, 495250\n         );"}
+{"level":"info","message":"Generated multi-row SQL","sql":"INSERT INTO investor.aif_document_details(\n      document_process, document_activity, document_type, document_format, document_path,\n      folio_id, transaction_reference_id, document_status, mime_type,\n      user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,\n      user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,\n      approval_status, approved_by, approved_on, comments, audit_code,\n      del_flag, last_update_tms, last_updated_by, creation_date, created_by,\n      page_count, client_id\n     ) VALUES (\n          'NCT', 'Image Upload', 'NCT Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2711954/CLIENT_CODE_142_TRANSACTION_NUMBER_2711954..tif',\n          null, '2711954', 'A', 'application/octet-stream',\n          null, '2711954', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          14, 495250\n         ), (\n          'NCT', 'Image Upload', 'NCT Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2689373/CLIENT_CODE_142_TRANSACTION_NUMBER_2689373..tif',\n          null, '2689373', 'A', 'application/octet-stream',\n          null, '2689373', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          12, 495250\n         ), (\n          'IC', 'Image Upload', 'New Application Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2674561/CLIENT_CODE_142_TRANSACTION_NUMBER_2674561..tif',\n          null, '2674561', 'A', 'application/octet-stream',\n          null, '2674561', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          47, 495250\n         );"}
+{"level":"info","message":"Connected to database"}
+{"level":"info","message":"SQL executed successfully"}
+{"level":"info","message":"Database connection released"}
+{"level":"info","message":"Starting updateFolioAndTransaction"}
+{"level":"info","message":"Generated multi-row SQL","sql":"INSERT INTO investor.aif_document_details(\n      document_process, document_activity, document_type, document_format, document_path,\n      folio_id, transaction_reference_id, document_status, mime_type,\n      user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,\n      user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,\n      approval_status, approved_by, approved_on, comments, audit_code,\n      del_flag, last_update_tms, last_updated_by, creation_date, created_by,\n      page_count, client_id\n     ) VALUES (\n          'NCT', 'Image Upload', 'NCT Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2711954/CLIENT_CODE_142_TRANSACTION_NUMBER_2711954..tif',\n          null, '2711954', 'A', 'application/octet-stream',\n          null, '2711954', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          14, 495250\n         ), (\n          'NCT', 'Image Upload', 'NCT Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2689373/CLIENT_CODE_142_TRANSACTION_NUMBER_2689373..tif',\n          null, '2689373', 'A', 'application/octet-stream',\n          null, '2689373', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          12, 495250\n         ), (\n          'IC', 'Image Upload', 'New Application Form', '.TIF', 'aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_142/CLIENT_CODE_142_TRANSACTION_NUMBER_2674561/CLIENT_CODE_142_TRANSACTION_NUMBER_2674561..tif',\n          null, '2674561', 'A', 'application/octet-stream',\n          null, '2674561', '9106924605', null, null,\n          null, null, null, null, null,\n          null, null, null, null, null,\n          false, now(), 'system', now(), 'system',\n          47, 495250\n         );"}
+{"level":"info","message":"Connected to database for folio update"}
+{"level":"info","message":"Deleted from temp_images_1"}
+{"level":"info","message":"Inserted 4 rows into temp_images_1"}
+{"level":"info","message":"Updated 3 folio_id rows"}
+{"level":"info","message":"Updated 1 transaction_reference_id rows"}
+{"level":"info","message":"Folio and transaction updates completed"}
+{"level":"info","message":"Database connection released"}
+{"inputFilePath":"uploads\\excel-1756202187622-464269061.xlsx","level":"info","message":"Reading Excel file:"}
+{"level":"info","message":"Worksheet loaded:","name":"Sheet1"}
+{"lastRow":4,"level":"info","message":"Total rows to process:"}
+{"level":"info","message":"Processing row 2"}
+{"drivePath":"\\plaza_63\\","folder":"\\plaza_63\\","fund":"142","ihNo":"2711954","image":"image","level":"info","message":"Row 2 data","pathVal":"image\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF","serverId":"\\\\10.41.14.52","trxnType":"NCT"}
+{"level":"info","message":"Row 2: Source file path: \\\\10.41.14.52\\\\plaza_63\\\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF"}
+{"level":"info","message":"Row 2: File extension: .tif"}
+{"level":"info","message":"Row 2: Reading file: \\\\10.41.14.52\\\\plaza_63\\\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF"}
+{"level":"info","message":"Row 2: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 2: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954"}
+{"level":"info","message":"Row 2: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954.tif"}
+{"level":"info","message":"Row 2: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954.tif"}
+{"level":"info","message":"Row 2: Processing TIFF"}
+{"level":"info","message":"Row 2: 14 pages"}
+{"level":"info","message":"Processing row 3"}
+{"drivePath":"\\plaza_60\\","folder":"\\plaza_60\\","fund":"142","ihNo":"2689373","image":"image","level":"info","message":"Row 3 data","pathVal":"image\\142\\NCT\\02-2024\\1-10000\\121422689373.tif","serverId":"\\\\10.41.14.52","trxnType":"NCT"}
+{"level":"info","message":"Row 3: Source file path: \\\\10.41.14.52\\\\plaza_60\\\\142\\NCT\\02-2024\\1-10000\\121422689373.tif"}
+{"level":"info","message":"Row 3: File extension: .tif"}
+{"level":"info","message":"Row 3: Reading file: \\\\10.41.14.52\\\\plaza_60\\\\142\\NCT\\02-2024\\1-10000\\121422689373.tif"}
+{"level":"info","message":"Row 3: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 3: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373"}
+{"level":"info","message":"Row 3: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373.tif"}
+{"level":"info","message":"Row 3: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373.tif"}
+{"level":"info","message":"Row 3: Processing TIFF"}
+{"level":"info","message":"Row 3: 12 pages"}
+{"level":"info","message":"Processing row 4"}
+{"drivePath":"\\Plaza_56\\","folder":"\\Plaza_56\\","fund":"142","ihNo":"2674561","image":"image","level":"info","message":"Row 4 data","pathVal":"image\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif","serverId":"\\\\10.41.14.50","trxnType":"NEW"}
+{"level":"info","message":"Row 4: Source file path: \\\\10.41.14.50\\\\Plaza_56\\\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif"}
+{"level":"info","message":"Row 4: File extension: .tif"}
+{"level":"info","message":"Row 4: Reading file: \\\\10.41.14.50\\\\Plaza_56\\\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif"}
+{"level":"info","message":"Row 4: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 4: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561"}
+{"level":"info","message":"Row 4: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561.tif"}
+{"level":"info","message":"Row 4: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561.tif"}
+{"level":"info","message":"Row 4: Processing TIFF"}
+{"level":"info","message":"Row 4: 47 pages"}
+{"level":"info","message":"Finished processing rows"}
+{"level":"info","message":"Saving processed file to: processed\\processed_2025-08-26T09-56-37-338Z.csv"}
+{"level":"info","message":"Processed file saved"}
+{"inputFilePath":"uploads\\excel-1756202187622-464269061.xlsx","level":"info","message":"Deleting input file:"}
+{"level":"info","message":"Input file deleted"}
+{"inputFilePath":"uploads\\excel-1756202229437-900726393.xlsx","level":"info","message":"Reading Excel file:"}
+{"level":"info","message":"Worksheet loaded:","name":"Sheet1"}
+{"lastRow":4,"level":"info","message":"Total rows to process:"}
+{"level":"info","message":"Processing row 2"}
+{"drivePath":"\\plaza_63\\","folder":"\\plaza_63\\","fund":"142","ihNo":"2711954","image":"image","level":"info","message":"Row 2 data","pathVal":"image\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF","serverId":"\\\\10.41.14.52","trxnType":"NCT"}
+{"level":"info","message":"Row 2: Source file path: \\\\10.41.14.52\\\\plaza_63\\\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF"}
+{"level":"info","message":"Row 2: File extension: .tif"}
+{"level":"info","message":"Row 2: Reading file: \\\\10.41.14.52\\\\plaza_63\\\\142\\NCT\\06-2025\\1-10000\\121422711954.TIF"}
+{"level":"info","message":"Row 2: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 2: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954"}
+{"level":"info","message":"Row 2: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954.tif"}
+{"level":"info","message":"Row 2: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954\\CLIENT_CODE_142_TRANSACTION_NUMBER_2711954.tif"}
+{"level":"info","message":"Row 2: Processing TIFF"}
+{"level":"info","message":"Row 2: 14 pages"}
+{"level":"info","message":"Processing row 3"}
+{"drivePath":"\\plaza_60\\","folder":"\\plaza_60\\","fund":"142","ihNo":"2689373","image":"image","level":"info","message":"Row 3 data","pathVal":"image\\142\\NCT\\02-2024\\1-10000\\121422689373.tif","serverId":"\\\\10.41.14.52","trxnType":"NCT"}
+{"level":"info","message":"Row 3: Source file path: \\\\10.41.14.52\\\\plaza_60\\\\142\\NCT\\02-2024\\1-10000\\121422689373.tif"}
+{"level":"info","message":"Row 3: File extension: .tif"}
+{"level":"info","message":"Row 3: Reading file: \\\\10.41.14.52\\\\plaza_60\\\\142\\NCT\\02-2024\\1-10000\\121422689373.tif"}
+{"level":"info","message":"Row 3: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 3: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373"}
+{"level":"info","message":"Row 3: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373.tif"}
+{"level":"info","message":"Row 3: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373\\CLIENT_CODE_142_TRANSACTION_NUMBER_2689373.tif"}
+{"level":"info","message":"Row 3: Processing TIFF"}
+{"level":"info","message":"Row 3: 12 pages"}
+{"level":"info","message":"Processing row 4"}
+{"drivePath":"\\Plaza_56\\","folder":"\\Plaza_56\\","fund":"142","ihNo":"2674561","image":"image","level":"info","message":"Row 4 data","pathVal":"image\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif","serverId":"\\\\10.41.14.50","trxnType":"NEW"}
+{"level":"info","message":"Row 4: Source file path: \\\\10.41.14.50\\\\Plaza_56\\\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif"}
+{"level":"info","message":"Row 4: File extension: .tif"}
+{"level":"info","message":"Row 4: Reading file: \\\\10.41.14.50\\\\Plaza_56\\\\142\\APPLICATIONS\\06-2022\\1-10000\\101422674561.tif"}
+{"level":"info","message":"Row 4: Creating clientPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142"}
+{"level":"info","message":"Row 4: Creating fileFolderPath: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561"}
+{"level":"info","message":"Row 4: Copying to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561.tif"}
+{"level":"info","message":"Row 4: Copied to: D:\\LOCAL\\pdf-processor-backend\\output\\CLIENT_CODE_142\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561\\CLIENT_CODE_142_TRANSACTION_NUMBER_2674561.tif"}
+{"level":"info","message":"Row 4: Processing TIFF"}
+{"level":"info","message":"Row 4: 47 pages"}
+{"level":"info","message":"Finished processing rows"}
+{"level":"info","message":"Saving processed file to: processed\\processed_2025-08-26T09-57-15-477Z.csv"}
+{"level":"info","message":"Processed file saved"}
+{"inputFilePath":"uploads\\excel-1756202229437-900726393.xlsx","level":"info","message":"Deleting input file:"}
+{"level":"info","message":"Input file deleted"}
