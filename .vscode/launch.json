@@ -5,7 +5,7 @@
       "name": "Launch chrome with Custom Directory",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:5173", // Your app URL or server address
+      "url": "http://localhost:5174", // Your app URL or server address
       "webRoot": "${workspaceFolder}",
       "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
     }

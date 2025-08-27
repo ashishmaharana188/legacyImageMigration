@@ -1,60 +1,40 @@
 {
-  "name": "pdf-processor-backend",
+  "name": "pdf-processor",
   "version": "1.0.0",
-  "type": "module",
-  "main": "index.js",
+  "description": "PDF processor full-stack application - monorepo",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "build": "tsc -b && vite build",
-    "start": "node dist/app.js",
-    "dev": "concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
-    "clean": "rm -rf dist",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "install:all": "npm install",
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "dev:frontend": "npm run dev --workspace=frontend",
+    "dev:backend": "npm run dev --workspace=backend",
+    "build": "npm run build:backend && npm run build:frontend",
+    "build:frontend": "npm run build --workspace=frontend",
+    "build:backend": "npm run build --workspace=backend",
+    "start": "npm run start --workspace=backend",
+    "clean": "npm run clean --workspace=backend",
+    "lint": "npm run lint --workspace=frontend && npm run lint --workspace=backend",
+    "test": "npm run test --workspace=frontend && npm run test --workspace=backend"
   },
-  "keywords": [],
+  "keywords": [
+    "pdf",
+    "processor",
+    "react",
+    "node",
+    "express",
+    "typescript"
+  ],
   "author": "",
   "license": "ISC",
-  "description": "",
-  "dependencies": {
-    "cors": "^2.8.5",
-    "dotenv": "^17.2.1",
-    "exceljs": "^4.4.0",
-    "express": "^5.1.0",
-    "multer": "^2.0.2",
-    "p-limit": "^7.0.0",
-    "pdf-lib": "^1.17.1",
-    "pg": "^8.16.3",
-    "sharp": "^0.34.3",
-    "utif": "^3.1.0",
-    "winston": "^3.17.0",
-    "axios": "^1.11.0",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
-  },
   "devDependencies": {
-    "@types/cors": "^2.8.19",
-    "@types/express": "^5.0.3",
-    "@types/multer": "^2.0.0",
-    "@types/node": "^24.3.0",
-    "@types/pg": "^8.15.5",
-    "@types/utif": "^3.0.5",
-    "@types/winston": "^2.4.4",
-    "concurrently": "^9.2.0",
-    "nodemon": "^3.1.10",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.2",
-    "typescript-eslint": "^8.39.1",
-    "vite": "^7.1.2",
-    "@eslint/js": "^9.33.0",
-    "@tailwindcss/cli": "^4.1.12",
-    "@tailwindcss/vite": "^4.1.12",
-    "@types/react": "^19.1.10",
-    "@types/react-dom": "^19.1.7",
-    "@vitejs/plugin-react": "^5.0.0",
-    "eslint": "^9.33.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.20",
-    "globals": "^16.3.0",
-    "tailwindcss": "^4.1.12"
+    "concurrently": "^9.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
   }
 }

@@ -1,0 +1,30 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "outDir": "./dist",
+    "rootDir": "./",
+    "composite": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./*"],
+      "@/controllers/*": ["./controllers/*"],
+      "@/services/*": ["./services/*"],
+      "@/utils/*": ["./utils/*"]
+    }
+  },
+  "include": [
+    "./**/*.ts",
+    "./controllers/**/*.ts",
+    "./services/**/*.ts",
+    "./app.ts"
+  ],
+  "exclude": ["node_modules", "dist", "../frontend"]
+}
