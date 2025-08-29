@@ -5,9 +5,36 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import pLimit from "p-limit";
 import winston from "winston";
+import { exec } from "child_process";
+import util from "util";
 
 interface SplitResult {
   splitFiles: { originalPath: string; splitPath: string; page: number }[];
+}
+
+const execPromise = util.promisify(exec);
+
+async function runPythonFallback(
+  filePath: string,
+  outputFolderPath: string,
+  fileName: string,
+  logger: winston.Logger
+) {
+  const pythonScript =
+    "D:/LOCAL/pdf-processor-backend/backend/services/fallBackSplit.py";
+  try {
+    const pythonPath =
+      "C:/Users/2009226/AppData/Local/Programs/Python/Python313/python.exe";
+    const { stdout, stderr } = await execPromise(
+      `"${pythonPath}" "${pythonScript}" "${filePath}" "${outputFolderPath}"`
+    );
+    logger.info(`Python fallback succeeded for ${fileName}`, { stdout });
+    if (stderr)
+      logger.warn(`Python fallback stderr for ${fileName}`, { stderr });
+  } catch (error) {
+    logger.error(`Python fallback failed for ${fileName}`, { error });
+    throw error;
+  }
 }
 
 export class Splitting {
@@ -135,6 +162,20 @@ export class Splitting {
                   this.logger.error(`Error processing ${fileName}`, {
                     error: err,
                   });
+
+                  try {
+                    await runPythonFallback(
+                      filePath,
+                      outputFolderPath,
+                      fileName,
+                      this.logger
+                    );
+                    // Optionally scan outputFolderPath and push results to splitFiles
+                  } catch (fallbackErr) {
+                    this.logger.error(`Fallback also failed for ${fileName}`, {
+                      error: fallbackErr,
+                    });
+                  }
                 }
               }
             })

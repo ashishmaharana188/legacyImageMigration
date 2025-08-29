@@ -1,157 +1,429 @@
-async executeSql(): Promise<{ result: string; logs: SqlLog[] }> {
-  const logs: SqlLog[] = [];
-  let client: PoolClient | null = null;
-  
-  try {
-    const { transactions, logs: generateLogs } = await this.generateSql();
-    logs.push(...generateLogs);
-    
-    if (!transactions.length) {
-      logs.push({
-        row: 0,
-        status: "error",
-        message: "No transactions to execute",
-      });
-      return { result: "failed", logs };
+// pdfProcessing.ts
+import ExcelJS from "exceljs";
+import fs from "fs/promises";
+import path from "path";
+import sharp from "sharp";
+import { PDFDocument } from "pdf-lib";
+import winston from "winston";
+import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import dotenv from "dotenv";
+dotenv.config();
+
+interface ProcessingResult {
+  outputFileName: string;
+  summary: {
+    totalRows: number;
+    successfulRows: number;
+    errors: number;
+    notFound: number;
+  };
+  files: {
+    row: number;
+    sourcePath: string;
+    destinationPath: string;
+    pageCount: number;
+  }[];
+}
+
+console.log("Access Key:", !!process.env.aws_access_key_id);
+console.log("Secret Key:", !!process.env.aws_secret_access_key);
+
+const s3 = new S3Client({
+  region: "ap-south-1", // e.g., "ap-south-1"
+  credentials: {
+    accessKeyId: process.env.aws_access_key_id!,
+    secretAccessKey: process.env.aws_secret_access_key!,
+  },
+});
+
+export class PdfProcessing {
+  private readonly trxnMap: Record<string, string> = {
+    NEW: "IC",
+    NCT: "NCT",
+    RED: "RED",
+    FUL: "RED",
+    IPO: "IOBI",
+    SIN: "IOBIS",
+    SWOP: "SWP",
+    SWOF: "SWP",
+  };
+
+  private readonly baseFolder = "Data/APPLICATION_FORMS"; // omit s3:// and bucket name here
+  private readonly logger = winston.createLogger({
+    level: "info",
+    format: winston.format.json(),
+    transports: [
+      new winston.transports.File({
+        filename: "logs/error.log",
+        level: "error",
+      }),
+      new winston.transports.File({ filename: "logs/combined.log" }),
+    ],
+  });
+
+  private getFileExtension(filePath: string): string {
+    return filePath ? path.extname(filePath).toLowerCase() : "";
+  }
+
+  private async buildDestinationS3FilePath(
+    trxn: string,
+    fund: string,
+    ihNo: string,
+    fileExt: string,
+    rowNumber: number
+  ): Promise<string> {
+    if (!fund || !ihNo || /[<>:"|?*]/.test(fund) || /[<>:"|?*]/.test(ihNo)) {
+      throw new Error(`Invalid fund (${fund}) or ihNo (${ihNo}) for S3 key`);
     }
-    
-    client = await this.pool.connect();
-    this.logger.info("Connected to database");
-    await client.query("BEGIN");
-    
-    // Check if transaction_reference_id already exists in database
-    const checkExistingQuery = `
-      SELECT transaction_reference_id 
-      FROM investor.aif_document_details 
-      WHERE transaction_reference_id = $1 
-      LIMIT 1
-    `;
-    
-    // Insert query
-    const insertQuery = `
-      INSERT INTO investor.aif_document_details(
-        document_process, document_activity, document_type, document_format, document_path,
-        folio_id, transaction_reference_id, document_status, mime_type,
-        user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,
-        user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
-        approval_status, approved_by, approved_on, comments, audit_code,
-        del_flag, last_update_tms, last_updated_by, creation_date, created_by,
-        page_count, client_id
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
-    `;
-    
-    for (const [index, data] of transactions.entries()) {
-      const ext = this.getFileExtension(data.id_path);
-      if (!ext) {
-        logs.push({
-          row: index + 2,
-          status: "error",
-          message: "Invalid file extension",
-        });
+
+    const clientPath =
+      trxn === "DD"
+        ? `${this.baseFolder}/${trxn}/CLIENT_CODE_${fund}`
+        : `${this.baseFolder}/CLIENT_CODE_${fund}`;
+
+    const fileFolderPath =
+      trxn === "DD"
+        ? `${clientPath}/CLIENT_CODE_${fund}_BATCH_NUMBER_${ihNo}`
+        : `${clientPath}/CLIENT_CODE_${fund}_TRANSACTION_NUMBER_${ihNo}`;
+
+    const fileName = `CLIENT_CODE_${fund}_${
+      trxn === "DD" ? "BATCH" : "TRANSACTION"
+    }_NUMBER_${ihNo}${fileExt}`;
+
+    const fullS3Key = `${fileFolderPath}/${fileName}`;
+
+    this.logger.info(`Row ${rowNumber}: Generated S3 key: ${fullS3Key}`);
+
+    return fullS3Key;
+  }
+
+  async processExcelFile(inputFilePath: string): Promise<ProcessingResult> {
+    this.logger.info(`Entered processExcelFile with path: ${inputFilePath}`);
+    const workbook = new ExcelJS.Workbook();
+    this.logger.info("Reading Excel file:", { inputFilePath });
+    await workbook.xlsx.readFile(inputFilePath);
+
+    if (workbook.worksheets.length === 0) {
+      throw new Error("No worksheets found in Excel file");
+    }
+    if (workbook.worksheets.length > 1) {
+      throw new Error(
+        "Excel file contains multiple worksheets; only one is allowed"
+      );
+    }
+
+    const worksheet = workbook.worksheets[0];
+    this.logger.info("Worksheet loaded:", { name: worksheet.name });
+
+    const headerRow = worksheet.getRow(1);
+    const requiredHeaders = [
+      "id_fund",
+      "id_trtype",
+      "id_ihno",
+      "id_path",
+      "id_acno",
+      "id_serverip",
+      "id_drivepath",
+    ];
+    const headerIndices: { [key: string]: number } = {};
+    headerRow.eachCell((cell, colNumber) => {
+      const header = cell.text?.trim().toLowerCase();
+      if (header && requiredHeaders.includes(header)) {
+        headerIndices[header] = colNumber;
+      }
+    });
+
+    const missingHeaders = requiredHeaders.filter((h) => !(h in headerIndices));
+    if (missingHeaders.length > 0) {
+      throw new Error(`Missing required headers: ${missingHeaders.join(", ")}`);
+    }
+
+    let totalRows = 0;
+    let successfulRows = 0;
+    let errors = 0;
+    let notFound = 0;
+    const files: {
+      row: number;
+      sourcePath: string;
+      destinationPath: string;
+      pageCount: number;
+    }[] = [];
+    const processedRows: {
+      id_fund: string;
+      id_trtype: string;
+      id_ihno: string;
+      image: string;
+      id_path: string;
+      id_acno: string;
+      page_count: string | number;
+    }[] = [];
+
+    const lastRow = worksheet.rowCount;
+    this.logger.info("Total rows to process:", { lastRow });
+
+    for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
+      const row = worksheet.getRow(rowNumber);
+      if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value) {
+        this.logger.info(`Row ${rowNumber}: Empty or invalid row, skipping`);
         continue;
       }
-      
-      const format = ext.toUpperCase();
-      const clientId = String(data.id_fund)
-        .split("")
-        .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
-        .join("");
-      
-      const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-      const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}.${ext}`;
-      
-      const folioId = data.id_fund; 
-      const incomingTransactionId = data.id_ihno.toString(); // ← Clearer naming
-      
+
+      totalRows++;
+      this.logger.info(`Processing row ${rowNumber}`);
+
       try {
-        // Check if this id_ihno already exists as transaction_reference_id
-        const existingResult = await client.query(checkExistingQuery, [incomingTransactionId]);
-        
-        if (existingResult.rows.length > 0) {
-          // This id_ihno already exists in transaction_reference_id column - skip
-          logs.push({
-            row: index + 2,
-            status: "skipped",
-            message: `Row ${index + 2} skipped - id_ihno ${incomingTransactionId} already exists in transaction_reference_id`,
+        const serverId =
+          row.getCell(headerIndices["id_serverip"]).text?.trim() || "";
+        const drivePath =
+          row.getCell(headerIndices["id_drivepath"]).text?.trim() || "";
+        const pathVal =
+          row.getCell(headerIndices["id_path"]).text?.trim() || "";
+        const folder =
+          row.getCell(headerIndices["id_drivepath"]).text?.trim() || "";
+        const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
+        const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
+        const trxnType =
+          row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
+        const image = pathVal.includes("image")
+          ? "image"
+          : pathVal.includes("common")
+          ? "common"
+          : "";
+        this.logger.info(`Row ${rowNumber} data`, {
+          serverId,
+          drivePath,
+          pathVal,
+          folder,
+          fund,
+          ihNo,
+          trxnType,
+          image,
+        });
+
+        if (!serverId) {
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            image: image,
+            id_path: pathVal,
+            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+            page_count: "Missing serverId",
           });
+          errors++;
+          this.logger.info(`Row ${rowNumber}: Missing serverId`);
           continue;
         }
-        
-        // This id_ihno doesn't exist in database - proceed with insertion
-        const values = [
-          this.trxnMap[data.id_trtype] || "Unknown",
-          "Image Upload",
-          trxnNameMap[data.id_trtype] || "Unknown",
-          format,
-          docPath,
-          folioId, // folio_id
-          incomingTransactionId, // transaction_reference_id ← stores data.id_ihno
-          "A",
-          mimeType[ext] || "application/octet-stream",
-          null, // user_attr0
-          incomingTransactionId, // user_attr1 
-          data.id_acno, // user_attr2
-          null, // user_attr3
-          null, // user_attr4
-          folioId, // user_attr5 
-          null, // user_attr6
-          null, // user_attr7
-          null, // user_attr8
-          null, // user_attr9
-          null,
-          null,
-          null,
-          null,
-          null,
-          false,
-          new Date(),
-          "system",
-          new Date(),
-          "system",
-          data.page_count,
-          clientId,
-        ];
-        
-        await client.query(insertQuery, values);
-        
-        logs.push({
-          row: index + 2,
-          status: "executed",
-          message: `Row ${index + 2} inserted successfully (id_ihno: ${incomingTransactionId} → transaction_reference_id, folio: ${folioId})`,
+        if (!drivePath) {
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            image: image,
+            id_path: pathVal,
+            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+            page_count: "Missing drivePath",
+          });
+          errors++;
+          this.logger.info(`Row ${rowNumber}: Missing drivePath`);
+          continue;
+        }
+        if (!pathVal) {
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            image: image,
+            id_path: pathVal,
+            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+            page_count: "Missing pathVal",
+          });
+          errors++;
+          this.logger.info(`Row ${rowNumber}: Missing pathVal`);
+          continue;
+        }
+
+        let sourceFilePath = path
+          .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
+          .replace(/^(\.\.[\/\\])+/, "");
+        if (sourceFilePath.includes("image")) {
+          sourceFilePath = sourceFilePath.replace(/image/g, folder);
+        } else if (sourceFilePath.includes("common")) {
+          sourceFilePath = sourceFilePath.replace(/common/g, folder);
+        }
+        this.logger.info(
+          `Row ${rowNumber}: Source file path: ${sourceFilePath}`
+        );
+
+        const fileExt = this.getFileExtension(pathVal);
+        this.logger.info(`Row ${rowNumber}: File extension: ${fileExt}`);
+
+        const fileExists = await fs
+          .access(sourceFilePath)
+          .then(() => true)
+          .catch(() => false);
+
+        if (fileExists) {
+          this.logger.info(`Row ${rowNumber}: Reading file: ${sourceFilePath}`);
+          const sourceData = await fs.readFile(sourceFilePath);
+
+          const trxn = this.trxnMap[trxnType] || "Unknown";
+          let s3Key: string;
+          try {
+            s3Key = await this.buildDestinationS3FilePath(
+              trxn,
+              fund,
+              ihNo,
+              fileExt,
+              rowNumber
+            );
+          } catch (err) {
+            this.logger.error(`Row ${rowNumber}: Path error`, { error: err });
+            processedRows.push({
+              id_fund: fund,
+              id_trtype: trxnType,
+              id_ihno: ihNo,
+              image: image,
+              id_path: pathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count: "Path Error",
+            });
+            errors++;
+            continue;
+          }
+
+          this.logger.info(`Row ${rowNumber}: Uploading to S3: ${s3Key}`);
+
+          try {
+            await s3.send(
+              new PutObjectCommand({
+                Bucket: "aif-in-a-box-assets-dev",
+                Key: s3Key,
+                Body: sourceData,
+                ContentType: "application/pdf", // or detect dynamically
+              })
+            );
+
+            this.logger.info(`Row ${rowNumber}: Uploaded to S3: ${s3Key}`);
+          } catch (uploadErr) {
+            this.logger.error(`Row ${rowNumber}: S3 upload failed`, {
+              error: uploadErr,
+            });
+            errors++;
+            continue;
+          }
+
+          let pageCount: number | string = 0;
+          try {
+            if (fileExt === ".tif" || fileExt === ".tiff") {
+              this.logger.info(`Row ${rowNumber}: Processing TIFF`);
+              const metadata = await sharp(sourceData).metadata();
+              pageCount = metadata.pages || 1;
+            } else if (fileExt === ".pdf") {
+              this.logger.info(`Row ${rowNumber}: Processing PDF`);
+              const pdfDoc = await PDFDocument.load(sourceData);
+              pageCount = pdfDoc.getPageCount();
+            } else {
+              pageCount = "Unsupported";
+            }
+            processedRows.push({
+              id_fund: fund,
+              id_trtype: trxnType,
+              id_ihno: ihNo,
+              image: image,
+              id_path: pathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count: pageCount,
+            });
+            if (typeof pageCount === "number") {
+              successfulRows++;
+              this.logger.info(`Row ${rowNumber}: ${pageCount} pages`);
+              files.push({
+                row: rowNumber,
+                sourcePath: sourceFilePath,
+                destinationPath: s3Key,
+                pageCount,
+              });
+            } else {
+              errors++;
+              this.logger.info(`Row ${rowNumber}: Unsupported file type`);
+            }
+          } catch (err) {
+            this.logger.error(`Row ${rowNumber}: Page count error`, {
+              error: err,
+            });
+            processedRows.push({
+              id_fund: fund,
+              id_trtype: trxnType,
+              id_ihno: ihNo,
+              image: image,
+              id_path: pathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
+            });
+            errors++;
+            continue;
+          }
+        } else {
+          this.logger.info(`File not found: ${sourceFilePath}`);
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trxnType,
+            id_ihno: ihNo,
+            image: image,
+            id_path: pathVal,
+            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+            page_count: "Not Found",
+          });
+          notFound++;
+        }
+      } catch (err) {
+        this.logger.error(`Error processing row ${rowNumber}`, { error: err });
+        processedRows.push({
+          id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
+          id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
+          id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
+          image: "",
+          id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
+          id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+          page_count: "Error",
         });
-        
-      } catch (rowError) {
-        logs.push({
-          row: index + 2,
-          status: "error",
-          message: `Row ${index + 2} failed: ${rowError instanceof Error ? rowError.message : "Unknown error"}`,
-        });
-        continue;
+        errors++;
       }
     }
-    
-    await client.query("COMMIT");
-    this.logger.info("SQL executed successfully");
-    return { result: "success", logs };
-    
-  } catch (err) {
-    if (client) {
-      await client.query("ROLLBACK");
-      this.logger.info("Transaction rolled back");
-    }
-    logs.push({
-      row: 0,
-      status: "error",
-      message: `SQL execution failed: ${
-        err instanceof Error ? err.message : "Unknown error"
-      }`,
+
+    const csvWorkbook = new ExcelJS.Workbook();
+    const csvWorksheet = csvWorkbook.addWorksheet("Processed");
+    csvWorksheet.columns = [
+      { header: "id_fund", key: "id_fund" },
+      { header: "id_trtype", key: "id_trtype" },
+      { header: "id_ihno", key: "id_ihno" },
+      { header: "image", key: "image" },
+      { header: "id_path", key: "id_path" },
+      { header: "id_acno", key: "id_acno" },
+      { header: "page_count", key: "page_count" },
+    ];
+
+    processedRows.forEach((row) => {
+      csvWorksheet.addRow(row);
     });
-    return { result: "failed", logs };
-    
-  } finally {
-    if (client) {
-      client.release();
-      this.logger.info("Database connection released");
-    }
+
+    this.logger.info("Finished processing rows");
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const outputFileName = `processed_${timestamp}.csv`;
+    const outputPath = path.join("processed", outputFileName);
+    this.logger.info(`Saving processed file to: ${outputPath}`);
+    await csvWorkbook.csv.writeFile(outputPath);
+    this.logger.info("Processed file saved");
+
+    this.logger.info("Deleting input file:", { inputFilePath });
+    await fs.unlink(inputFilePath);
+    this.logger.info("Input file deleted");
+
+    return {
+      outputFileName,
+      summary: { totalRows, successfulRows, errors, notFound },
+      files,
+    };
   }
 }

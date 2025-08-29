@@ -79,7 +79,7 @@ class FileController {
       const result = await processor.splitFiles();
       res.json({
         message: "Files split successfully",
-        splitFiles: result.splitFiles.map((file) => ({
+        splitFiles: result.splitFiles.map((file: any) => ({
           originalPath: file.originalPath,
           url: `/download-file/${encodeURIComponent(file.splitPath)}`,
           page: file.page,
