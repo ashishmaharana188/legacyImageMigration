@@ -5,6 +5,13 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
+import { exec } from "child_process";
+import { promisify } from "util";
+import dotenv from "dotenv";
+
+dotenv.config();
+
+const execAsync = promisify(exec);
 
 interface ProcessingResult {
   outputFileName: string;
@@ -391,6 +398,44 @@ export class PdfProcessing {
     this.logger.info(`Saving processed file to: ${outputPath}`);
     await csvWorkbook.csv.writeFile(outputPath);
     this.logger.info("Processed file saved");
+
+    // Trigger upload script
+
+    // Path to the batch file
+    const batPath = path.resolve(
+      __dirname,
+      "..",
+      "..",
+      "..",
+      "backend",
+      "upload-s3.bat"
+    );
+
+    this.logger.info(`Triggering upload script...`);
+
+    exec(
+      `"${batPath}"`,
+      {
+        shell: "cmd.exe",
+        env: {
+          ...process.env, // keep all existing env vars
+          AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
+          AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
+          AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
+          AWS_DEFAULT_REGION: process.env.AWS_DEFAULT_REGION,
+        },
+      },
+      (error, stdout, stderr) => {
+        if (error) {
+          this.logger.error(`Upload error: ${error.message}`);
+          return;
+        }
+        if (stderr) {
+          this.logger.error(`Upload stderr: ${stderr}`);
+        }
+        this.logger.info(`Upload stdout: ${stdout}`);
+      }
+    );
 
     this.logger.info("Deleting input file:", { inputFilePath });
     await fs.unlink(inputFilePath);
