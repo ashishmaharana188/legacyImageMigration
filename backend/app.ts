@@ -4,6 +4,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs/promises";
 import { fileController } from "./controllers/fileController";
+import { startSshTunnel } from "./services/tunnel";
 import dotenv from "dotenv";
 
 //env
@@ -104,6 +105,27 @@ app.post(
   fileController.updateFolioAndTransaction
 );
 
-app.listen(port, () => {
-  console.log(`Server running on http://localhost:${port}`);
-});
+const startServer = async () => {
+  const server: any = await startSshTunnel();
+
+  const expressServer = app.listen(port, () => {
+    console.log(`Server running on http://localhost:${port}`);
+  });
+
+  const gracefulShutdown = () => {
+    console.log("Shutting down gracefully...");
+    expressServer.close(() => {
+      console.log("Closed out remaining connections.");
+      if (server) {
+        server.close();
+        console.log("SSH tunnel closed.");
+      }
+      process.exit(0);
+    });
+  };
+
+  process.on("SIGTERM", gracefulShutdown);
+  process.on("SIGINT", gracefulShutdown);
+};
+
+startServer();
