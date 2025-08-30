@@ -6,9 +6,11 @@ import fs from "fs/promises";
 import { fileController } from "./controllers/fileController";
 import { startSshTunnel } from "./services/tunnel";
 import dotenv from "dotenv";
+import os from "os";
 
 //env
-dotenv.config();
+const userConfigDir = path.join(os.homedir(), ".appConfig");
+dotenv.config({ path: path.join(userConfigDir, ".env") });
 
 const app = express();
 const port = process.env.PORT || 3000;

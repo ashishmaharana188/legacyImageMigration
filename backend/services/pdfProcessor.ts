@@ -5,12 +5,10 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
+import { uploadDirectoryRecursive } from "./s3Uploader";
 /*import { exec } from "child_process";
 import { promisify } from "util";*/
-import dotenv from "dotenv";
-import { uploadDirectoryRecursive } from "./s3Uploader";
 
-dotenv.config();
 
 interface ProcessingResult {
   outputFileName: string;

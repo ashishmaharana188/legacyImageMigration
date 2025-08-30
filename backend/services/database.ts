@@ -5,9 +5,7 @@ import fs from "fs/promises";
 import path from "path";
 import { Pool, PoolClient } from "pg";
 import winston from "winston";
-import dotenv from "dotenv";
 
-dotenv.config();
 
 interface SqlLog {
   row: number;

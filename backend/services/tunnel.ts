@@ -1,6 +1,7 @@
 import { createTunnel } from "tunnel-ssh";
 import * as fs from "fs";
 import * as path from "path";
+import * as os from "os";
 
 export const startSshTunnel = async () => {
   const tunnelOptions: any = {
@@ -18,7 +19,7 @@ export const startSshTunnel = async () => {
     port: process.env.SSH_PORT,
     username: process.env.SSH_USER,
     privateKey: fs.readFileSync(
-      path.join(process.cwd(), "keys", "u2009226.pem")
+      path.join(os.homedir(), ".appConfig", "u2009226.pem")
     ),
   };
 
