@@ -6,7 +6,6 @@ import path from "path";
 import { Pool, PoolClient } from "pg";
 import winston from "winston";
 
-
 interface SqlLog {
   row: number;
   status: "success" | "error" | "executed" | "updated";
@@ -15,27 +14,97 @@ interface SqlLog {
 }
 
 export class Database {
+  private pool: Pool | null = null;
+
   private readonly trxnMap: Record<string, string> = {
-    NEW: "IC",
+    IC: "IC",
     NCT: "NCT",
     RED: "RED",
     FUL: "RED",
-    IPO: "IOBI",
-    SIN: "IOBIS",
+    IOBI: "IOBI",
+    IOBIS: "IOBIS",
     SWOP: "SWP",
     SWOF: "SWP",
   };
 
-  private readonly pool = new Pool({
-    user: process.env.DB_USER,
-    host: process.env.DB_HOST,
-    database: process.env.DB_NAME,
-    password: process.env.DB_PASSWORD || "",
-    port: parseInt(process.env.DB_PORT || "5433", 10), // 👈 forwarded port from SSH
-    max: 20,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 10000,
-  });
+  constructor() {
+    this.pool = this.createPool();
+  }
+
+  private createPool(): Pool {
+    const newPool = new Pool({
+      user: process.env.DB_USER,
+      host: process.env.DB_HOST,
+      database: process.env.DB_NAME,
+      password: process.env.DB_PASSWORD || "",
+      port: parseInt(process.env.DB_PORT || "5433", 10), // 👈 forwarded port from SSH
+      max: 20,
+      idleTimeoutMillis: 30000,
+      connectionTimeoutMillis: 10000,
+    });
+
+    // Lifecycle diagnostics
+    newPool.on("connect", () => {
+      this.logger.info("pg Pool: connect (new backend connection established)");
+    });
+    newPool.on("acquire", () => {
+      this.logger.info("pg Pool: acquire (client checked out from pool)");
+    });
+    newPool.on("error", (err) => {
+      this.logger.error(`pg Pool: error on idle client: ${err.message}`);
+      // Kill the broken pool and force recreation
+      newPool.end().catch(() => {});
+      this.pool = null;
+    });
+
+    // Optional warm-up
+    (async () => {
+      try {
+        this.logger.info("pool warm-up: attempting initial connect/release");
+        const client = await newPool.connect();
+        client.release();
+        this.logger.info("pool warm-up: connect/release successful");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        this.logger.error(`pool warm-up: failed: ${msg}`);
+        this.pool = null;
+      }
+    })();
+
+    // Background health check every 5 min
+    setInterval(async () => {
+      try {
+        const client = await newPool.connect();
+        await client.query("SELECT 1");
+        client.release();
+      } catch (e) {
+        this.logger.error("pool health check failed, recreating pool");
+        this.pool = null;
+      }
+    }, 300000);
+
+    this.logger.info("Postgres pool created");
+    return newPool;
+  }
+
+  public getPool(): Pool {
+    if (!this.pool) {
+      this.logger.warn("Recreating pg pool...");
+      this.pool = this.createPool();
+    }
+    return this.pool;
+  }
+
+  public async warmup() {
+    try {
+      const client = await this.getPool().connect();
+      client.release();
+      this.logger.info("🔥 Database connection warm-up successful");
+    } catch (err) {
+      this.logger.error("Database warm-up failed:", err);
+      this.pool = null;
+    }
+  }
 
   private readonly logger = winston.createLogger({
     level: "info",
@@ -56,35 +125,6 @@ export class Database {
       }),
     ],
   });
-
-  constructor() {
-
-    // Pool lifecycle diagnostics
-    this.pool.on("connect", () => {
-      this.logger.info("pg Pool: connect (new backend connection established)");
-    });
-    this.pool.on("acquire", () => {
-      this.logger.info("pg Pool: acquire (client checked out from pool)");
-    });
-    this.pool.on("error", (err) => {
-      this.logger.error(`pg Pool: error on idle client: ${err.message}`);
-    });
-
-    // Optional warm-up to surface connectivity early; harmless in prod
-    // Comment out if not desired
-    (async () => {
-      try {
-        this.logger.info("pool warm-up: attempting initial connect/release");
-        const client = await this.pool.connect();
-        client.release();
-        this.logger.info("pool warm-up: connect/release successful");
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.error(`pool warm-up: failed: ${msg}`);
-        console.error('Database connection warm-up failed:', e);
-      }
-    })();
-  }
 
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";
@@ -177,8 +217,8 @@ export class Database {
       );
 
       const trxnNameMap: Record<string, string> = {
-        NEW: "New Application Form",
-        NCT: "NCT Form",
+        NEW: "Initial Contribution Form",
+        NCT: "Non Commercial Transactions Form",
         RED: "Redemption Form",
         FUL: "Redemption Form",
         IPO: "IPO Form",
@@ -298,7 +338,7 @@ page_count, client_id
       }
 
       this.logger.info("executeSql: attempting pool.connect()");
-      client = await this.pool.connect();
+      client = await this.getPool().connect();
       this.logger.info("executeSql: pool.connect() successful");
 
       client.on("error", (err) => {
@@ -321,8 +361,8 @@ page_count, client_id
 `;
 
       const trxnNameMap: Record<string, string> = {
-        NEW: "New Application Form",
-        NCT: "NCT Form",
+        IC: "Initial Contribution Form",
+        NCT: "Non Commercial Transactions Form",
         RED: "Redemption Form",
         FUL: "Redemption Form",
         IPO: "IPO Form",
@@ -454,7 +494,7 @@ page_count, client_id
 
     try {
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
-      client = await this.pool.connect();
+      client = await this.getPool().connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
       client.on("error", (err) =>
         this.logger.error(

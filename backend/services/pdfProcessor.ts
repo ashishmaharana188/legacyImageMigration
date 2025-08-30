@@ -251,6 +251,7 @@ export class PdfProcessing {
 
         const fileExt = this.getFileExtension(pathVal);
         this.logger.info(`Row ${rowNumber}: File extension: ${fileExt}`);
+        const trxn = this.trxnMap[trxnType] || "Unknown";
 
         if (
           await fs
@@ -261,7 +262,6 @@ export class PdfProcessing {
           this.logger.info(`Row ${rowNumber}: Reading file: ${sourceFilePath}`);
           const sourceData = await fs.readFile(sourceFilePath);
 
-          const trxn = this.trxnMap[trxnType] || "Unknown";
           let destinationFilePath: string;
           try {
             destinationFilePath = await this.buildDestinationFilePath(
@@ -275,7 +275,7 @@ export class PdfProcessing {
             this.logger.error(`Row ${rowNumber}: Path error`, { error: err });
             processedRows.push({
               id_fund: fund,
-              id_trtype: trxnType,
+              id_trtype: trxn,
               id_ihno: ihNo,
               image: image,
               id_path: pathVal,
@@ -308,7 +308,7 @@ export class PdfProcessing {
             }
             processedRows.push({
               id_fund: fund,
-              id_trtype: trxnType,
+              id_trtype: trxn,
               id_ihno: ihNo,
               image: image,
               id_path: pathVal,
@@ -334,7 +334,7 @@ export class PdfProcessing {
             });
             processedRows.push({
               id_fund: fund,
-              id_trtype: trxnType,
+              id_trtype: trxn,
               id_ihno: ihNo,
               image: image,
               id_path: pathVal,
@@ -348,7 +348,7 @@ export class PdfProcessing {
           this.logger.info(`File not found: ${sourceFilePath}`);
           processedRows.push({
             id_fund: fund,
-            id_trtype: trxnType,
+            id_trtype: trxn,
             id_ihno: ihNo,
             image: image,
             id_path: pathVal,
