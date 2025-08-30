@@ -113,7 +113,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-black">
+    <div className="flex flex-col items-center justify-start min-h-screen bg-black py-8">
       <h1 className="text-2xl font-bold mb-4 text-white">
         Upload Athena Excel File
       </h1>
@@ -123,53 +123,71 @@ const App: React.FC = () => {
         onChange={handleFileChange}
         className="mb-4 ml-25 text-white"
       />
-      <button
-        onClick={handleUpload}
-        className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-      >
-        Upload
-      </button>
-      <button
-        onClick={handleSplitFiles}
-        className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600 mt-4"
-      >
-        Split Files
-      </button>
-      <div>
+      <div className="flex gap-2 mb-4">
+        <button
+          onClick={handleUpload}
+          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+        >
+          Upload
+        </button>
+        <button
+          onClick={handleSplitFiles}
+          className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+        >
+          Split Files
+        </button>
+      </div>
+      <div className="flex gap-2 mt-4">
         <button
           onClick={handleGenerateSql}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 mt-4"
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
         >
           Generate SQL
         </button>
         <button
           onClick={handleExecuteSql}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 mt-4 ml-2"
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
         >
           Execute SQL
         </button>
         <button
           onClick={handleupdateFolioAndTransaction}
-          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 mt-4 ml-2"
+          className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
         >
           Folio Update
         </button>
+      </div>
+      <div className="flex flex-col items-center justify-center mx-auto">
         {sqlResult && (
-          <div>
-            <h3 className="text-white">SQL Output</h3>
+          <div className="mt-4 text-white">
+            <h3 className="text-lg font-semibold">SQL Output</h3>
+            <p>SQL: {sqlResult.sql}</p>
+            <h4 className="font-semibold mt-2">Logs:</h4>
+            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
+              {JSON.stringify(sqlResult.logs, null, 2)}
+            </pre>
           </div>
         )}
         {executeResult && (
-          <div>
-            <h3 className="text-white">Execution Result</h3>
+          <div className="mt-4 text-white">
+            <h3 className="text-lg font-semibold">Execution Result</h3>
+            <p>Result: {executeResult.result}</p>
+            <h4 className="font-semibold mt-2">Logs:</h4>
+            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
+              {JSON.stringify(executeResult.logs, null, 2)}
+            </pre>
           </div>
         )}
         {updateFolioResult && (
-          <div>
-            <h3 className="text-white">Execution Folio_id update</h3>
+          <div className="mt-4 text-white">
+            <h3 className="text-lg font-semibold">Folio Update Result</h3>
+            <p>Result: {updateFolioResult.result}</p>
+            <h4 className="font-semibold mt-2">Logs:</h4>
+            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
+              {JSON.stringify(updateFolioResult.logs, null, 2)}
+            </pre>
           </div>
         )}
-      </div>
       {response?.downloadUrl && (
         <div className="mt-4">
           <div>
@@ -206,6 +224,7 @@ const App: React.FC = () => {
         </div>
       )}
       {error && <p className="mt-4 text-red-600">{error}</p>}
+      </div>
     </div>
   );
 };
