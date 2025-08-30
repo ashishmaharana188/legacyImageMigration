@@ -5,8 +5,8 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
-import { exec } from "child_process";
-import { promisify } from "util";
+/*import { exec } from "child_process";
+import { promisify } from "util";*/
 import dotenv from "dotenv";
 import { uploadDirectoryRecursive } from "./s3Uploader";
 
