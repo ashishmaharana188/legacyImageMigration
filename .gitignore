@@ -17,6 +17,9 @@ output
 split_output
 *.local
 backend/.env
+keys
+backend/keys
+
 
 # Editor directories and files
 .vscode/*

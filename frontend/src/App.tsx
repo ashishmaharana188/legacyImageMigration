@@ -88,8 +88,6 @@ const App: React.FC = () => {
     try {
       const response = await axios.post("http://localhost:3000/generate-sql");
       setSqlResult(response.data);
-      console.log("SQL:", response.data.sql);
-      console.log("Logs:", response.data.logs);
     } catch (error) {
       console.error("Error generating SQL:", error);
     }
@@ -99,8 +97,6 @@ const App: React.FC = () => {
     try {
       const response = await axios.post("http://localhost:3000/execute-sql");
       setExecuteResult(response.data);
-      console.log("Execution Result:", response.data.result);
-      console.log("Execution Logs:", response.data.logs);
     } catch (error) {
       console.error("Error executing SQL:", error);
     }
@@ -111,8 +107,6 @@ const App: React.FC = () => {
         "http://localhost:3000/updateFolioAndTransaction-sql"
       );
       setUpdateFolioResult(response.data);
-      console.log("Execution Result:", response.data.result);
-      console.log("Execution Logs:", response.data.logs);
     } catch (error) {
       console.error("Error executing folioUpdateSQL:", error);
     }

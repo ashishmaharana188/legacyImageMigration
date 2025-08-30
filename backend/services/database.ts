@@ -60,12 +60,6 @@ export class Database {
   });
 
   constructor() {
-    console.log('Database Pool Config:', {
-      user: process.env.DB_USER,
-      host: process.env.DB_HOST,
-      database: process.env.DB_NAME,
-      port: parseInt(process.env.DB_PORT || "5433", 10),
-    });
 
     // Pool lifecycle diagnostics
     this.pool.on("connect", () => {
@@ -115,7 +109,7 @@ export class Database {
 
     try {
       const csvPath = path.join(__dirname, "../../processed");
-      this.logger.info(`generateSql: reading directory ${csvPath}`);
+      this.logger.info("generateSql: Reading processed directory");
       const files = await fs.readdir(csvPath);
       this.logger.info(`generateSql: found ${files.length} files in processed`);
 
@@ -135,7 +129,7 @@ export class Database {
       }
 
       const csvFullPath = path.join(csvPath, latestCsv);
-      this.logger.info(`generateSql: reading CSV ${csvFullPath}`);
+      this.logger.info("generateSql: Reading CSV file");
 
       const workbook = new ExcelJS.Workbook();
       await workbook.csv.readFile(csvFullPath);
@@ -272,7 +266,7 @@ del_flag, last_update_tms, last_updated_by, creation_date, created_by,
 page_count, client_id
 ) VALUES ${values.join(", ")};`;
 
-      this.logger.info("Generated multi-row SQL", { sql });
+      this.logger.info("Generated multi-row SQL");
       return { sql, transactions, logs };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";

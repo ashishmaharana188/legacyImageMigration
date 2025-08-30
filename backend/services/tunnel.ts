@@ -9,13 +9,13 @@ export const startSshTunnel = async () => {
   };
 
   const serverOptions: any = {
-    host: "127.0.0.1",
-    port: parseInt(process.env.DB_PORT || "5433", 10),
+    host: process.env.REMOTE_HOST,
+    port: process.env.DB_PORT,
   };
 
   const sshOptions: any = {
     host: process.env.SSH_HOST,
-    port: 22,
+    port: process.env.SSH_PORT,
     username: process.env.SSH_USER,
     privateKey: fs.readFileSync(
       path.join(process.cwd(), "keys", "u2009226.pem")
@@ -23,22 +23,16 @@ export const startSshTunnel = async () => {
   };
 
   const forwardOptions: any = {
-    srcAddr: "127.0.0.1",
-    srcPort: parseInt(process.env.DB_PORT || "5433", 10),
+    srcAddr: process.env.REMOTE_HOST,
+    srcPort: process.env.DB_PORT,
     dstAddr: process.env.REMOTE_DB_HOST,
-    dstPort: parseInt(process.env.REMOTE_DB_PORT || "24888", 10),
+    dstPort: process.env.REMOTE_DB_PORT,
   };
-
-  console.log("SSH Tunnel Options:", {
-    tunnelOptions,
-    serverOptions,
-    sshOptions,
-    forwardOptions,
-  });
 
   try {
     const [server, conn] = await createTunnel(
       tunnelOptions,
+
       serverOptions,
       sshOptions,
       forwardOptions
