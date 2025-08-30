@@ -8,10 +8,9 @@ import winston from "winston";
 import { exec } from "child_process";
 import { promisify } from "util";
 import dotenv from "dotenv";
+import { uploadDirectoryRecursive } from "./s3Uploader";
 
 dotenv.config();
-
-const execAsync = promisify(exec);
 
 interface ProcessingResult {
   outputFileName: string;
@@ -399,10 +398,34 @@ export class PdfProcessing {
     await csvWorkbook.csv.writeFile(outputPath);
     this.logger.info("Processed file saved");
 
+    try {
+      const outputRoot = path.resolve(__dirname, "../../output");
+      const bucket = "aif-in-a-box-assets-prod";
+
+      const clients = await fs.readdir(outputRoot, { withFileTypes: true });
+      for (const clientDir of clients) {
+        if (
+          clientDir.isDirectory() &&
+          clientDir.name.startsWith("CLIENT_CODE_")
+        ) {
+          const clientPath = path.join(outputRoot, clientDir.name);
+          const s3Prefix = `Data/APPLICATION_FORMS/${clientDir.name}`;
+          this.logger.info(
+            `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+          );
+          await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
+        }
+      }
+
+      this.logger.info("All uploads complete.");
+    } catch (err) {
+      this.logger.error("Upload failed:", err);
+    }
+
     // Trigger upload script
 
     // Path to the batch file
-    const batPath = path.resolve(
+    /*    const batPath = path.resolve(
       __dirname,
       "..",
       "..",
@@ -435,7 +458,7 @@ export class PdfProcessing {
         }
         this.logger.info(`Upload stdout: ${stdout}`);
       }
-    );
+    );*/
 
     this.logger.info("Deleting input file:", { inputFilePath });
     await fs.unlink(inputFilePath);
