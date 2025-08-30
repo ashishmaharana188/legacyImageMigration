@@ -2,8 +2,12 @@ import { Request, Response } from "express";
 import { PdfProcessing } from "../services/pdfProcessor";
 import { Splitting } from "../services/splitProcessor";
 import { Database } from "../services/database";
+import { uploadDirectoryRecursive } from "../services/s3Uploader";
 import path from "path";
 import fs from "fs/promises";
+import { S3_BUCKET_NAME, getS3Prefix } from "../utils/s3Config";
+import { wss } from "../app";
+import { WebSocket } from "ws"; // Added this line
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -51,7 +55,10 @@ class FileController {
       res.download(filePath, filename);
     } catch (error) {
       console.error("Download error:", error);
-      res.status(500).json({ error: "Failed to download file" });
+      res.status(500).json({
+        error: "Failed to download file",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
@@ -69,7 +76,10 @@ class FileController {
       res.download(filePath, path.basename(filePath));
     } catch (error) {
       console.error("Download error:", error);
-      res.status(500).json({ error: "Failed to download file" });
+      res.status(500).json({
+        error: "Failed to download file",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
@@ -148,6 +158,70 @@ class FileController {
       res.status(500).json({
         error: "Failed to run updateFolioAndTransaction()",
         details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async uploadToS3(req: Request, res: Response) {
+    try {
+      console.log("--- AWS Credential Check (from fileController) ---");
+      console.log(
+        "AWS_ACCESS_KEY_ID:",
+        process.env.AWS_ACCESS_KEY_ID ? "Set" : "Not Set"
+      );
+      console.log(
+        "AWS_SECRET_ACCESS_KEY:",
+        process.env.AWS_SECRET_ACCESS_KEY ? "Set (Masked)" : "Not Set"
+      );
+      console.log(
+        "AWS_SESSION_TOKEN:",
+        process.env.AWS_SESSION_TOKEN ? "Set" : "Not Set"
+      );
+      console.log(
+        "AWS_DEFAULT_REGION:",
+        process.env.AWS_DEFAULT_REGION || "ap-south-1"
+      );
+      console.log(
+        "S3_BUCKET_NAME:",
+        S3_BUCKET_NAME // Using centralized config
+      );
+      console.log("--------------------------------------------------");
+
+      const outputRoot = path.join(__dirname, "../../output");
+      const bucket = S3_BUCKET_NAME; // Using centralized config
+
+      const clients = await fs.readdir(outputRoot, { withFileTypes: true });
+      for (const clientDir of clients) {
+        if (
+          clientDir.isDirectory() &&
+          clientDir.name.startsWith("CLIENT_CODE_")
+        ) {
+          const clientPath = path.join(outputRoot, clientDir.name);
+          const s3Prefix = getS3Prefix(clientDir.name); // Using centralized config
+          console.log(
+            `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+          );
+          await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
+        }
+      }
+      res.json({ message: "Files uploaded to S3 successfully" });
+      // Send WebSocket message on success
+      wss.clients.forEach((client: WebSocket) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 's3UploadStatus', status: 'success', message: 'S3 upload completed successfully!' }));
+        }
+      });
+    } catch (error) {
+      console.error("S3 upload error:", error);
+      res.status(500).json({
+        error: "Failed to upload files to S3",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+      // Send WebSocket message on error
+      wss.clients.forEach((client: WebSocket) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({ type: 's3UploadStatus', status: 'error', message: `S3 upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` }));
+        }
       });
     }
   }

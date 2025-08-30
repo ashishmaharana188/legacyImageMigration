@@ -1,14 +1,28 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { Upload } from "@aws-sdk/lib-storage";
 import fs from "fs";
 import path from "path";
 
+console.log(
+  "AWS_ACCESS_KEY_ID:",
+  process.env.AWS_ACCESS_KEY_ID ? "SET" : "NOT SET"
+);
+console.log(
+  "AWS_SECRET_ACCESS_KEY:",
+  process.env.AWS_SECRET_ACCESS_KEY ? "SET" : "NOT SET"
+); // Don't log the actual secret
+console.log(
+  "AWS_SESSION_TOKEN:",
+  process.env.AWS_SESSION_TOKEN ? "SET" : "NOT SET"
+);
+console.log("AWS_DEFAULT_REGION:", process.env.AWS_DEFAULT_REGION);
 
 const s3 = new S3Client({
   region: process.env.AWS_DEFAULT_REGION || "ap-south-1",
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    sessionToken: process.env.AWS_SESSION_TOKEN,
+    sessionToken: process.env.AWS_SESSION_TOKEN!,
   },
 });
 
@@ -29,13 +43,31 @@ export async function uploadDirectoryRecursive(
     } else {
       // Upload file
       const fileStream = fs.createReadStream(entryPath);
-      await s3.send(
-        new PutObjectCommand({
+      const upload = new Upload({
+        client: s3,
+        params: {
           Bucket: bucket,
           Key: entryKey,
           Body: fileStream,
-        })
-      );
+        },
+      });
+
+      upload.on("httpUploadProgress", (progress) => {
+        if (progress.loaded !== undefined && progress.total !== undefined) {
+          console.log(
+            `[PROGRESS] ${entryKey}: ${progress.loaded}/${progress.total} (${(
+              (progress.loaded / progress.total) *
+              100
+            ).toFixed(2)}%)`
+          );
+        } else {
+          console.log(
+            `[PROGRESS] ${entryKey}: Progress update (loaded or total is undefined)`
+          );
+        }
+      });
+
+      await upload.done();
       console.log(`[UPLOADED] ${entryKey}`);
     }
   }

@@ -6,9 +6,9 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
 import { uploadDirectoryRecursive } from "./s3Uploader";
+import { S3_BUCKET_NAME, getS3Prefix } from "../utils/s3Config";
 /*import { exec } from "child_process";
 import { promisify } from "util";*/
-
 
 interface ProcessingResult {
   outputFileName: string;
@@ -398,7 +398,7 @@ export class PdfProcessing {
 
     try {
       const outputRoot = path.resolve(__dirname, "../../output");
-      const bucket = "aif-in-a-box-assets-prod";
+      const bucket = S3_BUCKET_NAME;
 
       const clients = await fs.readdir(outputRoot, { withFileTypes: true });
       for (const clientDir of clients) {
@@ -407,7 +407,7 @@ export class PdfProcessing {
           clientDir.name.startsWith("CLIENT_CODE_")
         ) {
           const clientPath = path.join(outputRoot, clientDir.name);
-          const s3Prefix = `Data/APPLICATION_FORMS/${clientDir.name}`;
+          const s3Prefix = getS3Prefix(clientDir.name);
           this.logger.info(
             `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
           );

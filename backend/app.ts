@@ -1,16 +1,18 @@
+import dotenv from "dotenv";
+import os from "os";
+import path from "path"; // path is needed for dotenv config
+
+// Ensure dotenv is configured as early as possible
+const userConfigDir = path.join(os.homedir(), ".appConfig");
+dotenv.config({ path: path.join(userConfigDir, ".env") });
+
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import path from "path";
 import fs from "fs/promises";
 import { fileController } from "./controllers/fileController";
 import { startSshTunnel } from "./services/tunnel";
-import dotenv from "dotenv";
-import os from "os";
-
-//env
-const userConfigDir = path.join(os.homedir(), ".appConfig");
-dotenv.config({ path: path.join(userConfigDir, ".env") });
+import { WebSocketServer } from "ws"; // Added this line
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -107,11 +109,30 @@ app.post(
   fileController.updateFolioAndTransaction
 );
 
+app.post("/upload-to-s3", fileController.uploadToS3);
+
+// WebSocket server setup
+const wss = new WebSocketServer({ noServer: true });
+
+wss.on("connection", (ws: WebSocket) => {
+  console.log("WebSocket client connected");
+  ws.send(JSON.stringify({ type: "message", payload: "Welcome to the WebSocket server!" }));
+});
+
+export { wss }; // Export wss for use in other modules
+
 const startServer = async () => {
   const server: any = await startSshTunnel();
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
+  });
+
+  // Upgrade HTTP server to WebSocket
+  expressServer.on("upgrade", (request, socket, head) => {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit("connection", ws, request);
+    });
   });
 
   const gracefulShutdown = () => {
@@ -122,6 +143,10 @@ const startServer = async () => {
         server.close();
         console.log("SSH tunnel closed.");
       }
+      // Close WebSocket server
+      wss.close(() => {
+        console.log("WebSocket server closed.");
+      });
       process.exit(0);
     });
   };

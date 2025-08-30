@@ -31,10 +31,14 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@types/ws": "^8.18.1",
     "concurrently": "^9.2.0"
   },
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=8.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
   }
 }
