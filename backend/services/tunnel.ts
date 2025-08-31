@@ -4,6 +4,10 @@ import * as path from "path";
 import * as os from "os";
 
 export const startSshTunnel = async () => {
+  if (process.env.USE_SSH_TUNNEL !== "true") {
+    console.log("SSH tunnel is disabled. Skipping tunnel creation.");
+    return null; // Or handle as appropriate for your application
+  }
   const tunnelOptions: any = {
     autoClose: true,
     reconnectOnError: false,

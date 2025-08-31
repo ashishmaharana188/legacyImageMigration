@@ -122,7 +122,10 @@ wss.on("connection", (ws: WebSocket) => {
 export { wss }; // Export wss for use in other modules
 
 const startServer = async () => {
-  const server: any = await startSshTunnel();
+  let server: any;
+  if (process.env.USE_SSH_TUNNEL === "true") {
+    server = await startSshTunnel();
+  }
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
