@@ -33,6 +33,7 @@ const App: React.FC = () => {
     logs: { row: number; status: string; message: string; sql?: string };
   } | null>(null);
   const [s3UploadProgress, setS3UploadProgress] = useState<string[]>([]); // Changed to string[]
+  const [sanityCheckResult, setSanityCheckResult] = useState<any | null>(null);
 
   useEffect(() => {
     const ws = new WebSocket("ws://localhost:3000"); // Connect to WebSocket server
@@ -163,6 +164,22 @@ const App: React.FC = () => {
     }
   };
 
+  const handleSanityCheck = async () => {
+    try {
+      const response = await axios.post(
+        "http://localhost:3000/sanity-check-duplicates",
+        {
+          cutoffTms: new Date().toISOString(),
+          dryRun: true,
+          normalize: true,
+        }
+      );
+      setSanityCheckResult(response.data);
+    } catch (error) {
+      console.error("Error during sanity check:", error);
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-black py-8">
       <h1 className="text-2xl font-bold mb-4 text-white">
@@ -213,6 +230,12 @@ const App: React.FC = () => {
         >
           Upload to S3
         </button>
+        <button
+          onClick={handleSanityCheck}
+          className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
+        >
+          Sanity Check Duplicates
+        </button>
       </div>
       {s3UploadProgress.length > 0 && (
         <div className="mt-4 text-white">
@@ -252,6 +275,14 @@ const App: React.FC = () => {
             <h4 className="font-semibold mt-2">Logs:</h4>
             <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
               {JSON.stringify(updateFolioResult.logs, null, 2)}
+            </pre>
+          </div>
+        )}
+        {sanityCheckResult && (
+          <div className="mt-4 text-white">
+            <h3 className="text-lg font-semibold">Sanity Check Result</h3>
+            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
+              {JSON.stringify(sanityCheckResult, null, 2)}
             </pre>
           </div>
         )}

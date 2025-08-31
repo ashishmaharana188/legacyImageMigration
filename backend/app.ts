@@ -109,6 +109,7 @@ app.post(
   fileController.updateFolioAndTransaction
 );
 
+app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
 app.post("/upload-to-s3", fileController.uploadToS3);
 
 // WebSocket server setup

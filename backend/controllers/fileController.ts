@@ -162,6 +162,25 @@ class FileController {
     }
   }
 
+  async sanityCheckDuplicates(req: Request, res: Response) {
+    try {
+      const { cutoffTms, dryRun, normalize } = req.body;
+      const processor = new Database();
+      const result = await processor.sanityCheckDuplicates({
+        cutoffTms,
+        dryRun,
+        normalize,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Sanity check error:", error);
+      res.status(500).json({
+        error: "Failed to run sanity check",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   async uploadToS3(req: Request, res: Response) {
     try {
       console.log("--- AWS Credential Check (from fileController) ---");

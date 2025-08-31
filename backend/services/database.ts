@@ -663,6 +663,152 @@ WHERE ts.client_id = d.client_id
       }
     }
   }
+
+  // ADD THIS inside the Database class (e.g., after updateFolioAndTransaction)
+
+  public async sanityCheckDuplicates(params: {
+    cutoffTms: string; // ISO string or 'YYYY-MM-DD HH:MM:SS±TZ' used against creation_date
+    dryRun?: boolean; // if true, does not delete; returns rows that would be deleted
+    normalize?: boolean; // if true, compares TRIM(LOWER(user_attr1)) for robustness
+  }): Promise<{
+    result: "success" | "failed";
+    dryRun: boolean;
+    cutoffTms: string;
+    deletedCount?: number;
+    rows?: any[];
+    logs: SqlLog[];
+  }> {
+    const logs: SqlLog[] = [];
+    const { cutoffTms, dryRun = true, normalize = false } = params;
+    let client: PoolClient | null = null;
+
+    const keyExpr = normalize ? "TRIM(LOWER(d.user_attr1))" : "d.user_attr1";
+
+    // Preview query: list rows that would be deleted (rn > 1 within keys that existed on/before cutoff)
+    const previewSql = `
+WITH pre_cutoff_keys AS (
+  SELECT DISTINCT ${keyExpr} AS k
+  FROM investor.aif_document_details d
+  WHERE d.user_attr1 IS NOT NULL
+    AND d.creation_date <= $1::timestamptz
+),
+dups AS (
+  SELECT
+    d.*,
+    ROW_NUMBER() OVER (
+      PARTITION BY ${keyExpr}
+      ORDER BY d.creation_date ASC, d.id ASC
+    ) AS rn
+  FROM investor.aif_document_details d
+  JOIN pre_cutoff_keys p ON ${keyExpr} = p.k
+)
+SELECT *
+FROM dups
+WHERE rn > 1
+ORDER BY ${
+      normalize ? "TRIM(LOWER(d.user_attr1))" : "d.user_attr1"
+    }, creation_date DESC, id DESC
+LIMIT 1000
+`;
+
+    // Delete query: removes only rn > 1 within keys existing on/before cutoff
+    const deleteSql = `
+WITH pre_cutoff_keys AS (
+  SELECT DISTINCT ${keyExpr} AS k
+  FROM investor.aif_document_details d
+  WHERE d.user_attr1 IS NOT NULL
+    AND d.creation_date <= $1::timestamptz
+),
+dups AS (
+  SELECT
+    d.id,
+    ROW_NUMBER() OVER (
+      PARTITION BY ${keyExpr}
+      ORDER BY d.creation_date ASC, d.id ASC
+    ) AS rn
+  FROM investor.aif_document_details d
+  JOIN pre_cutoff_keys p ON ${keyExpr} = p.k
+)
+DELETE FROM investor.aif_document_details t
+USING dups
+WHERE t.id = dups.id
+  AND dups.rn > 1
+RETURNING t.id
+`;
+
+    try {
+      this.logger.info(
+        `sanityCheckDuplicates: start (cutoff=${cutoffTms}, dryRun=${dryRun}, normalize=${normalize})`
+      );
+
+      client = await this.getPool().connect();
+      await client.query("BEGIN");
+
+      // Always preview
+      const previewRes = await client.query(previewSql, [cutoffTms]);
+      logs.push({
+        row: 0,
+        status: "executed",
+        message: `Preview duplicates fetched: ${previewRes.rows.length}`,
+      });
+
+      if (dryRun) {
+        await client.query("ROLLBACK");
+        this.logger.info(
+          `sanityCheckDuplicates: dry-run complete, ${previewRes.rows.length} rows would be deleted`
+        );
+        return {
+          result: "success",
+          dryRun: true,
+          cutoffTms,
+          rows: previewRes.rows,
+          logs,
+        };
+      }
+
+      // Execute delete
+      const delRes = await client.query(deleteSql, [cutoffTms]);
+      await client.query("COMMIT");
+
+      this.logger.info(
+        `sanityCheckDuplicates: deleted ${delRes.rowCount} duplicate rows (cutoff=${cutoffTms})`
+      );
+      logs.push({
+        row: 0,
+        status: "updated",
+        message: `Deleted duplicate rows: ${delRes.rowCount}`,
+      });
+
+      return {
+        result: "success",
+        dryRun: false,
+        cutoffTms,
+        deletedCount: delRes.rowCount ?? 0,
+        logs,
+      };
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query("ROLLBACK");
+        } catch {}
+      }
+      this.logger.error(
+        `sanityCheckDuplicates: failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+      logs.push({
+        row: 0,
+        status: "error",
+        message: `sanityCheckDuplicates failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+      return { result: "failed", dryRun, cutoffTms, logs };
+    } finally {
+      if (client) client.release();
+    }
+  }
 }
 
 // local helpers duplicated at end in original snippet; keeping top-level ones in-scope
