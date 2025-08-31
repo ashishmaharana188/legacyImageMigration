@@ -47,9 +47,15 @@ const App: React.FC = () => {
       const message = JSON.parse(event.data);
       console.log("Received WebSocket message:", message);
       if (message.type === "s3UploadStatus") {
-        setS3UploadProgress((prev) => [...prev, `S3 Upload Status: ${message.message}`]);
+        setS3UploadProgress((prev) => [
+          ...prev,
+          `S3 Upload Status: ${message.message}`,
+        ]);
       } else if (message.type === "progress") {
-        setS3UploadProgress((prev) => [...prev, `Uploading ${message.file}: ${message.percentage}%`]);
+        setS3UploadProgress((prev) => [
+          ...prev,
+          `Uploading ${message.file}: ${message.percentage}%`,
+        ]);
       } else if (message.type === "complete") {
         setS3UploadProgress((prev) => [...prev, `Completed: ${message.file}`]);
       } else if (message.type === "error") {
@@ -81,7 +87,10 @@ const App: React.FC = () => {
       setS3UploadProgress((prev) => [...prev, response.data.message]);
     } catch (error) {
       console.error("Error uploading to S3:", error);
-      setS3UploadProgress((prev) => [...prev, `Error: ${error instanceof Error ? error.message : "Unknown error"}`]);
+      setS3UploadProgress((prev) => [
+        ...prev,
+        `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+      ]);
     }
   };
 
@@ -286,42 +295,42 @@ const App: React.FC = () => {
             </pre>
           </div>
         )}
-      {response?.downloadUrl && (
-        <div className="mt-4">
-          <div>
-            <h2 className="text-lg font-semibold mt-4">Processed File</h2>
-            <a
-              href={`http://localhost:3000${response.downloadUrl}`}
-              className="underline text-blue-600"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              Download Processed CSV
-            </a>
-          </div>
-          {response.fileUrls && response.fileUrls.length > 0 && (
+        {response?.downloadUrl && (
+          <div className="mt-4">
             <div>
-              <h2 className="text-lg font-semibold mt-4">Referenced Files</h2>
-              <ul className="list-disc ml-6">
-                {response.fileUrls.map((file) => (
-                  <li key={file.row}>
-                    Row {file.row}: {file.pageCount} pages{" "}
-                    <a
-                      href={`http://localhost:3000${file.url}`}
-                      className="underline text-blue-600"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                    >
-                      Download
-                    </a>
-                  </li>
-                ))}
-              </ul>
+              <h2 className="text-lg font-semibold mt-4">Processed File</h2>
+              <a
+                href={`http://localhost:3000${response.downloadUrl}`}
+                className="underline text-blue-600"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download Processed CSV
+              </a>
             </div>
-          )}
-        </div>
-      )}
-      {error && <p className="mt-4 text-red-600">{error}</p>}
+            {response.fileUrls && response.fileUrls.length > 0 && (
+              <div>
+                <h2 className="text-lg font-semibold mt-4">Referenced Files</h2>
+                <ul className="list-disc ml-6">
+                  {response.fileUrls.map((file) => (
+                    <li key={file.row}>
+                      Row {file.row}: {file.pageCount} pages{" "}
+                      <a
+                        href={`http://localhost:3000${file.url}`}
+                        className="underline text-blue-600"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Download
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+        {error && <p className="mt-4 text-red-600">{error}</p>}
       </div>
     </div>
   );
