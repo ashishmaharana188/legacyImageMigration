@@ -89,9 +89,6 @@ export class Database {
         client.on("error", onClientError);
         await client.query("SELECT 1");
         client.off("error", onClientError);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn(`pool health check failed (tolerated): ${msg}`);
       } finally {
         if (client) client.release();
       }
@@ -412,10 +409,8 @@ page_count, client_id
         }
 
         const format = ext.replace(".", "").toUpperCase();
-        const clientId = String(data.id_fund)
-          .split("")
-          .map((char) => (/\\d/.test(char) ? char.charCodeAt(0) : ""))
-          .join("");
+        const clientId = parseInt(String(data.id_fund), 10); // Convert to integer
+        const finalClientId = isNaN(clientId) ? null : clientId; // Set to null if not a valid number
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
         const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
@@ -450,7 +445,7 @@ page_count, client_id
           new Date(),
           "system",
           data.page_count,
-          clientId,
+          finalClientId,
         ];
 
         await client.query(queryText, values);
@@ -472,7 +467,8 @@ page_count, client_id
         try {
           await client.query("ROLLBACK");
           this.logger.info("executeSql: transaction rolled back");
-        } catch (e) {
+        }
+        catch (e) {
           const m = e instanceof Error ? e.message : "Unknown error";
           this.logger.error(`executeSql: ROLLBACK failed: ${m}`);
         }
@@ -665,8 +661,6 @@ WHERE ts.client_id = d.client_id
     }
   }
 
-  // ADD THIS inside the Database class (e.g., after updateFolioAndTransaction)
-
   public async sanityCheckDuplicates(params: {
     dryRun?: boolean; // if true, does not delete; returns rows that would be deleted
     normalize?: boolean; // if true, compares TRIM(LOWER(user_attr1)) for robustness
@@ -836,6 +830,57 @@ WHERE r2.rn > 1;
         }`,
       });
       return { result: "failed", dryRun, cutoffTms, logs };
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  public async getAifDocumentDetails(cutoffTms: string = "2025-08-31T00:00:00.0000"): Promise<any[]> {
+    let client: PoolClient | null = null;
+    try {
+      client = await this.getPool().connect();
+      const query = `
+        SELECT
+          document_process,
+          document_activity,
+          document_type,
+          document_format,
+          document_path,
+          folio_id,
+          transaction_reference_id,
+          document_status,
+          mime_type,
+          user_attr0,
+          user_attr1,
+          user_attr2,
+          user_attr3,
+          user_attr4,
+          user_attr5,
+          user_attr6,
+          user_attr7,
+          user_attr8,
+          user_attr9,
+          approval_status,
+          approved_by,
+          approved_on,
+          comments,
+          audit_code,
+          del_flag,
+          last_update_tms,
+          last_updated_by,
+          creation_date,
+          created_by,
+          page_count,
+          client_id
+        FROM investor.aif_document_details
+        WHERE last_update_tms >= $1::timestamptz;
+      `;
+      const res = await client.query(query, [cutoffTms]);
+      this.logger.info(`Fetched ${res.rows.length} rows from aif_document_details.`);
+      return res.rows;
+    } catch (error) {
+      this.logger.error(`Error fetching aif_document_details: ${error}`);
+      throw error;
     } finally {
       if (client) client.release();
     }

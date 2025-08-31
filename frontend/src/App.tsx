@@ -179,13 +179,29 @@ const App: React.FC = () => {
         "http://localhost:3000/sanity-check-duplicates",
         {
           cutoffTms: new Date().toISOString(),
-          dryRun: true,
+          dryRun: false,
           normalize: true,
         }
       );
       setSanityCheckResult(response.data);
     } catch (error) {
       console.error("Error during sanity check:", error);
+    }
+  };
+
+  const handleTransferToMongo = async () => {
+    try {
+      const response = await axios.post(
+        "http://localhost:3000/transfer-to-mongo"
+      );
+      alert(response.data.message); // Or update a state variable to display the message
+    } catch (error) {
+      console.error("Error transferring data to MongoDB:", error);
+      alert(
+        `Failed to transfer data: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   };
 
@@ -244,6 +260,12 @@ const App: React.FC = () => {
           className="px-4 py-2 bg-yellow-500 text-white rounded hover:bg-yellow-600"
         >
           Sanity Check Duplicates
+        </button>
+        <button
+          onClick={handleTransferToMongo}
+          className="px-4 py-2 bg-indigo-500 text-white rounded hover:bg-indigo-600"
+        >
+          Transfer to Mongo
         </button>
       </div>
       {s3UploadProgress.length > 0 && (

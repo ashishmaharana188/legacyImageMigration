@@ -11,7 +11,8 @@ import cors from "cors";
 import multer from "multer";
 import fs from "fs/promises";
 import { fileController } from "./controllers/fileController";
-import { startSshTunnel } from "./services/tunnel";
+import { startSshTunnel, startMongoSshTunnel } from "./services/tunnel";
+import { MongoDatabase } from "./services/mongoDatabase"; // Added this line
 import { WebSocketServer } from "ws"; // Added this line
 
 const app = express();
@@ -110,6 +111,7 @@ app.post(
 );
 
 app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
+app.post("/transfer-to-mongo", fileController.transferDataToMongo);
 app.post("/upload-to-s3", fileController.uploadToS3);
 
 // WebSocket server setup
@@ -123,9 +125,45 @@ wss.on("connection", (ws: WebSocket) => {
 export { wss }; // Export wss for use in other modules
 
 const startServer = async () => {
-  let server: any;
+  let pgServer: any; // For PostgreSQL tunnel
+  let mongoServer: any; // For MongoDB tunnel
+  let mongoLocalPort: number | undefined;
+
   if (process.env.USE_SSH_TUNNEL === "true") {
-    server = await startSshTunnel();
+    pgServer = await startSshTunnel(); // Start PostgreSQL tunnel
+  }
+
+  if (process.env.USE_MONGO_SSH_TUNNEL === "true") {
+    const tunnelResult = await startMongoSshTunnel();
+    if (tunnelResult) {
+      mongoServer = tunnelResult.server;
+      mongoLocalPort = tunnelResult.localPort;
+
+      // Parse the original MONGO_URI and update its host/port for the tunnel
+      if (process.env.MONGO_URI) {
+        try {
+          const mongoUriObj = new URL(process.env.MONGO_URI);
+          mongoUriObj.hostname = 'localhost';
+          mongoUriObj.port = mongoLocalPort.toString();
+          process.env.MONGO_URI = mongoUriObj.toString();
+          console.log(`MongoDB URI updated for tunnel: ${process.env.MONGO_URI}`);
+        } catch (e) {
+          console.error("Error parsing MONGO_URI for tunnel update:", e);
+          // Fallback to original URI or handle error
+        }
+      } else {
+        console.warn("USE_MONGO_SSH_TUNNEL is true but MONGO_URI is not set.");
+      }
+    }
+  }
+
+  // Initialize and connect to MongoDB during server startup
+  const mongoDatabase = new MongoDatabase();
+  try {
+    await mongoDatabase.connect();
+    console.log("MongoDB connection established during startup.");
+  } catch (error) {
+    console.error("Failed to establish MongoDB connection during startup:", error);
   }
 
   const expressServer = app.listen(port, () => {
@@ -143,9 +181,13 @@ const startServer = async () => {
     console.log("Shutting down gracefully...");
     expressServer.close(() => {
       console.log("Closed out remaining connections.");
-      if (server) {
-        server.close();
-        console.log("SSH tunnel closed.");
+      if (pgServer) { // Changed from 'server' to 'pgServer'
+        pgServer.close(); // Changed from 'server' to 'pgServer'
+        console.log("PostgreSQL SSH tunnel closed."); // Clarified message
+      }
+      if (mongoServer) { // Added for MongoDB tunnel
+        mongoServer.close();
+        console.log("MongoDB SSH tunnel closed."); // Added message
       }
       // Close WebSocket server
       wss.close(() => {
