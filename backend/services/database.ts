@@ -682,15 +682,15 @@ WHERE ts.client_id = d.client_id
     const { cutoffTms, dryRun = true, normalize = false } = params;
     let client: PoolClient | null = null;
 
-    const keyExpr = normalize ? "TRIM(LOWER(d.user_attr1))" : "d.user_attr1";
+    const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
 
     // Preview query: list rows that would be deleted (rn > 1 within keys that existed on/before cutoff)
     const previewSql = `
 WITH pre_cutoff_keys AS (
   SELECT DISTINCT ${keyExpr} AS k
-  FROM investor.aif_document_details d
-  WHERE d.user_attr1 IS NOT NULL
-    AND d.creation_date <= $1::timestamptz
+  FROM investor.aif_document_details
+  WHERE user_attr1 IS NOT NULL
+    AND creation_date <= $1::timestamptz
 ),
 dups AS (
   SELECT
@@ -706,7 +706,7 @@ SELECT *
 FROM dups
 WHERE rn > 1
 ORDER BY ${
-      normalize ? "TRIM(LOWER(d.user_attr1))" : "d.user_attr1"
+      normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1"
     }, creation_date DESC, id DESC
 LIMIT 1000
 `;
