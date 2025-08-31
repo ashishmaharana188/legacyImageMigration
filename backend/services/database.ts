@@ -14,7 +14,7 @@ interface SqlLog {
 }
 
 export class Database {
-  private pool: Pool | null = null;
+  private pool: Pool;
 
   private readonly trxnMap: Record<string, string> = {
     IC: "IC",
@@ -37,10 +37,12 @@ export class Database {
       host: process.env.DB_HOST,
       database: process.env.DB_NAME,
       password: process.env.DB_PASSWORD || "",
-      port: parseInt(process.env.DB_PORT || "5433", 10), // 👈 forwarded port from SSH
+      port: parseInt(process.env.DB_PORT || "5433", 10),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,
+      // Consider allowExitOnIdle in serverless/background contexts
+      // allowExitOnIdle: true,
     });
 
     // Lifecycle diagnostics
@@ -50,36 +52,48 @@ export class Database {
     newPool.on("acquire", () => {
       this.logger.info("pg Pool: acquire (client checked out from pool)");
     });
+
+    // IMPORTANT: Do NOT end() or null-out the pool on idle client errors.
+    // Log and let pg discard the broken idle client internally.
     newPool.on("error", (err) => {
-      this.logger.error(`pg Pool: error on idle client: ${err.message}`);
-      // Kill the broken pool and force recreation
-      newPool.end().catch(() => {});
-      this.pool = null;
+      this.logger.error(
+        `pg Pool: unexpected error on idle client: ${err.message}`
+      );
     });
 
-    // Optional warm-up
+    // Optional warm-up (tolerant of transient failures; does not mutate pool)
     (async () => {
       try {
         this.logger.info("pool warm-up: attempting initial connect/release");
         const client = await newPool.connect();
+        // attach a temporary error handler while checked out
+        const onClientError = (e: Error) =>
+          this.logger.error(`warm-up client error: ${e.message}`);
+        client.on("error", onClientError);
         client.release();
+        client.off("error", onClientError);
         this.logger.info("pool warm-up: connect/release successful");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.error(`pool warm-up: failed: ${msg}`);
-        this.pool = null;
+        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`);
       }
     })();
 
-    // Background health check every 5 min
+    // Background health check every 5 min (never recreates or nulls the pool)
     setInterval(async () => {
+      let client: PoolClient | null = null;
       try {
-        const client = await newPool.connect();
+        client = await newPool.connect();
+        const onClientError = (e: Error) =>
+          this.logger.error(`health-check client error: ${e.message}`);
+        client.on("error", onClientError);
         await client.query("SELECT 1");
-        client.release();
+        client.off("error", onClientError);
       } catch (e) {
-        this.logger.error("pool health check failed, recreating pool");
-        this.pool = null;
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        this.logger.warn(`pool health check failed (tolerated): ${msg}`);
+      } finally {
+        if (client) client.release();
       }
     }, 300000);
 
@@ -88,21 +102,25 @@ export class Database {
   }
 
   public getPool(): Pool {
-    if (!this.pool) {
-      this.logger.warn("Recreating pg pool...");
-      this.pool = this.createPool();
-    }
+    // Keep returning the existing singleton pool.
     return this.pool;
   }
 
   public async warmup() {
+    let client: PoolClient | null = null;
     try {
-      const client = await this.getPool().connect();
-      client.release();
+      client = await this.getPool().connect();
+      const onClientError = (e: Error) =>
+        this.logger.error(`warmup client error: ${e.message}`);
+      client.on("error", onClientError);
+      // A simple ping ensures the backend is reachable
+      await client.query("SELECT 1");
+      client.off("error", onClientError);
       this.logger.info("🔥 Database connection warm-up successful");
     } catch (err) {
-      this.logger.error("Database warm-up failed:", err);
-      this.pool = null;
+      this.logger.warn("Database warm-up failed (tolerated):", err);
+    } finally {
+      if (client) client.release();
     }
   }
 
@@ -230,23 +248,24 @@ export class Database {
       const mimeType: Record<string, string> = {
         tif: "image/tiff",
         pdf: "application/pdf",
+        tiff: "image/tiff",
       };
 
       const values = transactions
         .map((data, index) => {
           try {
             const p = data.id_path;
-            const ext = this.getFileExtension(p);
+            const ext = this.getFileExtension(p).replace(".", "");
             if (!ext) throw new Error("Invalid file extension");
 
-            const format = ext.toUpperCase();
+            const format = ext.replace(".", "").toUpperCase();
             const clientId = String(data.id_fund)
               .split("")
               .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
               .join("");
 
             const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-            const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}.${ext}`;
+            const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
             const sql = `(
 '${this.trxnMap[data.id_trtype] || "Unknown"}', 'Image Upload', '${
@@ -391,13 +410,13 @@ page_count, client_id
           continue;
         }
 
-        const format = ext.toUpperCase();
+        const format = ext.replace(".", "").toUpperCase();
         const clientId = String(data.id_fund)
           .split("")
           .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
           .join("");
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-        const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}.${ext}`;
+        const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
         const values = [
           this.trxnMap[data.id_trtype] || "Unknown",
@@ -408,7 +427,7 @@ page_count, client_id
           null,
           data.id_ihno.toString(),
           "A",
-          mimeType[ext] || "application/octet-stream",
+          mimeType[ext.replace(".", "")] || "Unknown",
           null,
           data.id_ihno.toString(),
           data.id_acno,
@@ -458,12 +477,11 @@ page_count, client_id
         }
       }
 
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      this.logger.error(`executeSql: failed: ${msg}`);
+      this.logger.error(`executeSql: failed:`, err);
       logs.push({
         row: 0,
         status: "error",
-        message: `SQL execution failed: ${msg}`,
+        message: `SQL execution failed: ${err}`,
       });
       return { result: "failed", logs };
     } finally {
