@@ -261,7 +261,7 @@ export class Database {
             const format = ext.replace(".", "").toUpperCase();
             const clientId = String(data.id_fund)
               .split("")
-              .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
+              .map((char) => (/\\d/.test(char) ? char.charCodeAt(0) : ""))
               .join("");
 
             const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
@@ -321,7 +321,8 @@ user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
 approval_status, approved_by, approved_on, comments, audit_code,
 del_flag, last_update_tms, last_updated_by, creation_date, created_by,
 page_count, client_id
-) VALUES ${values.join(", ")};`;
+) VALUES ${values.join(", ")};
+`;
 
       this.logger.info("Generated multi-row SQL");
       return { sql, transactions, logs };
@@ -413,7 +414,7 @@ page_count, client_id
         const format = ext.replace(".", "").toUpperCase();
         const clientId = String(data.id_fund)
           .split("")
-          .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
+          .map((char) => (/\\d/.test(char) ? char.charCodeAt(0) : ""))
           .join("");
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
         const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
@@ -725,39 +726,37 @@ RETURNING t.id
 `;
 
     const previewSql = `
--- Rule 1 Preview
-WITH pre_cutoff_keys AS (
-  SELECT DISTINCT ${keyExpr} AS k
+WITH
+-- CTEs for Rule 2 Preview
+post_cutoff_only_keys AS (
+  SELECT ${keyExpr} AS k
   FROM investor.aif_document_details
   WHERE user_attr1 IS NOT NULL
-    AND creation_date <= $1::timestamptz
+  GROUP BY ${keyExpr}
+  HAVING MIN(creation_date) > $2::timestamptz
+),
+post_cutoff_dups_ranked AS (
+  SELECT d.*,
+         ROW_NUMBER() OVER (PARTITION BY ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
+  FROM investor.aif_document_details d
+  WHERE ${keyExpr} IN (SELECT k FROM post_cutoff_only_keys)
 )
-SELECT d.*, 'Rule 1' as reason
+-- Rule 1 Preview
+SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
 FROM investor.aif_document_details d
-WHERE ${keyExpr} IN (SELECT k FROM pre_cutoff_keys)
-  AND d.creation_date > $1::timestamptz
+WHERE ${keyExpr} IN (
+    SELECT DISTINCT ${keyExpr}
+    FROM investor.aif_document_details
+    WHERE user_attr1 IS NOT NULL AND creation_date <= $1::timestamptz
+)
+AND d.creation_date > $1::timestamptz
 
 UNION ALL
 
 -- Rule 2 Preview
-WITH post_cutoff_only_keys AS (
-    SELECT ${keyExpr} AS k
-    FROM investor.aif_document_details
-    WHERE user_attr1 IS NOT NULL
-    GROUP BY ${keyExpr}
-    HAVING MIN(creation_date) > $2::timestamptz
-),
-dups_to_preview AS (
-    SELECT
-        d.*,
-        ROW_NUMBER() OVER (
-            PARTITION BY ${keyExpr}
-            ORDER BY d.creation_date ASC, d.id ASC
-        ) as rn
-    FROM investor.aif_document_details d
-    JOIN post_cutoff_only_keys p ON ${keyExpr} = p.k
-)
-SELECT d.*, 'Rule 2' as reason FROM dups_to_preview d WHERE rn > 1
+SELECT r2.*, 'Rule 2' as reason
+FROM post_cutoff_dups_ranked r2
+WHERE r2.rn > 1;
 `;
 
     try {
@@ -769,10 +768,13 @@ SELECT d.*, 'Rule 2' as reason FROM dups_to_preview d WHERE rn > 1
       await client.query("BEGIN");
 
       if (dryRun) {
-        const previewRes = await client.query(previewSql, [cutoffTms, cutoffTms]);
+        const previewRes = await client.query(previewSql, [
+          cutoffTms,
+          cutoffTms,
+        ]);
         await client.query("ROLLBACK");
         this.logger.info(
-          `sanityCheckDuplicates: dry-run complete, ${previewRes.rows.length} rows would be deleted`
+          `sanityCheckDuplicates_v2: dry-run complete, ${previewRes.rows.length} rows would be deleted`
         );
         return {
           result: "success",
@@ -803,7 +805,7 @@ SELECT d.*, 'Rule 2' as reason FROM dups_to_preview d WHERE rn > 1
 
       const totalDeleted = (delRes1.rowCount ?? 0) + (delRes2.rowCount ?? 0);
       this.logger.info(
-        `sanityCheckDuplicates: committed. Total deleted: ${totalDeleted} rows.`
+        `sanityCheckDuplicates_v2: committed. Total deleted: ${totalDeleted} rows.`
       );
 
       return {
@@ -818,18 +820,18 @@ SELECT d.*, 'Rule 2' as reason FROM dups_to_preview d WHERE rn > 1
         try {
           await client.query("ROLLBACK");
         } catch (e) {
-          this.logger.error(`sanityCheckDuplicates: ROLLBACK failed: ${e}`);
+          this.logger.error(`sanityCheckDuplicates_v2: ROLLBACK failed: ${e}`);
         }
       }
       this.logger.error(
-        `sanityCheckDuplicates: failed: ${
+        `sanityCheckDuplicates_v2: failed: ${
           err instanceof Error ? err.message : String(err)
         }`
       );
       logs.push({
         row: 0,
         status: "error",
-        message: `sanityCheckDuplicates failed: ${
+        message: `sanityCheckDuplicates_v2 failed: ${
           err instanceof Error ? err.message : String(err)
         }`,
       });

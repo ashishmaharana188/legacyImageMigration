@@ -167,7 +167,6 @@ class FileController {
       const { cutoffTms, dryRun, normalize } = req.body;
       const processor = new Database();
       const result = await processor.sanityCheckDuplicates({
-        cutoffTms,
         dryRun,
         normalize,
       });
@@ -227,7 +226,13 @@ class FileController {
       // Send WebSocket message on success
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 's3UploadStatus', status: 'success', message: 'S3 upload completed successfully!' }));
+          client.send(
+            JSON.stringify({
+              type: "s3UploadStatus",
+              status: "success",
+              message: "S3 upload completed successfully!",
+            })
+          );
         }
       });
     } catch (error) {
@@ -239,7 +244,15 @@ class FileController {
       // Send WebSocket message on error
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 's3UploadStatus', status: 'error', message: `S3 upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` }));
+          client.send(
+            JSON.stringify({
+              type: "s3UploadStatus",
+              status: "error",
+              message: `S3 upload failed: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`,
+            })
+          );
         }
       });
     }
