@@ -396,30 +396,6 @@ export class PdfProcessing {
     await csvWorkbook.csv.writeFile(outputPath);
     this.logger.info("Processed file saved");
 
-    try {
-      const outputRoot = path.resolve(__dirname, "../../output");
-      const bucket = S3_BUCKET_NAME;
-
-      const clients = await fs.readdir(outputRoot, { withFileTypes: true });
-      for (const clientDir of clients) {
-        if (
-          clientDir.isDirectory() &&
-          clientDir.name.startsWith("CLIENT_CODE_")
-        ) {
-          const clientPath = path.join(outputRoot, clientDir.name);
-          const s3Prefix = getS3Prefix(clientDir.name);
-          this.logger.info(
-            `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
-          );
-          await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
-        }
-      }
-
-      this.logger.info("All uploads complete.");
-    } catch (err) {
-      this.logger.error("Upload failed:", err);
-    }
-
     // Trigger upload script
 
     // Path to the batch file
