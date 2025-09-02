@@ -33,13 +33,11 @@ export class Database {
 
   private createPool(): Pool {
     const newPool = new Pool({
-      user: process.env.USER_SSH_TUNNEL ? process.env.DB_USER : "postgres",
-      host: process.env.USER_SSH_TUNNEL ? process.env.DB_HOST : "localhost",
-      database: process.env.USER_SSH_TUNNEL ? process.env.DB_NAME : "test",
-      password: process.env.USER_SSH_TUNNEL
-        ? process.env.DB_PASSWORD
-        : "123456",
-      port: process.env.USER_SSH_TUNNEL
+      user: process.env.USE_SSH_TUNNEL ? process.env.DB_USER : "postgres",
+      host: process.env.USE_SSH_TUNNEL ? process.env.DB_HOST : "localhost",
+      database: process.env.USE_SSH_TUNNEL ? process.env.DB_NAME : "test",
+      password: process.env.USE_SSH_TUNNEL ? process.env.DB_PASSWORD : "123456",
+      port: process.env.USE_SSH_TUNNEL
         ? parseInt(process.env.DB_PORT || "5433", 10)
         : 5432,
       max: 20,
