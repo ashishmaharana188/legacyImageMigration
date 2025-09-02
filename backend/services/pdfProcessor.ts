@@ -146,7 +146,6 @@ export class PdfProcessing {
       id_fund: string;
       id_trtype: string;
       id_ihno: string;
-      image: string;
       id_path: string;
       id_acno: string;
       page_count: string | number;
@@ -178,11 +177,7 @@ export class PdfProcessing {
         const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
         const trxnType =
           row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-        const image = pathVal.includes("image")
-          ? "image"
-          : pathVal.includes("common")
-          ? "common"
-          : "";
+
         this.logger.info(`Row ${rowNumber} data`, {
           serverId,
           drivePath,
@@ -191,7 +186,6 @@ export class PdfProcessing {
           fund,
           ihNo,
           trxnType,
-          image,
         });
 
         if (!serverId) {
@@ -199,7 +193,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxnType,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Missing serverId",
@@ -213,7 +206,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxnType,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Missing drivePath",
@@ -227,7 +219,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxnType,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Missing pathVal",
@@ -277,7 +268,6 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              image: image,
               id_path: pathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: "Path Error",
@@ -310,7 +300,7 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              image: image,
+
               id_path: pathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: pageCount,
@@ -336,7 +326,6 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              image: image,
               id_path: pathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
@@ -350,7 +339,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxn,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Not Found",
@@ -363,7 +351,6 @@ export class PdfProcessing {
           id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
           id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
           id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
-          image: "",
           id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
           id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
           page_count: "Error",
@@ -378,7 +365,6 @@ export class PdfProcessing {
       { header: "id_fund", key: "id_fund" },
       { header: "id_trtype", key: "id_trtype" },
       { header: "id_ihno", key: "id_ihno" },
-      { header: "image", key: "image" },
       { header: "id_path", key: "id_path" },
       { header: "id_acno", key: "id_acno" },
       { header: "page_count", key: "page_count" },
@@ -445,3 +431,4 @@ export class PdfProcessing {
     };
   }
 }
+

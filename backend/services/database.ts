@@ -17,7 +17,7 @@ export class Database {
   private pool: Pool;
 
   private readonly trxnMap: Record<string, string> = {
-    IC: "IC",
+    NEW: "IC",
     NCT: "NCT",
     RED: "RED",
     FUL: "RED",
@@ -155,7 +155,6 @@ export class Database {
       id_fund: number;
       id_trtype: string;
       id_ihno: number;
-      image: string;
       id_path: string;
       id_acno: string;
       page_count: number | string;
@@ -198,7 +197,6 @@ export class Database {
         id_fund: number;
         id_trtype: string;
         id_ihno: number;
-        image: string;
         id_path: string;
         id_acno: string;
         page_count: number | string;
@@ -211,12 +209,11 @@ export class Database {
             id_fund: parseInt(row.getCell(1).text, 10),
             id_trtype: row.getCell(2).text.trim(),
             id_ihno: parseInt(row.getCell(3).text, 10),
-            image: row.getCell(4).text.trim(),
-            id_path: row.getCell(5).text.trim(),
-            id_acno: row.getCell(6).text.trim(),
-            page_count: isNaN(parseInt(row.getCell(7).text, 10))
-              ? row.getCell(7).text.trim()
-              : parseInt(row.getCell(7).text, 10),
+            id_path: row.getCell(4).text.trim(),
+            id_acno: row.getCell(5).text.trim(),
+            page_count: isNaN(parseInt(row.getCell(6).text, 10))
+              ? row.getCell(6).text.trim()
+              : parseInt(row.getCell(6).text, 10),
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
@@ -382,7 +379,7 @@ page_count, client_id
 `;
 
       const trxnNameMap: Record<string, string> = {
-        IC: "Initial Contribution Form",
+        NEW: "Initial Contribution Form",
         NCT: "Non Commercial Transactions Form",
         RED: "Redemption Form",
         FUL: "Redemption Form",
@@ -393,8 +390,9 @@ page_count, client_id
       };
 
       const mimeType: Record<string, string> = {
-        tif: "image/tiff",
+        tif: "image/tif",
         pdf: "application/pdf",
+        tiff: "image/tiff",
       };
 
       for (const [index, data] of transactions.entries()) {
@@ -471,8 +469,7 @@ page_count, client_id
         try {
           await client.query("ROLLBACK");
           this.logger.info("executeSql: transaction rolled back");
-        }
-        catch (e) {
+        } catch (e) {
           const m = e instanceof Error ? e.message : "Unknown error";
           this.logger.error(`executeSql: ROLLBACK failed: ${m}`);
         }
@@ -573,17 +570,17 @@ FROM (
 
       // Query 3: Update folio_id using id_acno
       const updateFolioQuery = `
-WITH client_folio AS (
-  SELECT folio_number,id,client_id,
-    (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
-)
-UPDATE investor.aif_document_details AS d
-SET folio_id = f.id
-FROM client_folio AS f
-JOIN fund.client_master cm on f.client_id=cm.id
-LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
-WHERE d.user_attr2 = f.folio_number
-   OR d.transaction_reference_id = t.ihno
+      WITH client_folio AS (
+        SELECT folio_number,id,client_id,
+        (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
+    )
+    UPDATE investor.aif_document_details AS d
+      SET folio_id = f.id
+    FROM client_folio AS f
+    JOIN fund.client_master cm on f.client_id=cm.id
+      LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
+    WHERE d.user_attr2 = f.folio_number
+        OR d.transaction_reference_id = t.ihno
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
       const updateFolioResult = await client.query(updateFolioQuery);
@@ -839,7 +836,9 @@ WHERE r2.rn > 1;
     }
   }
 
-  public async getAifDocumentDetails(cutoffTms: string = "2025-08-31T00:00:00.0000"): Promise<any[]> {
+  public async getAifDocumentDetails(
+    cutoffTms: string = "2025-08-31T00:00:00.0000"
+  ): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
       client = await this.getPool().connect();
@@ -880,7 +879,9 @@ WHERE r2.rn > 1;
         WHERE last_update_tms >= $1::timestamptz;
       `;
       const res = await client.query(query, [cutoffTms]);
-      this.logger.info(`Fetched ${res.rows.length} rows from aif_document_details.`);
+      this.logger.info(
+        `Fetched ${res.rows.length} rows from aif_document_details.`
+      );
       return res.rows;
     } catch (error) {
       this.logger.error(`Error fetching aif_document_details: ${error}`);

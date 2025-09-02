@@ -279,26 +279,6 @@ const App: React.FC = () => {
         </div>
       )}
       <div className="flex flex-col items-center justify-center mx-auto">
-        {sqlResult && (
-          <div className="mt-4 text-white">
-            <h3 className="text-lg font-semibold">SQL Output</h3>
-            <p>SQL: {sqlResult.sql}</p>
-            <h4 className="font-semibold mt-2">Logs:</h4>
-            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
-              {JSON.stringify(sqlResult.logs, null, 2)}
-            </pre>
-          </div>
-        )}
-        {executeResult && (
-          <div className="mt-4 text-white">
-            <h3 className="text-lg font-semibold">Execution Result</h3>
-            <p>Result: {executeResult.result}</p>
-            <h4 className="font-semibold mt-2">Logs:</h4>
-            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
-              {JSON.stringify(executeResult.logs, null, 2)}
-            </pre>
-          </div>
-        )}
         {updateFolioResult && (
           <div className="mt-4 text-white">
             <h3 className="text-lg font-semibold">Folio Update Result</h3>
