@@ -17,76 +17,110 @@ const logger = winston.createLogger({
   ],
 });
 
-// Define the schema for fnxTransactionInitiationDocUpload
-const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema(
-  {
-    activityStatus: String,
-    applicationId: String,
-    barcode: String,
-    branchId: String,
-    clientId: Number,
-    createdBy: String,
-    createdFrom: Date,
-    createdOn: Date,
-    currentStage: Number,
-    documentFormat: String,
-    documentPath: String,
-    documentSize: String,
-    documentType: String,
-    lastUpdatedBy: String,
-    lastUpdatedFrom: String,
-    lastUpdatedOn: Date,
-    mimeType: String,
-    processCode: String,
-    sourceUser: String,
-    totalPageCount: Number,
-    transactionCode: String,
-    transactionNo: String,
-    transactionType: String,
-    workDate: Date,
-  },
-  { collection: "fnxTransactionInitiationDocUpload" }
-); // Specify collection name
-
-// Create the model
-const FnxTransactionInitiationDocUpload = mongoose.model(
-  "FnxTransactionInitiationDocUpload",
-  FnxTransactionInitiationDocUploadSchema
-);
-
 export class MongoDatabase {
   private uri: string;
+  private model: mongoose.Model<any>;
 
   constructor() {
-    this.uri = process.env.MONGO_URI || "mongodb://localhost:27017/investor"; // Default to 'investor' database
+    const useTunnel = process.env.USE_MONGO_SSH_TUNNEL === "true";
+
+    if (useTunnel) {
+      this.uri = process.env.MONGO_URI || "mongodb://localhost:27017/investor";
+      const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema(
+        {
+          activityStatus: String,
+          applicationId: String,
+          barcode: String,
+          branchId: String,
+          clientId: Number,
+          createdBy: String,
+          createdFrom: Date,
+          createdOn: Date,
+          currentStage: Number,
+          documentFormat: String,
+          documentPath: String,
+          documentSize: String,
+          documentType: String,
+          lastUpdatedBy: String,
+          lastUpdatedFrom: String,
+          lastUpdatedOn: Date,
+          mimeType: String,
+          processCode: String,
+          sourceUser: String,
+          totalPageCount: Number,
+          transactionCode: String,
+          transactionNo: String,
+          transactionType: String,
+          workDate: Date,
+        },
+        { collection: "fnxTransactionInitiationDocUpload" }
+      );
+
+      this.model =
+        mongoose.models.FnxTransactionInitiationDocUpload ||
+        mongoose.model(
+          "FnxTransactionInitiationDocUpload",
+          FnxTransactionInitiationDocUploadSchema
+        );
+    } else {
+      this.uri = process.env.LOCAL_URI || ""; // URI for test_noSql
+      const TestImageMigrationSchema = new mongoose.Schema(
+        {},
+        { strict: false, collection: "testImageMigration" }
+      );
+      this.model =
+        mongoose.models.TestImageMigration ||
+        mongoose.model("TestImageMigration", TestImageMigrationSchema);
+    }
   }
 
   public async connect(): Promise<void> {
     try {
-      const connectOptions: mongoose.ConnectOptions = {};
+      const useTunnel = process.env.USE_MONGO_SSH_TUNNEL === "true";
 
-      if (process.env.MONGO_USER && process.env.MONGO_PASSWORD) {
-        connectOptions.user = process.env.MONGO_USER;
-        connectOptions.pass = process.env.MONGO_PASSWORD;
-        if (process.env.MONGO_AUTH_SOURCE) {
-          connectOptions.authSource = process.env.MONGO_AUTH_SOURCE;
+      if (useTunnel) {
+        const connectOptions: mongoose.ConnectOptions = {};
+
+        if (process.env.MONGO_USER && process.env.MONGO_PASSWORD) {
+          connectOptions.user = process.env.MONGO_USER;
+          connectOptions.pass = process.env.MONGO_PASSWORD;
+          if (process.env.MONGO_AUTH_SOURCE) {
+            connectOptions.authSource = process.env.MONGO_AUTH_SOURCE;
+          }
         }
+        await mongoose.connect(this.uri, connectOptions);
+      } else {
+        if (!this.uri) {
+          logger.error("LOCAL_URI is not set for non-tunnel connection.");
+          process.exit(1);
+        }
+        await mongoose.connect(this.uri);
       }
-
-      await mongoose.connect(this.uri, connectOptions);
       logger.info("MongoDB connected successfully");
 
-      // Perform a simple check on the collection
+      // Check if the collection exists
       try {
-        // Ensure db is available before accessing
         if (mongoose.connection.db) {
-          const collection = mongoose.connection.db.collection(
-            "fnxTransactionInitiationDocUpload"
-          );
-          const count = await collection.find().sort({ "_id:": -1 });
-          logger.info(
-            `MongoDB collection 'fnxTransactionInitiationDocUpload' accessed successfully. Contains ${count} documents.`
-          );
+          const collectionName = this.model.collection.name;
+          const collections = await mongoose.connection.db
+            .listCollections({ name: collectionName })
+            .toArray();
+
+          if (collections.length === 0) {
+            logger.error(
+              `Collection '${collectionName}' does not exist. The application will exit.`
+            );
+            await mongoose.disconnect();
+            process.exit(1);
+          } else {
+            const count = await mongoose.connection.db
+              .collection(collectionName)
+              .find()
+              .sort("-id: -1");
+            logger.info(
+              `MongoDB collection '${collectionName}' accessed successfully. Contains ${count} documents.`
+            );
+          }
         } else {
           logger.warn(
             "mongoose.connection.db is not available after connection."
@@ -94,7 +128,7 @@ export class MongoDatabase {
         }
       } catch (collectionError) {
         logger.warn(
-          `Could not access 'fnxTransactionInitiationDocUpload' collection: ${collectionError}`
+          `Could not access '${this.model.collection.name}' collection: ${collectionError}`
         );
       }
     } catch (error) {
@@ -105,10 +139,10 @@ export class MongoDatabase {
 
   public async insertDocument(document: any): Promise<void> {
     try {
-      const newDoc = new FnxTransactionInitiationDocUpload(document);
+      const newDoc = new this.model(document);
       await newDoc.save();
       logger.info(
-        `Document inserted into collection: fnxTransactionInitiationDocUpload`
+        `Document inserted into collection: ${this.model.collection.name}`
       );
     } catch (error) {
       logger.error(`Error inserting document into MongoDB: ${error}`);
@@ -127,18 +161,14 @@ export class MongoDatabase {
 
   public async testConnectionAndQuery(): Promise<any[]> {
     try {
-      // Check if Mongoose is already connected
       if (mongoose.connection.readyState !== 1) {
         logger.warn("MongoDB not connected. Attempting to connect...");
-        await this.connect(); // Attempt to connect if not already
+        await this.connect();
       }
 
-      // Perform a simple query to test the connection and collection access
-      const result = await FnxTransactionInitiationDocUpload.find({})
-        .limit(1)
-        .lean();
+      const result = await this.model.find({}).limit(1).lean();
       logger.info(
-        "MongoDB connection test successful. Found 1 document (if any)."
+        `MongoDB connection test successful. Found ${result.length} document(s).`
       );
       return result;
     } catch (error) {
