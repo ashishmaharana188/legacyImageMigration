@@ -54,7 +54,7 @@ export class MongoDatabase {
           transactionType: String,
           workDate: Date,
         },
-        { collection: "fnxTransactionInitiationDocUpload" }
+        { collection: "fnxTransactionInitiationDocUpload", versionKey: false }
       );
 
       this.model =
@@ -120,7 +120,7 @@ export class MongoDatabase {
               .sort({ _id: -1 })
               .toArray();
             logger.info(
-              `MongoDB collection '${collectionName}' accessed successfully. Contains ${count} documents.`
+              `MongoDB collection '${collectionName}' accessed successfully.`
             );
           }
         } else {
@@ -141,14 +141,21 @@ export class MongoDatabase {
 
   public async insertDocument(document: any): Promise<void> {
     try {
-      const newDoc = new this.model(document);
-      await newDoc.save();
-      logger.info(
-        `Document inserted into collection: ${this.model.collection.name}`
-      );
-    } catch (error) {
-      logger.error(`Error inserting document into MongoDB: ${error}`);
-      throw error;
+      await this.model.insertMany(document, { ordered: false });
+      logger.info(`${document.length} documents inserted successfully`);
+    } catch (error: any) {
+      // If some failed, Mongoose will throw a BulkWriteError
+      if (error.writeErrors) {
+        for (const err of error.writeErrors) {
+          const failedDoc = document[err.index];
+          console.error(
+            "Failed to insert transaction_reference_id:",
+            failedDoc.transaction_reference_id
+          );
+        }
+      } else {
+        logger.error("Unexpected bulk insert error", error);
+      }
     }
   }
 
@@ -186,10 +193,16 @@ export class MongoDatabase {
       const database = new Database();
       await this.connect();
 
+      const transactionsMap: Record<string, string> = {
+        IC: "ICP",
+        NCT: "NCTP",
+      };
+
       const pgData = await database.getAifDocumentDetails();
 
       for (const data of pgData) {
         const docType = data.document_type;
+        const docProcess = data.process_code;
         const doc = {
           activityStatus: data.activity_status || "O",
           applicationId: data.application_id || null,
@@ -197,8 +210,12 @@ export class MongoDatabase {
           branchId: data.branch_id || "BR01",
           clientId: data.client_id,
           createdBy: data.created_by || "system",
-          createdFrom: data.created_from || new Date(),
-          createdOn: data.created_on || new Date(),
+          createdFrom: new Date(data.created_from)
+            .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            .toLocaleUpperCase(),
+          createdOn: new Date(data.created_on)
+            .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            .toLocaleUpperCase(),
           currentStage: data.current_stage || 15,
           documentFormat: data.document_format,
           documentPath: data.document_path,
@@ -206,15 +223,19 @@ export class MongoDatabase {
           documentType: "APLCN",
           lastUpdatedBy: "",
           lastUpdatedFrom: data.last_updated_from || null,
-          lastUpdatedOn: data.last_updated_on || new Date(),
+          lastUpdatedOn: new Date()
+            .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            .toLocaleUpperCase(),
           mimeType: data.mime_type,
-          processCode: data.process_code,
+          processCode: transactionsMap[docProcess],
           sourceUser: data.source_user || "system",
           totalPageCount: data.total_page_count || null,
           transactionCode: data.transaction_code,
           transactionNo: data.transaction_reference_id,
-          transactionType: docType ? docType.replace("Form", "").trim() : "",
-          workDate: data.work_date || new Date(),
+          transactionType: docType.replace("Form", "").trim(),
+          workDate: new Date()
+            .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+            .toLocaleUpperCase(),
         };
         await this.insertDocument(doc);
       }

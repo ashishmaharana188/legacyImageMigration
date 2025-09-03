@@ -276,8 +276,6 @@ false, now(), 'system', now(), 'system',
 ${data.page_count}, ${clientId}
 )`;
 
-            this.logger.debug(`generateSql: built values for row ${index + 2}`);
-
             logs.push({
               row: index + 2,
               status: "success",
@@ -394,8 +392,8 @@ page_count, client_id
         tiff: "image/tiff",
       };
 
+      let insertedRows = 0;
       for (const [index, data] of transactions.entries()) {
-        this.logger.debug(`executeSql: preparing row ${index + 2}`);
         const ext = this.getFileExtension(data.id_path);
         if (!ext) {
           this.logger.warn(
@@ -450,13 +448,10 @@ page_count, client_id
         ];
 
         await client.query(queryText, values);
-        this.logger.info(`executeSql: inserted row ${index + 2}`);
-        logs.push({
-          row: index + 2,
-          status: "executed",
-          message: `Row ${index + 2} inserted successfully`,
-        });
+        insertedRows++;
       }
+      this.logger.debug(`executeSql: preparing row ${insertedRows}`);
+      this.logger.info(`executeSql: inserted ${insertedRows} rows`);
 
       await client.query("COMMIT");
       this.logger.info("executeSql: COMMIT successful");
