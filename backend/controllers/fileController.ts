@@ -240,6 +240,25 @@ class FileController {
 
   async uploadToS3(req: Request, res: Response) {
     try {
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (!isProduction) {
+        const message = "Skipping S3 upload in development environment.";
+        console.log(message);
+        // Send WebSocket message
+        wss.clients.forEach((client: WebSocket) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(
+              JSON.stringify({
+                type: "s3UploadStatus",
+                status: "skipped",
+                message: message,
+              })
+            );
+          }
+        });
+        return res.json({ message: message });
+      }
+
       console.log("--- AWS Credential Check (from fileController) ---");
       console.log(
         "AWS_ACCESS_KEY_ID:",

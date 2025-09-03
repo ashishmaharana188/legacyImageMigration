@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "npm run clean && tsc -b",
+    "start:prod": "set NODE_ENV=production&&node dist/app.js",
     "start": "node dist/app.js",
     "dev": "concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
     "clean": "rm -rf dist",

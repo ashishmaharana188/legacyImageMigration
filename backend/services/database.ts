@@ -32,14 +32,15 @@ export class Database {
   }
 
   private createPool(): Pool {
+    const useSshTunnel = process.env.USE_SSH_TUNNEL === 'true';
     const newPool = new Pool({
-      user: process.env.USE_SSH_TUNNEL ? process.env.DB_USER : "postgres",
-      host: process.env.USE_SSH_TUNNEL ? process.env.DB_HOST : "localhost",
-      database: process.env.USE_SSH_TUNNEL ? process.env.DB_NAME : "test",
-      password: process.env.USE_SSH_TUNNEL ? process.env.DB_PASSWORD : "123456",
-      port: process.env.USE_SSH_TUNNEL
+      user: useSshTunnel ? process.env.DB_USER : "postgres",
+      host: useSshTunnel ? process.env.DB_HOST : "localhost",
+      database: useSshTunnel ? process.env.DB_NAME : "test",
+      password: useSshTunnel ? process.env.DB_PASSWORD : "123456",
+      port: useSshTunnel
         ? parseInt(process.env.DB_PORT || "5433", 10)
-        : 5432,
+        : parseInt(process.env.DB_PORT || "5432", 10),
       max: 20,
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 10000,

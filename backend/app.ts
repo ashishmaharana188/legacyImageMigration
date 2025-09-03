@@ -2,14 +2,44 @@ import dotenv from "dotenv";
 import os from "os";
 import path from "path"; // path is needed for dotenv config
 
+import * as fs from "fs";
 // Ensure dotenv is configured as early as possible
+const isProduction = process.env.NODE_ENV === 'production';
+const envFile = isProduction ? '.env.production' : '.env.development';
 const userConfigDir = path.join(os.homedir(), ".appConfig");
-dotenv.config({ path: path.join(userConfigDir, ".env") });
+const envPath = path.join(userConfigDir, envFile);
+
+// Check if the env file exists before attempting to load
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
+  console.log(`MONGO_URI: ${process.env.MONGO_URI}`);
+  console.log(`LOCAL_URI: ${process.env.LOCAL_URI}`);
+
+  if (isProduction) {
+    console.log("Connected to Prod database");
+  } else {
+    console.log("Connected to Dev database");
+  }
+} else {
+  console.warn(`Warning: Environment file not found at: ${envPath}`);
+  // Optionally, you can fall back to a default .env file or handle this case as an error
+  // For example, to fall back to a local .env file:
+  // const localEnvPath = path.resolve(process.cwd(), 'backend', '.env');
+  // if (fs.existsSync(localEnvPath)) {
+  //   dotenv.config({ path: localEnvPath });
+  //   console.log(`Falling back to local environment file: ${localEnvPath}`);
+  // } else {
+  //   console.error("Error: No environment file found.");
+  //   process.exit(1);
+  // }
+}
 
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import fs from "fs/promises";
+import * as fsp from "fs/promises";
 import { fileController } from "./controllers/fileController";
 import { startSshTunnel, startMongoSshTunnel } from "./services/tunnel";
 import { MongoDatabase } from "./services/mongoDatabase"; // Added this line
@@ -27,21 +57,21 @@ const processedDir = "processed";
 async function ensureDirectories() {
   try {
     if (
-      !(await fs
+      !(await fsp
         .access(uploadDir)
         .then(() => true)
         .catch(() => false))
     ) {
-      await fs.mkdir(uploadDir, { recursive: true });
+      await fsp.mkdir(uploadDir, { recursive: true });
       console.log(`Created directory: ${uploadDir}`);
     }
     if (
-      !(await fs
+      !(await fsp
         .access(processedDir)
         .then(() => true)
         .catch(() => false))
     ) {
-      await fs.mkdir(processedDir, { recursive: true });
+      await fsp.mkdir(processedDir, { recursive: true });
       console.log(`Created directory: ${processedDir}`);
     }
   } catch (err) {

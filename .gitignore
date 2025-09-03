@@ -17,6 +17,10 @@ output
 split_output
 *.local
 backend/.env
+.env.development
+.env.production
+backend/.env.development
+backend/.env.production
 keys
 backend/keys
 
