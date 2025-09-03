@@ -1,31 +1,4 @@
- const docType = data.document_type;
-                let doc = {
-                    "activityStatus": "O",
-                    "applicationId": null,
-                    "barcode": null,
-                    "branchId": "BR01",
-                    "clientId": client,
-                    "createdBy": "system",
-                    "createdFrom": date,
-                    "createdOn": date,
-                    "currentStage": 15,
-                    "documentFormat": data.document_format,
-                    "documentPath": data.document_path,
-                    "documentSize": "",
-                    "documentType": "APLCN",
-                    "lastUpdatedBy": "",
-                    "lastUpdatedFrom": null,
-                    "lastUpdatedOn": date,
-                    "mimeType": data.mime_type,
-                    "processCode": transactionsMap[docProcess],
-                    "sourceUser": "system",
-                    "totalPageCount": null,
-                    "transactionCode": data.document_process,
-                    "transactionNo": data.transaction_reference_id,
-                    "transactionType": docType.replace("Form", "").trim(),
-                    "workDate": date,
-                };
-
-                check the temp.txt file at root folder, i want to connect to mongodb on abutton click and run a api or function call the creates runs aselect    │ 
-│    command on aifDocument details using the cuttifftms from database.ts as the only filter, then put it in same json format as temp.txt. and insert │ 
-│     in the connected noSQL collection   
+> check the updateTransactionQuery for ts.clientId in where condition, since this applcation is going to be used in client specifc ways. I want a front end option that          │
+│   queries all the client codes from select* from fund.client_master and dispalys them in a dropdown with select client code as the title. once user selects the client           │
+│   code the full application is set to use this clientCode or its associated id where ever its needed. This initla client code fetch needs to happen from the database by         │
+│   connecting to it and running the query. can this be done?  

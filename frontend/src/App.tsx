@@ -179,7 +179,7 @@ const App: React.FC = () => {
         "http://localhost:3000/sanity-check-duplicates",
         {
           cutoffTms: new Date().toISOString(),
-          dryRun: false,
+          dryRun: true,
           normalize: true,
         }
       );

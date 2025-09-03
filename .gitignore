@@ -21,6 +21,7 @@ backend/.env
 .env.production
 backend/.env.development
 backend/.env.production
+backend/uploads
 keys
 backend/keys
 

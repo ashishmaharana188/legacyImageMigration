@@ -32,7 +32,7 @@ export class Database {
   }
 
   private createPool(): Pool {
-    const useSshTunnel = process.env.USE_SSH_TUNNEL === 'true';
+    const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
     const newPool = new Pool({
       user: useSshTunnel ? process.env.DB_USER : "postgres",
       host: useSshTunnel ? process.env.DB_HOST : "localhost",
@@ -574,7 +574,7 @@ FROM (
         (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
     )
     UPDATE investor.aif_document_details AS d
-      SET folio_id = f.id
+      SET folio_id = f.id, client_id = f.client_id
     FROM client_folio AS f
     JOIN fund.client_master cm on f.client_id=cm.id
       LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
