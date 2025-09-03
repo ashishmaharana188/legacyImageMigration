@@ -183,51 +183,10 @@ class FileController {
 
   async transferDataToMongo(req: Request, res: Response) {
     try {
-      const database = new Database();
       const mongoDatabase = new MongoDatabase();
-
-      // Connect to MongoDB
-      await mongoDatabase.connect();
-
-      // Fetch data from PostgreSQL
-      const pgData = await database.getAifDocumentDetails();
-
-      // Format and insert into MongoDB
-      for (const data of pgData) {
-        const docType = data.document_type;
-        const doc = {
-          activityStatus: data.activity_status || "O",
-          applicationId: data.application_id || null,
-          barcode: data.barcode || null,
-          branchId: data.branch_id || "BR01",
-          clientId: data.client_id,
-          createdBy: data.created_by || "system",
-          createdFrom: data.created_from || new Date(),
-          createdOn: data.created_on || new Date(),
-          currentStage: data.current_stage || 15,
-          documentFormat: data.document_format,
-          documentPath: data.document_path,
-          documentSize: data.document_size || "",
-          documentType: data.document_type || "APLCN",
-          lastUpdatedBy: data.last_updated_by || "",
-          lastUpdatedFrom: data.last_updated_from || null,
-          lastUpdatedOn: data.last_updated_on || new Date(),
-          mimeType: data.mime_type,
-          processCode: data.process_code,
-          sourceUser: data.source_user || "system",
-          totalPageCount: data.total_page_count || null,
-          transactionCode: data.transaction_code,
-          transactionNo: data.transaction_reference_id,
-          transactionType: docType ? docType.replace("Form", "").trim() : "",
-          workDate: data.work_date || new Date(),
-        };
-        await mongoDatabase.insertDocument(doc);
-      }
-
-      await mongoDatabase.disconnect();
-
+      const result = await mongoDatabase.transferDataFromPostgres();
       res.json({
-        message: `Transferred ${pgData.length} documents to MongoDB successfully.`,
+        message: `Transferred ${result.transferredCount} documents to MongoDB successfully.`,
       });
     } catch (error) {
       console.error("Data transfer error:", error);

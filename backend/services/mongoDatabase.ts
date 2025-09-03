@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import winston from "winston";
+import { Database } from "./database";
 
 const logger = winston.createLogger({
   level: "info",
@@ -116,7 +117,8 @@ export class MongoDatabase {
             const count = await mongoose.connection.db
               .collection(collectionName)
               .find()
-              .sort("-id: -1");
+              .sort({ _id: -1 })
+              .toArray();
             logger.info(
               `MongoDB collection '${collectionName}' accessed successfully. Contains ${count} documents.`
             );
@@ -173,6 +175,54 @@ export class MongoDatabase {
       return result;
     } catch (error) {
       logger.error(`MongoDB connection test failed: ${error}`);
+      throw error;
+    }
+  }
+
+  public async transferDataFromPostgres(): Promise<{
+    transferredCount: number;
+  }> {
+    try {
+      const database = new Database();
+      await this.connect();
+
+      const pgData = await database.getAifDocumentDetails();
+
+      for (const data of pgData) {
+        const docType = data.document_type;
+        const doc = {
+          activityStatus: data.activity_status || "O",
+          applicationId: data.application_id || null,
+          barcode: data.barcode || null,
+          branchId: data.branch_id || "BR01",
+          clientId: data.client_id,
+          createdBy: data.created_by || "system",
+          createdFrom: data.created_from || new Date(),
+          createdOn: data.created_on || new Date(),
+          currentStage: data.current_stage || 15,
+          documentFormat: data.document_format,
+          documentPath: data.document_path,
+          documentSize: data.document_size || "",
+          documentType: "APLCN",
+          lastUpdatedBy: "",
+          lastUpdatedFrom: data.last_updated_from || null,
+          lastUpdatedOn: data.last_updated_on || new Date(),
+          mimeType: data.mime_type,
+          processCode: data.process_code,
+          sourceUser: data.source_user || "system",
+          totalPageCount: data.total_page_count || null,
+          transactionCode: data.transaction_code,
+          transactionNo: data.transaction_reference_id,
+          transactionType: docType ? docType.replace("Form", "").trim() : "",
+          workDate: data.work_date || new Date(),
+        };
+        await this.insertDocument(doc);
+      }
+
+      await this.disconnect();
+      return { transferredCount: pgData.length };
+    } catch (error) {
+      logger.error(`Data transfer error: ${error}`);
       throw error;
     }
   }
