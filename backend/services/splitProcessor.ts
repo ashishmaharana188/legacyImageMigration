@@ -7,6 +7,8 @@ import pLimit from "p-limit";
 import winston from "winston";
 import { exec } from "child_process";
 import util from "util";
+import { uploadDirectoryRecursive } from "./s3Uploader";
+import { S3_BUCKET_NAME } from "../utils/s3Config";
 
 interface SplitResult {
   splitFiles: { originalPath: string; splitPath: string; page: number }[];
@@ -139,8 +141,8 @@ export class Splitting {
                       }).toBuffer();
                       const splitFileName = `${path.basename(
                         fileName,
-                        `.${fileExt}`
-                      )}_${i + 1}.${fileExt}`;
+                        fileExt
+                      )}_${i + 1}${fileExt}`;
                       const outputFilePath = path.join(
                         outputFolderPath,
                         splitFileName
@@ -190,5 +192,19 @@ export class Splitting {
     await scanAndProcessDirectory(this.baseFolder, this.splitFolder);
     this.logger.info("File splitting complete");
     return { splitFiles };
+  }
+
+  async uploadSplitFilesToS3(): Promise<{ message: string }> {
+    const bucket = S3_BUCKET_NAME;
+    const s3Prefix = "Data/SPLIT_APPLICATION_FORMS";
+    this.logger.info(
+      `Starting upload of split files to s3://${bucket}/${s3Prefix}`
+    );
+
+    await uploadDirectoryRecursive(this.splitFolder, bucket, s3Prefix);
+
+    const message = "Split files uploaded to S3 successfully";
+    this.logger.info(message);
+    return { message };
   }
 }

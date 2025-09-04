@@ -26,6 +26,36 @@ const s3 = new S3Client({
   },
 });
 
+export async function uploadFile(localFilePath: string, bucket: string, key: string) {
+  const fileStream = fs.createReadStream(localFilePath);
+  const upload = new Upload({
+    client: s3,
+    params: {
+      Bucket: bucket,
+      Key: key,
+      Body: fileStream,
+    },
+  });
+
+  upload.on("httpUploadProgress", (progress) => {
+    if (progress.loaded !== undefined && progress.total !== undefined) {
+      console.log(
+        `[PROGRESS] ${key}: ${progress.loaded}/${progress.total} (${(
+          (progress.loaded / progress.total) *
+          100
+        ).toFixed(2)}%)`
+      );
+    } else {
+      console.log(
+        `[PROGRESS] ${key}: Progress update (loaded or total is undefined)`
+      );
+    }
+  });
+
+  await upload.done();
+  console.log(`[UPLOADED] ${key}`);
+}
+
 export async function uploadDirectoryRecursive(
   localDir: string,
   bucket: string,
@@ -42,33 +72,7 @@ export async function uploadDirectoryRecursive(
       await uploadDirectoryRecursive(entryPath, bucket, entryKey);
     } else {
       // Upload file
-      const fileStream = fs.createReadStream(entryPath);
-      const upload = new Upload({
-        client: s3,
-        params: {
-          Bucket: bucket,
-          Key: entryKey,
-          Body: fileStream,
-        },
-      });
-
-      upload.on("httpUploadProgress", (progress) => {
-        if (progress.loaded !== undefined && progress.total !== undefined) {
-          console.log(
-            `[PROGRESS] ${entryKey}: ${progress.loaded}/${progress.total} (${(
-              (progress.loaded / progress.total) *
-              100
-            ).toFixed(2)}%)`
-          );
-        } else {
-          console.log(
-            `[PROGRESS] ${entryKey}: Progress update (loaded or total is undefined)`
-          );
-        }
-      });
-
-      await upload.done();
-      console.log(`[UPLOADED] ${entryKey}`);
+      await uploadFile(entryPath, bucket, entryKey);
     }
   }
 }

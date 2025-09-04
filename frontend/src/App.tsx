@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react"; // Added useEffect
+import { useState } from "react";
 import axios from "axios";
 
 interface FileResponse {
+  statusCode?: number;
   message?: string;
   originalFile?: string;
   processedFile?: string;
@@ -14,12 +15,12 @@ interface FileResponse {
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
   splitFiles?: string[];
+  error?: string;
 }
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [response, setResponse] = useState<FileResponse | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [sqlResult, setSqlResult] = useState<{
     sql: string;
     logs: { row: number; status: string; message: string; sql?: string }[];
@@ -32,79 +33,26 @@ const App: React.FC = () => {
     result: string;
     logs: { row: number; status: string; message: string; sql?: string };
   } | null>(null);
-  const [s3UploadProgress, setS3UploadProgress] = useState<string[]>([]); // Changed to string[]
   const [sanityCheckResult, setSanityCheckResult] = useState<any | null>(null);
-
-  useEffect(() => {
-    const ws = new WebSocket("ws://localhost:3000"); // Connect to WebSocket server
-
-    ws.onopen = () => {
-      console.log("WebSocket connection opened");
-      setS3UploadProgress((prev) => [...prev, "WebSocket connected."]);
-    };
-
-    ws.onmessage = (event) => {
-      const message = JSON.parse(event.data);
-      console.log("Received WebSocket message:", message);
-      if (message.type === "s3UploadStatus") {
-        setS3UploadProgress((prev) => [
-          ...prev,
-          `S3 Upload Status: ${message.message}`,
-        ]);
-      } else if (message.type === "progress") {
-        setS3UploadProgress((prev) => [
-          ...prev,
-          `Uploading ${message.file}: ${message.percentage}%`,
-        ]);
-      } else if (message.type === "complete") {
-        setS3UploadProgress((prev) => [...prev, `Completed: ${message.file}`]);
-      } else if (message.type === "error") {
-        setS3UploadProgress((prev) => [...prev, `Error: ${message.message}`]);
-      } else {
-        setS3UploadProgress((prev) => [...prev, `Message: ${message.payload}`]);
-      }
-    };
-
-    ws.onclose = () => {
-      console.log("WebSocket connection closed");
-      setS3UploadProgress((prev) => [...prev, "WebSocket disconnected."]);
-    };
-
-    ws.onerror = (err) => {
-      console.error("WebSocket error:", err);
-      setS3UploadProgress((prev) => [...prev, "WebSocket error occurred."]);
-    };
-
-    return () => {
-      ws.close(); // Clean up WebSocket connection on component unmount
-    };
-  }, []); // Empty dependency array means this effect runs once on mount
-
-  const handleUploadToS3 = async () => {
-    try {
-      setS3UploadProgress((prev) => [...prev, "Starting S3 upload..."]);
-      const response = await axios.post("http://localhost:3000/upload-to-s3");
-      setS3UploadProgress((prev) => [...prev, response.data.message]);
-    } catch (error) {
-      console.error("Error uploading to S3:", error);
-      setS3UploadProgress((prev) => [
-        ...prev,
-        `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-      ]);
-    }
-  };
+  const [logs, setLogs] = useState<{ status: string; errors: string[] }>({
+    status: "",
+    errors: [],
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFile(e.target.files[0]);
       setResponse(null);
-      setError(null);
+      setLogs({ status: "", errors: [] });
     }
   };
 
   const handleUpload = async () => {
     if (!file) {
-      setError("Please select a file");
+      setLogs((prev) => ({
+        ...prev,
+        errors: [...prev.errors, "Please select a file"],
+      }));
       return;
     }
 
@@ -112,69 +60,174 @@ const App: React.FC = () => {
     formData.append("excel", file);
 
     try {
+      setLogs({ status: "Uploading...", errors: [] });
       const res = await fetch("http://localhost:3000/upload-excel", {
         method: "POST",
         body: formData,
       });
 
-      const data = await res.json();
-      if (!res.ok) {
+      const data: FileResponse = await res.json();
+      if (data.statusCode !== 200) {
         throw new Error(data.error || "Upload failed");
       }
 
       setResponse(data);
-      setError(null);
+      setLogs((prev) => ({ ...prev, status: "Upload successful." }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed");
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          err instanceof Error ? err.message : "Unknown error",
+        ],
+      }));
       setResponse(null);
     }
   };
 
   const handleSplitFiles = async () => {
     try {
+      setLogs((prev) => ({ ...prev, status: "Splitting files..." }));
       const res = await fetch("http://localhost:3000/split-files", {
         method: "POST",
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data: FileResponse = await res.json();
+      if (data.statusCode !== 200) {
         throw new Error(data.error || "Split failed");
       }
       setResponse((prev) => ({ ...prev, splitFiles: data.splitFiles }));
+      setLogs((prev) => ({ ...prev, status: "Split successful." }));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Split failed");
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          err instanceof Error ? err.message : "Unknown error",
+        ],
+      }));
+    }
+  };
+
+  const handleUploadSplitFilesToS3 = async () => {
+    try {
+      setLogs({ status: "Uploading split files to S3...", errors: [] });
+      const response = await axios.post(
+        "http://localhost:3000/upload-split-files-to-s3"
+      );
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "Upload failed");
+      }
+      setLogs((prev) => ({ ...prev, status: response.data.message }));
+    } catch (err) {
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          err instanceof Error ? err.message : "Unknown error",
+        ],
+      }));
     }
   };
 
   const handleGenerateSql = async () => {
     try {
+      setLogs((prev) => ({ ...prev, status: "Generating SQL..." }));
       const response = await axios.post("http://localhost:3000/generate-sql");
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "SQL generation failed");
+      }
       setSqlResult(response.data);
+      setLogs((prev) => ({ ...prev, status: "SQL generation successful." }));
     } catch (error) {
-      console.error("Error generating SQL:", error);
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
     }
   };
 
   const handleExecuteSql = async () => {
     try {
+      setLogs((prev) => ({ ...prev, status: "Executing SQL..." }));
       const response = await axios.post("http://localhost:3000/execute-sql");
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "SQL execution failed");
+      }
       setExecuteResult(response.data);
+      setLogs((prev) => ({ ...prev, status: "SQL execution successful." }));
     } catch (error) {
-      console.error("Error executing SQL:", error);
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
     }
   };
+
   const handleupdateFolioAndTransaction = async () => {
     try {
+      setLogs((prev) => ({
+        ...prev,
+        status: "Updating Folio and Transaction...",
+      }));
       const response = await axios.post(
         "http://localhost:3000/updateFolioAndTransaction-sql"
       );
+      if (response.data.statusCode !== 200) {
+        throw new Error(
+          response.data.error || "Folio and Transaction update failed"
+        );
+      }
       setUpdateFolioResult(response.data);
+      setLogs((prev) => ({
+        ...prev,
+        status: "Folio and Transaction update successful.",
+      }));
     } catch (error) {
-      console.error("Error executing folioUpdateSQL:", error);
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
+    }
+  };
+
+  const handleUploadToS3 = async () => {
+    try {
+      setLogs((prev) => ({ ...prev, status: "Starting S3 upload..." }));
+      const response = await axios.post("http://localhost:3000/upload-to-s3");
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "S3 upload failed");
+      }
+      setLogs((prev) => ({ ...prev, status: response.data.message }));
+    } catch (error) {
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
     }
   };
 
   const handleSanityCheck = async () => {
     try {
+      setLogs((prev) => ({ ...prev, status: "Running sanity check..." }));
       const response = await axios.post(
         "http://localhost:3000/sanity-check-duplicates",
         {
@@ -183,25 +236,46 @@ const App: React.FC = () => {
           normalize: true,
         }
       );
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "Sanity check failed");
+      }
       setSanityCheckResult(response.data);
+      setLogs((prev) => ({ ...prev, status: "Sanity check successful." }));
     } catch (error) {
-      console.error("Error during sanity check:", error);
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
     }
   };
 
   const handleTransferToMongo = async () => {
     try {
+      setLogs((prev) => ({ ...prev, status: "Transferring to MongoDB..." }));
       const response = await axios.post(
         "http://localhost:3000/transfer-to-mongo"
       );
-      alert(response.data.message); // Or update a state variable to display the message
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "Transfer to MongoDB failed");
+      }
+      alert(response.data.message);
+      setLogs((prev) => ({
+        ...prev,
+        status: "Transfer to MongoDB successful.",
+      }));
     } catch (error) {
-      console.error("Error transferring data to MongoDB:", error);
-      alert(
-        `Failed to transfer data: ${
-          error instanceof Error ? error.message : "Unknown error"
-        }`
-      );
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
     }
   };
 
@@ -228,6 +302,12 @@ const App: React.FC = () => {
           className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
         >
           Split Files
+        </button>
+        <button
+          onClick={handleUploadSplitFilesToS3}
+          className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+        >
+          Upload Split Files to S3
         </button>
       </div>
       <div className="flex gap-2 mt-4">
@@ -268,12 +348,15 @@ const App: React.FC = () => {
           Transfer to Mongo
         </button>
       </div>
-      {s3UploadProgress.length > 0 && (
-        <div className="mt-4 text-white">
-          <h3 className="text-lg font-semibold">S3 Upload Progress</h3>
-          <div className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
-            {s3UploadProgress.map((msg, index) => (
-              <p key={index}>{msg}</p>
+      {(logs.status || logs.errors.length > 0) && (
+        <div className="mt-4 text-white" id="s3uploadprogress">
+          <h3 className="text-lg font-semibold">Progress</h3>
+          <div className="bg-gray-800 p-2 rounded overflow-auto min-h-30">
+            {logs.status && <p>{logs.status}</p>}
+            {logs.errors.map((err, index) => (
+              <p key={index} className="text-red-500">
+                Count of errors while doing something: {err}
+              </p>
             ))}
           </div>
         </div>
@@ -332,7 +415,11 @@ const App: React.FC = () => {
             )}
           </div>
         )}
-        {error && <p className="mt-4 text-red-600">{error}</p>}
+        {logs.errors.length > 0 && (
+          <p className="mt-4 text-red-600">
+            {logs.errors[logs.errors.length - 1]}
+          </p>
+        )}
       </div>
     </div>
   );

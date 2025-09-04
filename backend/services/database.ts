@@ -17,7 +17,7 @@ export class Database {
   private pool: Pool;
 
   private readonly trxnMap: Record<string, string> = {
-    NEW: "IC",
+    IC: "IC",
     NCT: "NCT",
     RED: "RED",
     FUL: "RED",
@@ -376,7 +376,7 @@ page_count, client_id
 `;
 
       const trxnNameMap: Record<string, string> = {
-        NEW: "Initial Contribution Form",
+        IC: "Initial Contribution Form",
         NCT: "Non Commercial Transactions Form",
         RED: "Redemption Form",
         FUL: "Redemption Form",

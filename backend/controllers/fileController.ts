@@ -14,12 +14,13 @@ class FileController {
   async processExcelFile(req: Request, res: Response) {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
+        return res.status(400).json({ statusCode: 400, error: "No file uploaded" });
       }
       console.log(`Processing file: ${req.file.originalname}`);
       const processor = new PdfProcessing();
       const result = await processor.processExcelFile(req.file.path);
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: "File processed successfully",
         originalFile: req.file.originalname,
         processedFile: result.outputFileName,
@@ -34,6 +35,7 @@ class FileController {
     } catch (error) {
       console.error("Processing error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to process file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -50,13 +52,14 @@ class FileController {
           .then(() => true)
           .catch(() => false))
       ) {
-        return res.status(404).json({ error: "File not found" });
+        return res.status(404).json({ statusCode: 404, error: "File not found" });
       }
       res.setHeader("Content-Type", "text/csv"); // Set for CSV
       res.download(filePath, filename);
     } catch (error) {
       console.error("Download error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to download file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -72,12 +75,13 @@ class FileController {
           .then(() => true)
           .catch(() => false))
       ) {
-        return res.status(404).json({ error: "File not found" });
+        return res.status(404).json({ statusCode: 404, error: "File not found" });
       }
       res.download(filePath, path.basename(filePath));
     } catch (error) {
       console.error("Download error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to download file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -88,7 +92,8 @@ class FileController {
     try {
       const processor = new Splitting();
       const result = await processor.splitFiles();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: "Files split successfully",
         splitFiles: result.splitFiles.map((file: any) => ({
           originalPath: file.originalPath,
@@ -99,6 +104,7 @@ class FileController {
     } catch (error) {
       console.error("Split error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to split files",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -109,13 +115,15 @@ class FileController {
     try {
       const processor = new Database();
       const result = await processor.generateSql(); // Call new method in pdfProcessor.ts
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: "SQL generated successfully",
         sql: result.sql,
       });
     } catch (error) {
       console.error("SQL generation error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to generate SQL",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -126,7 +134,8 @@ class FileController {
     try {
       const processor = new Database();
       const result = await processor.executeSql();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message:
           result.result === "success"
             ? "SQL executed successfully"
@@ -137,6 +146,7 @@ class FileController {
     } catch (error) {
       console.error("SQL execution error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to execute SQL",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -147,7 +157,8 @@ class FileController {
     try {
       const processor = new Database();
       const result = await processor.updateFolioAndTransaction();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message:
           result.result === "success"
             ? "Folio_id updated successfully"
@@ -157,6 +168,7 @@ class FileController {
       });
     } catch (error) {
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to run updateFolioAndTransaction()",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -171,10 +183,11 @@ class FileController {
         dryRun,
         normalize,
       });
-      res.json(result);
+      res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
       console.error("Sanity check error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to run sanity check",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -185,12 +198,14 @@ class FileController {
     try {
       const mongoDatabase = new MongoDatabase();
       const result = await mongoDatabase.transferDataFromPostgres();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: `Transferred ${result.transferredCount} documents to MongoDB successfully.`,
       });
     } catch (error) {
       console.error("Data transfer error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to transfer data to MongoDB",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -215,7 +230,7 @@ class FileController {
             );
           }
         });
-        return res.json({ message: message });
+        return res.status(200).json({ statusCode: 200, message: message });
       }
 
       console.log("--- AWS Credential Check (from fileController) ---");
@@ -258,7 +273,7 @@ class FileController {
           await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
         }
       }
-      res.json({ message: "Files uploaded to S3 successfully" });
+      res.status(200).json({ statusCode: 200, message: "Files uploaded to S3 successfully" });
       // Send WebSocket message on success
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
@@ -274,6 +289,7 @@ class FileController {
     } catch (error) {
       console.error("S3 upload error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to upload files to S3",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -290,6 +306,21 @@ class FileController {
             })
           );
         }
+      });
+    }
+  }
+
+  async uploadSplitFilesToS3(req: Request, res: Response) {
+    try {
+      const processor = new Splitting();
+      const result = await processor.uploadSplitFilesToS3();
+      res.status(200).json({ statusCode: 200, message: result.message });
+    } catch (error) {
+      console.error("S3 upload error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to upload split files to S3",
+        details: error instanceof Error ? error.message : "Unknown error",
       });
     }
   }

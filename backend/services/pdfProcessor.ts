@@ -59,7 +59,7 @@ export class PdfProcessing {
     trxn: string,
     fund: string,
     ihNo: string,
-    fileExt: string,
+    pathVal: string,
     rowNumber: number
   ): Promise<string> {
     if (!fund || !ihNo || /[<>:"|?*]/.test(fund) || /[<>:"|?*]/.test(ihNo)) {
@@ -84,11 +84,13 @@ export class PdfProcessing {
     );
     await fs.mkdir(fileFolderPath, { recursive: true });
 
+    const fileExt = this.getFileExtension(pathVal);
+    const cleanedFileExt = fileExt.replace(/\.+$/, "."); // Remove any trailing dots before the final extension
+    const baseFileName = path.basename(pathVal, fileExt);
+
     return path.join(
       fileFolderPath,
-      `CLIENT_CODE_${fund}_${
-        trxn === "DD" ? "BATCH" : "TRANSACTION"
-      }_NUMBER_${ihNo}${fileExt}`
+      `${baseFileName}${cleanedFileExt}`
     );
   }
 
@@ -259,7 +261,7 @@ export class PdfProcessing {
               trxn,
               fund,
               ihNo,
-              fileExt,
+              pathVal,
               rowNumber
             );
           } catch (err) {

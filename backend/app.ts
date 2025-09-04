@@ -133,6 +133,7 @@ app.get("/download/:filename", fileController.downloadFile);
 app.get("/download-file/:filePath", fileController.downloadReferencedFile);
 
 app.post("/split-files", fileController.splitFiles);
+app.post("/upload-split-files-to-s3", fileController.uploadSplitFilesToS3);
 app.post("/generate-sql", fileController.generateSql);
 app.post("/execute-sql", fileController.executeSql);
 app.post(

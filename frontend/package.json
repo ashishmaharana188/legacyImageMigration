@@ -8,6 +8,7 @@
     "start:prod": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "start": "vite",
     "preview": "vite preview",
     "clean": "rm -rf dist"
   },
