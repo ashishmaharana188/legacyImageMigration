@@ -11,6 +11,17 @@ interface FileResponse {
     successfulRows: number;
     errors: number;
     notFound: number;
+    successfulInserts: number; // Added from pdfProcessor.ts
+    unsuccessfulCount: number; // Added from pdfProcessor.ts (bad rows)
+    totalPageCount: number; // Added from pdfProcessor.ts
+    totalSplitImages: number; // Added from pdfProcessor.ts
+  };
+  splitSummary?: {
+    totalOriginalFilesProcessed: number;
+    totalExpectedSplits: number; // Re-added: Internal count of expected splits
+    totalSplitFilesGenerated: number;
+    splitErrors: number;
+    totalExpectedPagesFromCsv: number; // Added from splitProcessor.ts
   };
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
@@ -348,7 +359,7 @@ const App: React.FC = () => {
           Transfer to Mongo
         </button>
       </div>
-      {(logs.status || logs.errors.length > 0) && (
+      {(logs.status || logs.errors.length > 0 || response?.summary || response?.splitSummary) && (
         <div className="mt-4 text-white" id="s3uploadprogress">
           <h3 className="text-lg font-semibold">Progress</h3>
           <div className="bg-gray-800 p-2 rounded overflow-auto min-h-30">
@@ -358,6 +369,23 @@ const App: React.FC = () => {
                 Count of errors while doing something: {err}
               </p>
             ))}
+            {response?.summary && (
+              <div className="mt-2">
+                <h4 className="font-semibold">PDF Processing Summary:</h4>
+                <p>Total Rows: {response.summary.totalRows}</p>
+                <p>Successful Rows: {response.summary.successfulRows}</p>
+                <p>Bad Rows: {response.summary.unsuccessfulCount}</p>
+              </div>
+            )}
+            {response?.splitSummary && (
+              <div className="mt-2">
+                <h4 className="font-semibold">File Splitting Summary:</h4>
+                <p>Total Files for Splitting: {response.splitSummary.totalOriginalFilesProcessed}</p>
+                <p>Total Expected Splits (Internal): {response.splitSummary.totalExpectedSplits}</p>
+                <p>Total Split Images: {response.splitSummary.totalSplitFilesGenerated}</p>
+                <p>Total Expected Pages (from CSV): {response.splitSummary.totalExpectedPagesFromCsv}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
