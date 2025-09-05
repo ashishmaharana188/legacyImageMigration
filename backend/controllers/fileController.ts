@@ -4,17 +4,25 @@ import { Splitting } from "../services/splitProcessor";
 import { Database } from "../services/database";
 import { MongoDatabase } from "../services/mongoDatabase";
 import { uploadDirectoryRecursive } from "../services/s3Uploader";
+import { uploadSplitFilesToS3 } from "../services/s3Uploader";
 import path from "path";
 import fs from "fs/promises";
-import { S3_BUCKET_NAME, getS3Prefix } from "../utils/s3Config";
+import {
+  S3_BUCKET_NAME,
+  getS3FilePrefix,
+  getS3SplitPrefix,
+} from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
+import { listFiles } from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
     try {
       if (!req.file) {
-        return res.status(400).json({ statusCode: 400, error: "No file uploaded" });
+        return res
+          .status(400)
+          .json({ statusCode: 400, error: "No file uploaded" });
       }
       console.log(`Processing file: ${req.file.originalname}`);
       const processor = new PdfProcessing();
@@ -52,7 +60,9 @@ class FileController {
           .then(() => true)
           .catch(() => false))
       ) {
-        return res.status(404).json({ statusCode: 404, error: "File not found" });
+        return res
+          .status(404)
+          .json({ statusCode: 404, error: "File not found" });
       }
       res.setHeader("Content-Type", "text/csv"); // Set for CSV
       res.download(filePath, filename);
@@ -75,7 +85,9 @@ class FileController {
           .then(() => true)
           .catch(() => false))
       ) {
-        return res.status(404).json({ statusCode: 404, error: "File not found" });
+        return res
+          .status(404)
+          .json({ statusCode: 404, error: "File not found" });
       }
       res.download(filePath, path.basename(filePath));
     } catch (error) {
@@ -214,7 +226,7 @@ class FileController {
 
   async uploadToS3(req: Request, res: Response) {
     try {
-      const isProduction = process.env.NODE_ENV === 'production';
+      const isProduction = process.env.NODE_ENV === "production";
       if (!isProduction) {
         const message = "Skipping S3 upload in development environment.";
         console.log(message);
@@ -266,14 +278,17 @@ class FileController {
           clientDir.name.startsWith("CLIENT_CODE_")
         ) {
           const clientPath = path.join(outputRoot, clientDir.name);
-          const s3Prefix = getS3Prefix(clientDir.name); // Using centralized config
+          const s3Prefix = getS3FilePrefix(clientDir.name); // Using centralized config
           console.log(
             `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
           );
           await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
         }
       }
-      res.status(200).json({ statusCode: 200, message: "Files uploaded to S3 successfully" });
+      res.status(200).json({
+        statusCode: 200,
+        message: "Files uploaded to S3 successfully",
+      });
       // Send WebSocket message on success
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
@@ -311,15 +326,54 @@ class FileController {
   }
 
   async uploadSplitFilesToS3(req: Request, res: Response) {
+    const splitOutputRoot = path.join(__dirname, "../../split_output");
+    const bucket = S3_BUCKET_NAME;
+    const clients = await fs.readdir(splitOutputRoot, { withFileTypes: true });
+
+    for (const clientDir of clients) {
+      if (
+        clientDir.isDirectory() &&
+        clientDir.name.startsWith("CLIENT_CODE_")
+      ) {
+        const clientPath = path.join(splitOutputRoot, clientDir.name);
+        const s3Prefix = getS3SplitPrefix(clientDir.name); // Using centralized config
+        console.log(
+          `Uploading SpitFiles to ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+        );
+        try {
+          const result = await uploadSplitFilesToS3(
+            clientPath,
+            bucket,
+            s3Prefix
+          );
+          res.status(200).json({ statusCode: 200, message: result });
+        } catch (error) {
+          console.error("S3 upload error:", error);
+          res.status(500).json({
+            statusCode: 500,
+            error: "Failed to upload split files to S3",
+            details: error instanceof Error ? error.message : "Unknown error",
+          });
+        }
+      }
+    }
+  }
+
+  async listS3Files(req: Request, res: Response) {
     try {
-      const processor = new Splitting();
-      const result = await processor.uploadSplitFilesToS3();
-      res.status(200).json({ statusCode: 200, message: result });
+      const prefix = req.query.prefix as string;
+      if (!prefix) {
+        return res
+          .status(400)
+          .json({ statusCode: 400, error: "Prefix is required" });
+      }
+      const files = await listFiles(prefix);
+      res.status(200).json({ statusCode: 200, files });
     } catch (error) {
-      console.error("S3 upload error:", error);
+      console.error("S3 list error:", error);
       res.status(500).json({
         statusCode: 500,
-        error: "Failed to upload split files to S3",
+        error: "Failed to list S3 files",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }

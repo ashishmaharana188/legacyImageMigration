@@ -1,15 +1,14 @@
 import dotenv from "dotenv";
 import os from "os";
-import path from "path"; // path is needed for dotenv config
+import path from "path";
 
 import * as fs from "fs";
-// Ensure dotenv is configured as early as possible
-const isProduction = process.env.NODE_ENV === 'production';
-const envFile = isProduction ? '.env.production' : '.env.development';
+
+const isProduction = process.env.NODE_ENV === "production";
+const envFile = isProduction ? ".env.production" : ".env.development";
 const userConfigDir = path.join(os.homedir(), ".appConfig");
 const envPath = path.join(userConfigDir, envFile);
 
-// Check if the env file exists before attempting to load
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
   console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
@@ -24,16 +23,6 @@ if (fs.existsSync(envPath)) {
   }
 } else {
   console.warn(`Warning: Environment file not found at: ${envPath}`);
-  // Optionally, you can fall back to a default .env file or handle this case as an error
-  // For example, to fall back to a local .env file:
-  // const localEnvPath = path.resolve(process.cwd(), 'backend', '.env');
-  // if (fs.existsSync(localEnvPath)) {
-  //   dotenv.config({ path: localEnvPath });
-  //   console.log(`Falling back to local environment file: ${localEnvPath}`);
-  // } else {
-  //   console.error("Error: No environment file found.");
-  //   process.exit(1);
-  // }
 }
 
 import express from "express";
@@ -144,24 +133,30 @@ app.post(
 app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
 app.post("/transfer-to-mongo", fileController.transferDataToMongo);
 app.post("/upload-to-s3", fileController.uploadToS3);
+app.get("/api/s3/list", fileController.listS3Files);
 
 // WebSocket server setup
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on("connection", (ws: WebSocket) => {
   console.log("WebSocket client connected");
-  ws.send(JSON.stringify({ type: "message", payload: "Welcome to the WebSocket server!" }));
+  ws.send(
+    JSON.stringify({
+      type: "message",
+      payload: "Welcome to the WebSocket server!",
+    })
+  );
 });
 
-export { wss }; // Export wss for use in other modules
+export { wss };
 
 const startServer = async () => {
-  let pgServer: any; // For PostgreSQL tunnel
-  let mongoServer: any; // For MongoDB tunnel
+  let pgServer: any;
+  let mongoServer: any;
   let mongoLocalPort: number | undefined;
 
   if (process.env.USE_SSH_TUNNEL === "true") {
-    pgServer = await startSshTunnel(); // Start PostgreSQL tunnel
+    pgServer = await startSshTunnel();
   }
 
   if (process.env.USE_MONGO_SSH_TUNNEL === "true") {
@@ -170,17 +165,17 @@ const startServer = async () => {
       mongoServer = tunnelResult.server;
       mongoLocalPort = tunnelResult.localPort;
 
-      // Parse the original MONGO_URI and update its host/port for the tunnel
       if (process.env.MONGO_URI) {
         try {
           const mongoUriObj = new URL(process.env.MONGO_URI);
-          mongoUriObj.hostname = 'localhost';
+          mongoUriObj.hostname = "localhost";
           mongoUriObj.port = mongoLocalPort.toString();
           process.env.MONGO_URI = mongoUriObj.toString();
-          console.log(`MongoDB URI updated for tunnel: ${process.env.MONGO_URI}`);
+          console.log(
+            `MongoDB URI updated for tunnel: ${process.env.MONGO_URI}`
+          );
         } catch (e) {
           console.error("Error parsing MONGO_URI for tunnel update:", e);
-          // Fallback to original URI or handle error
         }
       } else {
         console.warn("USE_MONGO_SSH_TUNNEL is true but MONGO_URI is not set.");
@@ -188,20 +183,21 @@ const startServer = async () => {
     }
   }
 
-  // Initialize and connect to MongoDB during server startup
   const mongoDatabase = new MongoDatabase();
   try {
     await mongoDatabase.connect();
     console.log("MongoDB connection established during startup.");
   } catch (error) {
-    console.error("Failed to establish MongoDB connection during startup:", error);
+    console.error(
+      "Failed to establish MongoDB connection during startup:",
+      error
+    );
   }
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
   });
 
-  // Upgrade HTTP server to WebSocket
   expressServer.on("upgrade", (request, socket, head) => {
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit("connection", ws, request);
@@ -212,15 +208,14 @@ const startServer = async () => {
     console.log("Shutting down gracefully...");
     expressServer.close(() => {
       console.log("Closed out remaining connections.");
-      if (pgServer) { // Changed from 'server' to 'pgServer'
-        pgServer.close(); // Changed from 'server' to 'pgServer'
-        console.log("PostgreSQL SSH tunnel closed."); // Clarified message
+      if (pgServer) {
+        pgServer.close();
+        console.log("PostgreSQL SSH tunnel closed.");
       }
-      if (mongoServer) { // Added for MongoDB tunnel
+      if (mongoServer) {
         mongoServer.close();
-        console.log("MongoDB SSH tunnel closed."); // Added message
+        console.log("MongoDB SSH tunnel closed.");
       }
-      // Close WebSocket server
       wss.close(() => {
         console.log("WebSocket server closed.");
       });

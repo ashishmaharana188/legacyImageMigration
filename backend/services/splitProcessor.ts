@@ -28,7 +28,8 @@ async function runPythonFallback(
   outputFolderPath: string,
   fileName: string,
   logger: winston.Logger
-): Promise<number> { // Modified to return a number
+): Promise<number> {
+  // Modified to return a number
   // Construct the path to the Python script relative to the project root
   const projectRoot = path.resolve(__dirname, "../../.."); // Go up from backend/services to project root
   const pythonScript = path.join(
@@ -56,8 +57,11 @@ async function runPythonFallback(
       logger.info(`Extracted split count from Python fallback: ${splitCount}`);
       return splitCount;
     } else {
-      logger.warn("Could not extract split count from Python fallback stdout.", { stdout });
-      return 1; // Default to 1 if count not found, to avoid undercounting
+      logger.warn(
+        "Could not extract split count from Python fallback stdout.",
+        { stdout }
+      );
+      return 1;
     }
   } catch (error) {
     logger.error(`Python fallback failed for ${fileName}`, {
@@ -69,12 +73,9 @@ async function runPythonFallback(
 }
 
 export class Splitting {
-  uploadSplitFilesToS3() {
-    throw new Error("Method not implemented.");
-  }
   private readonly baseFolder = path.join(__dirname, "../../output");
   private readonly splitFolder = path.join(__dirname, "../../split_output");
-  private readonly processedFolder = path.join(__dirname, "../../processed"); // New: Path to processed folder
+  private readonly processedFolder = path.join(__dirname, "../../processed");
   private readonly limit = pLimit(100);
   private readonly logger = winston.createLogger({
     level: "info",

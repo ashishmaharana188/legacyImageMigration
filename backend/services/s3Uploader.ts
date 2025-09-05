@@ -26,7 +26,11 @@ const s3 = new S3Client({
   },
 });
 
-export async function uploadFile(localFilePath: string, bucket: string, key: string) {
+export async function uploadFile(
+  localFilePath: string,
+  bucket: string,
+  key: string
+) {
   const fileStream = fs.createReadStream(localFilePath);
   const upload = new Upload({
     client: s3,
@@ -75,4 +79,12 @@ export async function uploadDirectoryRecursive(
       await uploadFile(entryPath, bucket, entryKey);
     }
   }
+}
+
+export async function uploadSplitFilesToS3(
+  localDir: string,
+  bucket: string,
+  prefix: string
+) {
+  throw new Error("Method not implemented.");
 }

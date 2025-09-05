@@ -32,6 +32,8 @@ interface FileResponse {
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [response, setResponse] = useState<FileResponse | null>(null);
+  const [s3Prefix, setS3Prefix] = useState<string>("");
+  const [s3Files, setS3Files] = useState<string[]>([]);
   const [sqlResult, setSqlResult] = useState<{
     sql: string;
     logs: { row: number; status: string; message: string; sql?: string }[];
@@ -294,6 +296,29 @@ const App: React.FC = () => {
     }
   };
 
+  const handleListS3Files = async () => {
+    try {
+      setLogs({ status: "Listing S3 files...", errors: [] });
+      const response = await axios.get(
+        `http://localhost:3000/api/s3/list?prefix=${s3Prefix}`
+      );
+      if (response.data.statusCode !== 200) {
+        throw new Error(response.data.error || "Failed to list S3 files");
+      }
+      setS3Files(response.data.files);
+      setLogs((prev) => ({ ...prev, status: "S3 files listed successfully." }));
+    } catch (error) {
+      setLogs((prev) => ({
+        ...prev,
+        status: "failed to run",
+        errors: [
+          ...prev.errors,
+          error instanceof Error ? error.message : "Unknown error",
+        ],
+      }));
+    }
+  };
+
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-black py-8">
       <h1 className="text-2xl font-bold mb-4 text-white">
@@ -363,7 +388,36 @@ const App: React.FC = () => {
           Transfer to Mongo
         </button>
       </div>
-      {(logs.status || logs.errors.length > 0 || response?.summary || response?.splitSummary) && (
+      <div className="mt-8 w-full max-w-2xl">
+        <h2 className="text-xl font-bold mb-4 text-white">S3 File Lister</h2>
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={s3Prefix}
+            onChange={(e) => setS3Prefix(e.target.value)}
+            placeholder="Enter S3 prefix"
+            className="flex-grow px-4 py-2 bg-gray-800 text-white rounded"
+          />
+          <button
+            onClick={handleListS3Files}
+            className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
+          >
+            List S3 Files
+          </button>
+        </div>
+        {s3Files.length > 0 && (
+          <div className="mt-4 text-white">
+            <h3 className="text-lg font-semibold">S3 Files</h3>
+            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
+              {s3Files.join("")}
+            </pre>
+          </div>
+        )}
+      </div>
+      {(logs.status ||
+        logs.errors.length > 0 ||
+        response?.summary ||
+        response?.splitSummary) && (
         <div className="mt-4 text-white" id="s3uploadprogress">
           <h3 className="text-lg font-semibold">Progress</h3>
           <div className="bg-gray-800 p-2 rounded overflow-auto min-h-30">
@@ -384,10 +438,22 @@ const App: React.FC = () => {
             {response?.splitSummary && (
               <div className="mt-2">
                 <h4 className="font-semibold">File Splitting Summary:</h4>
-                <p>Total Files for Splitting: {response.splitSummary.totalOriginalFilesProcessed}</p>
-                <p>Total Expected Splits (Internal): {response.splitSummary.totalExpectedSplits}</p>
-                <p>Total Split Images: {response.splitSummary.totalSplitFilesGenerated}</p>
-                <p>Total Expected Pages (from CSV): {response.splitSummary.totalExpectedPagesFromCsv}</p>
+                <p>
+                  Total Files for Splitting:{" "}
+                  {response.splitSummary.totalOriginalFilesProcessed}
+                </p>
+                <p>
+                  Total Expected Splits (Internal):{" "}
+                  {response.splitSummary.totalExpectedSplits}
+                </p>
+                <p>
+                  Total Split Images:{" "}
+                  {response.splitSummary.totalSplitFilesGenerated}
+                </p>
+                <p>
+                  Total Expected Pages (from CSV):{" "}
+                  {response.splitSummary.totalExpectedPagesFromCsv}
+                </p>
               </div>
             )}
           </div>
@@ -425,26 +491,6 @@ const App: React.FC = () => {
                 Download Processed CSV
               </a>
             </div>
-            {response.fileUrls && response.fileUrls.length > 0 && (
-              <div>
-                <h2 className="text-lg font-semibold mt-4">Referenced Files</h2>
-                <ul className="list-disc ml-6">
-                  {response.fileUrls.map((file) => (
-                    <li key={file.row}>
-                      Row {file.row}: {file.pageCount} pages{" "}
-                      <a
-                        href={`http://localhost:3000${file.url}`}
-                        className="underline text-blue-600"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        Download
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         )}
         {logs.errors.length > 0 && (
