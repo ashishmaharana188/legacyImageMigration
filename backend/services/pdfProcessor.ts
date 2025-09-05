@@ -84,13 +84,13 @@ export class PdfProcessing {
     );
     await fs.mkdir(fileFolderPath, { recursive: true });
 
-    const fileExt = this.getFileExtension(pathVal);
-    const cleanedFileExt = fileExt.replace(/\.+$/, "."); // Remove any trailing dots before the final extension
-    const baseFileName = path.basename(pathVal, fileExt);
+    const parsedPath = path.parse(pathVal);
+    const baseFileName = parsedPath.name;
+    const fileExt = parsedPath.ext.toLowerCase();
 
     return path.join(
       fileFolderPath,
-      `${baseFileName}${cleanedFileExt}`
+      `${baseFileName}${fileExt}`
     );
   }
 

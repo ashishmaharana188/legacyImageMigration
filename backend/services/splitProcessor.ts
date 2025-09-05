@@ -198,6 +198,9 @@ export class Splitting {
               if (fileStats.isFile()) {
                 totalOriginalFilesProcessed++; // Increment for each original file processed
                 const fileName = path.basename(filePath);
+                console.log(
+                  `[DEBUG] Processing file: ${fileName}, Full path: ${filePath}`
+                );
                 const fileExt = this.getFileExtension(fileName);
                 let fileBuffer: Buffer;
                 try {
@@ -216,14 +219,21 @@ export class Splitting {
                     const numPages = pdfDoc.getPages().length;
                     totalExpectedSplits += numPages; // Add to total expected splits (internal count)
                     for (let i = 0; i < numPages; i++) {
+                      const originalFileExt = path.extname(fileName);
+                      const baseName = path.basename(fileName, originalFileExt);
+                      console.log(
+                        `[DEBUG-PDF] fileName: ${fileName}, baseName: ${baseName}, originalFileExt: ${originalFileExt}`
+                      );
                       const subDoc = await PDFDocument.create();
                       const [copiedPage] = await subDoc.copyPages(pdfDoc, [i]);
                       subDoc.addPage(copiedPage);
                       const pdfBytes = await subDoc.save();
-                      const splitFileName = `${path.basename(
-                        fileName,
-                        fileExt
-                      )}_${i + 1}${fileExt}`;
+                      const splitFileName = `${baseName}_${
+                        i + 1
+                      }${originalFileExt.toLowerCase()}`;
+                      console.log(
+                        `[DEBUG-PDF] Final splitFileName: ${splitFileName}`
+                      );
                       const outputFilePath = path.join(
                         outputFolderPath,
                         splitFileName
