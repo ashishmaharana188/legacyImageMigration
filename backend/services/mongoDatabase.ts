@@ -67,7 +67,7 @@ export class MongoDatabase {
       this.uri = process.env.LOCAL_URI || ""; // URI for test_noSql
       const TestImageMigrationSchema = new mongoose.Schema(
         {},
-        { strict: false, collection: "testImageMigration" }
+        { strict: false, collection: "testImageMigration", versionKey: false }
       );
       this.model =
         mongoose.models.TestImageMigration ||

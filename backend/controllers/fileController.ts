@@ -314,7 +314,7 @@ class FileController {
     try {
       const processor = new Splitting();
       const result = await processor.uploadSplitFilesToS3();
-      res.status(200).json({ statusCode: 200, message: result.message });
+      res.status(200).json({ statusCode: 200, message: result });
     } catch (error) {
       console.error("S3 upload error:", error);
       res.status(500).json({

@@ -69,6 +69,9 @@ async function runPythonFallback(
 }
 
 export class Splitting {
+  uploadSplitFilesToS3() {
+    throw new Error("Method not implemented.");
+  }
   private readonly baseFolder = path.join(__dirname, "../../output");
   private readonly splitFolder = path.join(__dirname, "../../split_output");
   private readonly processedFolder = path.join(__dirname, "../../processed"); // New: Path to processed folder
@@ -219,8 +222,8 @@ export class Splitting {
                       const pdfBytes = await subDoc.save();
                       const splitFileName = `${path.basename(
                         fileName,
-                        ".pdf"
-                      )}_${i + 1}.pdf`;
+                        fileExt
+                      )}_${i + 1}${fileExt}`;
                       const outputFilePath = path.join(
                         outputFolderPath,
                         splitFileName

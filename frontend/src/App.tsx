@@ -107,7 +107,11 @@ const App: React.FC = () => {
       if (data.statusCode !== 200) {
         throw new Error(data.error || "Split failed");
       }
-      setResponse((prev) => ({ ...prev, splitFiles: data.splitFiles }));
+      setResponse((prev) => ({
+        ...prev,
+        splitFiles: data.splitFiles,
+        splitSummary: data.splitSummary,
+      }));
       setLogs((prev) => ({ ...prev, status: "Split successful." }));
     } catch (err) {
       setLogs((prev) => ({

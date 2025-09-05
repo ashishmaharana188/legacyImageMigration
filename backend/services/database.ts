@@ -669,7 +669,7 @@ WHERE ts.client_id = d.client_id
   }> {
     const logs: SqlLog[] = [];
     const { dryRun = true, normalize = false } = params;
-    const cutoffTms = "2025-08-31T00:00:00.0000"; // Hardcoded cutoff time
+    const cutoffTms = "2025-09-05T00:00:00.0000"; // Hardcoded cutoff time
     let client: PoolClient | null = null;
 
     const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
