@@ -306,34 +306,62 @@ class FileController {
   async uploadSplitFilesToS3(req: Request, res: Response) {
     const splitOutputRoot = path.join(__dirname, "../../split_output");
     const bucket = S3_BUCKET_NAME;
-    const clients = await fs.readdir(splitOutputRoot, { withFileTypes: true });
+    const results = {
+      successful: [] as string[],
+      failed: [] as { name: string; error: string }[],
+    };
 
-    for (const clientDir of clients) {
-      if (
-        clientDir.isDirectory() &&
-        clientDir.name.startsWith("CLIENT_CODE_")
-      ) {
+    try {
+      const clients = await fs.readdir(splitOutputRoot, { withFileTypes: true });
+      const clientDirs = clients.filter(
+        (d) => d.isDirectory() && d.name.startsWith("CLIENT_CODE_")
+      );
+
+      if (clientDirs.length === 0) {
+        return res.status(200).json({
+          statusCode: 200,
+          message: "No client directories found to upload.",
+        });
+      }
+
+      for (const clientDir of clientDirs) {
         const clientPath = path.join(splitOutputRoot, clientDir.name);
-        const s3Prefix = getS3SplitPrefix(clientDir.name); // Using centralized config
+        const s3Prefix = getS3SplitPrefix(clientDir.name);
         console.log(
-          `Uploading SpitFiles to ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+          `Uploading SpitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`
         );
         try {
-          const result = await uploadSplitFilesToS3(
-            clientPath,
-            bucket,
-            s3Prefix
-          );
-          res.status(200).json({ statusCode: 200, message: result });
+          await uploadSplitFilesToS3(clientPath, bucket, s3Prefix);
+          results.successful.push(clientDir.name);
         } catch (error) {
-          console.error("S3 upload error:", error);
-          res.status(500).json({
-            statusCode: 500,
-            error: "Failed to upload split files to S3",
-            details: error instanceof Error ? error.message : "Unknown error",
-          });
+          const errorMessage = error instanceof Error ? error.message : "Unknown error";
+          console.error(`S3 upload error for ${clientDir.name}:`, error);
+          results.failed.push({ name: clientDir.name, error: errorMessage });
         }
       }
+
+      if (results.failed.length > 0) {
+        return res.status(500).json({
+          statusCode: 500,
+          message: "S3 upload process completed with one or more failures.",
+          ...results,
+        });
+      }
+
+      res.status(200).json({
+        statusCode: 200,
+        message: "All split files uploaded to S3 successfully.",
+        ...results,
+      });
+
+    } catch (error) {
+      // This outer catch handles errors like `fs.readdir` failing
+      console.error("General S3 upload process error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "A critical error occurred during the S3 upload process.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
