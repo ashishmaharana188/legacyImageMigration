@@ -14,7 +14,7 @@ import {
 } from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
-import { listFiles } from "../services/s3Manager";
+import { listFiles, deleteFiles } from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -245,29 +245,6 @@ class FileController {
         return res.status(200).json({ statusCode: 200, message: message });
       }
 
-      console.log("--- AWS Credential Check (from fileController) ---");
-      console.log(
-        "AWS_ACCESS_KEY_ID:",
-        process.env.AWS_ACCESS_KEY_ID ? "Set" : "Not Set"
-      );
-      console.log(
-        "AWS_SECRET_ACCESS_KEY:",
-        process.env.AWS_SECRET_ACCESS_KEY ? "Set (Masked)" : "Not Set"
-      );
-      console.log(
-        "AWS_SESSION_TOKEN:",
-        process.env.AWS_SESSION_TOKEN ? "Set" : "Not Set"
-      );
-      console.log(
-        "AWS_DEFAULT_REGION:",
-        process.env.AWS_DEFAULT_REGION || "ap-south-1"
-      );
-      console.log(
-        "S3_BUCKET_NAME:",
-        S3_BUCKET_NAME // Using centralized config
-      );
-      console.log("--------------------------------------------------");
-
       const outputRoot = path.join(__dirname, "../../output");
       const bucket = S3_BUCKET_NAME; // Using centralized config
 
@@ -328,34 +305,68 @@ class FileController {
   async uploadSplitFilesToS3(req: Request, res: Response) {
     const splitOutputRoot = path.join(__dirname, "../../split_output");
     const bucket = S3_BUCKET_NAME;
-    const clients = await fs.readdir(splitOutputRoot, { withFileTypes: true });
+    const results = {
+      successful: [] as string[],
+      failed: [] as { name: string; error: string }[],
+    };
 
-    for (const clientDir of clients) {
-      if (
-        clientDir.isDirectory() &&
-        clientDir.name.startsWith("CLIENT_CODE_")
-      ) {
-        const clientPath = path.join(splitOutputRoot, clientDir.name);
-        const s3Prefix = getS3SplitPrefix(clientDir.name); // Using centralized config
-        console.log(
-          `Uploading SpitFiles to ${clientDir.name} → s3://${bucket}/${s3Prefix}`
-        );
-        try {
-          const result = await uploadSplitFilesToS3(
-            clientPath,
-            bucket,
-            s3Prefix
+    try {
+      const clients = await fs.readdir(splitOutputRoot, {
+        withFileTypes: true,
+      });
+      const clientDirs = clients.filter(
+        (d) => d.isDirectory() && d.name.startsWith("CLIENT_CODE_")
+      );
+
+      if (clientDirs.length === 0) {
+        return res.status(200).json({
+          statusCode: 200,
+          message: "No client directories found to upload.",
+        });
+      }
+
+      for (const clientDir of clients) {
+        if (
+          clientDir.isDirectory() &&
+          clientDir.name.startsWith("CLIENT_CODE_")
+        ) {
+          const clientPath = path.join(splitOutputRoot, clientDir.name);
+          const s3Prefix = getS3SplitPrefix(clientDir.name);
+          console.log(
+            `Uploading SpitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`
           );
-          res.status(200).json({ statusCode: 200, message: result });
-        } catch (error) {
-          console.error("S3 upload error:", error);
-          res.status(500).json({
-            statusCode: 500,
-            error: "Failed to upload split files to S3",
-            details: error instanceof Error ? error.message : "Unknown error",
-          });
+          try {
+            await uploadSplitFilesToS3(clientPath, bucket, s3Prefix);
+            results.successful.push(clientDir.name);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
+            console.error(`S3 upload error for ${clientDir.name}:`, error);
+            results.failed.push({ name: clientDir.name, error: errorMessage });
+          }
         }
       }
+      if (results.failed.length > 0) {
+        return res.status(500).json({
+          statusCode: 500,
+          message: "S3 upload process completed with one or more failures.",
+          ...results,
+        });
+      }
+
+      res.status(200).json({
+        statusCode: 200,
+        message: "All split files uploaded to S3 successfully.",
+        ...results,
+      });
+    } catch (error) {
+      // This outer catch handles errors like `fs.readdir` failing
+      console.error("General S3 upload process error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "A critical error occurred during the S3 upload process.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
     }
   }
 
@@ -374,6 +385,30 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to list S3 files",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async deleteS3Files(req: Request, res: Response) {
+    try {
+      const { keys } = req.body;
+      if (!keys || !Array.isArray(keys) || keys.length === 0) {
+        return res
+          .status(400)
+          .json({ statusCode: 400, error: "File keys are required" });
+      }
+      const deletedKeys = await deleteFiles(keys);
+      res.status(200).json({
+        statusCode: 200,
+        message: "Files deleted successfully",
+        deletedKeys,
+      });
+    } catch (error) {
+      console.error("S3 delete error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to delete S3 files",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }
