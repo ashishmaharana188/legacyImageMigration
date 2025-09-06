@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 
 interface FileResponse {
@@ -27,13 +27,31 @@ interface FileResponse {
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
   splitFiles?: string[];
   error?: string;
+  directories?: string[];
+  files?: S3File[];
+}
+
+interface S3File {
+  key: string;
+  lastModified?: string;
 }
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
   const [response, setResponse] = useState<FileResponse | null>(null);
-  const [s3Prefix, setS3Prefix] = useState<string>("");
-  const [s3Files, setS3Files] = useState<string[]>([]);
+  const [currentPrefix, setCurrentPrefix] = useState<string>("Data/");
+  const [s3Directories, setS3Directories] = useState<string[]>([]);
+  const [s3Files, setS3Files] = useState<S3File[]>([]);
+  const [nextContinuationToken, setNextContinuationToken] = useState<string | undefined>(
+    undefined
+  );
+  const [isFilterMode, setIsFilterMode] = useState<boolean>(false);
+  const [transactionNumberPattern, setTransactionNumberPattern] = useState<string>("");
+  const [filenamePattern, setFilenamePattern] = useState<string>("");
+  const [searchResults, setSearchResults] = useState<S3File[]>([]);
+  const [clientPage, setClientPage] = useState(1);
+  const itemsPerPage = 10;
+  const [searchPage, setSearchPage] = useState(1);
   const [sqlResult, setSqlResult] = useState<{
     sql: string;
     logs: { row: number; status: string; message: string; sql?: string }[];
@@ -296,17 +314,27 @@ const App: React.FC = () => {
     }
   };
 
-  const handleListS3Files = async () => {
+  useEffect(() => {
+    setS3Directories([]);
+    setS3Files([]);
+    setNextContinuationToken(undefined);
+    setClientPage(1); // Reset to first page on new directory
+    fetchS3Objects(currentPrefix);
+  }, [currentPrefix]);
+
+  const fetchS3Objects = async (prefix: string, token?: string) => {
     try {
-      setLogs({ status: "Listing S3 files...", errors: [] });
-      const response = await axios.get(
-        `http://localhost:3000/api/s3/list?prefix=${s3Prefix}`
+      setLogs({ status: "Listing S3 objects...", errors: [] });
+      const response = await axios.get<FileResponse>(
+        `http://localhost:3000/api/s3/list?prefix=${prefix}${token ? `&continuationToken=${token}` : ''}`
       );
       if (response.data.statusCode !== 200) {
-        throw new Error(response.data.error || "Failed to list S3 files");
+        throw new Error(response.data.error || "Failed to list S3 objects");
       }
-      setS3Files(response.data.files);
-      setLogs((prev) => ({ ...prev, status: "S3 files listed successfully." }));
+      setS3Directories(prev => [...prev, ...(response.data.directories || [])]);
+      setS3Files(prev => [...prev, ...(response.data.files || [])]);
+      setNextContinuationToken(response.data.nextContinuationToken);
+      setLogs((prev) => ({ ...prev, status: "S3 objects listed successfully." }));
     } catch (error) {
       setLogs((prev) => ({
         ...prev,
@@ -318,6 +346,97 @@ const App: React.FC = () => {
       }));
     }
   };
+
+  const handleLoadMore = () => {
+    if (nextContinuationToken) {
+      fetchS3Objects(currentPrefix, nextContinuationToken);
+    }
+  };
+
+  const handleDeleteS3File = async (key: string) => {
+    if (window.confirm(`Are you sure you want to delete ${key}?`)) {
+      try {
+        setLogs({ status: `Deleting ${key}...`, errors: [] });
+        const response = await axios.post("http://localhost:3000/api/s3/delete", { keys: [key] });
+        if (response.data.statusCode !== 200) {
+          throw new Error(response.data.error || "Failed to delete S3 file");
+        }
+        setLogs((prev) => ({ ...prev, status: `Successfully deleted ${key}.` }));
+
+        if (isFilterMode) {
+          setSearchResults(prev => prev.filter(file => file.key !== key));
+        } else {
+          // Refresh the browser list by re-triggering useEffect
+          const prefixToReload = currentPrefix;
+          setCurrentPrefix(""); // Temporarily change prefix to force reload
+          setCurrentPrefix(prefixToReload);
+        }
+      } catch (error) {
+        setLogs((prev) => ({
+          ...prev,
+          status: "failed to run",
+          errors: [
+            ...prev.errors,
+            error instanceof Error ? error.message : "Unknown error",
+          ],
+        }));
+      }
+    }
+  };
+
+  const handleDirectoryClick = (directory: string) => {
+    setCurrentPrefix(directory);
+  };
+
+  const handleBreadcrumbClick = (index: number) => {
+    const prefixParts = currentPrefix.split("/").filter(Boolean);
+    const newPrefix = prefixParts.slice(0, index + 1).join("/") + "/";
+    setCurrentPrefix(newPrefix);
+  };
+
+  const handleSearch = async () => {
+    if (!transactionNumberPattern && !filenamePattern) {
+      alert("Please enter a search pattern in at least one of the fields.");
+      return;
+    }
+
+    if (window.confirm("This search may take a while for large directories. Continue?")) {
+      try {
+        setLogs({ status: `Searching...`, errors: [] });
+        setSearchPage(1); // Reset to first page for new search
+        const response = await axios.get<FileResponse>(
+          `http://localhost:3000/api/s3/search?prefix=${currentPrefix}&transactionPattern=${encodeURIComponent(transactionNumberPattern)}&filenamePattern=${encodeURIComponent(filenamePattern)}`
+        );
+        if (response.data.statusCode !== 200) {
+          throw new Error(response.data.error || "Failed to search files");
+        }
+        setSearchResults(response.data.files || []);
+        setLogs((prev) => ({ ...prev, status: "Search complete." }));
+      } catch (error) {
+        setLogs((prev) => ({
+          ...prev,
+          status: "Search failed",
+          errors: [
+            ...prev.errors,
+            error instanceof Error ? error.message : "Unknown error",
+          ],
+        }));
+      }
+    }
+  };
+
+  const combinedItems = useMemo(() => {
+    return [
+      ...s3Directories.map(dir => ({ type: 'dir', key: dir })),
+      ...s3Files.map(file => ({ type: 'file', ...file }))
+    ];
+  }, [s3Directories, s3Files]);
+
+  const totalPages = Math.ceil(combinedItems.length / itemsPerPage);
+  const paginatedItems = combinedItems.slice((clientPage - 1) * itemsPerPage, clientPage * itemsPerPage);
+
+  const totalSearchPages = Math.ceil(searchResults.length / itemsPerPage);
+  const paginatedSearchResults = searchResults.slice((searchPage - 1) * itemsPerPage, searchPage * itemsPerPage);
 
   return (
     <div className="flex flex-col items-center justify-start min-h-screen bg-black py-8">
@@ -389,28 +508,194 @@ const App: React.FC = () => {
         </button>
       </div>
       <div className="mt-8 w-full max-w-2xl">
-        <h2 className="text-xl font-bold mb-4 text-white">S3 File Lister</h2>
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={s3Prefix}
-            onChange={(e) => setS3Prefix(e.target.value)}
-            placeholder="Enter S3 prefix"
-            className="flex-grow px-4 py-2 bg-gray-800 text-white rounded"
-          />
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-bold text-white">S3 Browser</h2>
           <button
-            onClick={handleListS3Files}
-            className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
+            onClick={() => setIsFilterMode(!isFilterMode)}
+            className={`px-4 py-2 text-white rounded ${isFilterMode ? 'bg-red-500 hover:bg-red-600' : 'bg-indigo-500 hover:bg-indigo-600'}`}
           >
-            List S3 Files
+            {isFilterMode ? 'Cancel Search' : 'Search / Filter'}
           </button>
         </div>
-        {s3Files.length > 0 && (
-          <div className="mt-4 text-white">
-            <h3 className="text-lg font-semibold">S3 Files</h3>
-            <pre className="bg-gray-800 p-2 rounded overflow-auto max-h-48">
-              {s3Files.join("")}
-            </pre>
+
+        {isFilterMode ? (
+          <div>
+            {/* Search UI */}
+            <div className="flex flex-col gap-2">
+              <input
+                type="text"
+                value={transactionNumberPattern}
+                onChange={(e) => setTransactionNumberPattern(e.target.value)}
+                placeholder="Transaction Number contains..."
+                className="flex-grow px-4 py-2 bg-gray-800 text-white rounded"
+              />
+              <input
+                type="text"
+                value={filenamePattern}
+                onChange={(e) => setFilenamePattern(e.target.value)}
+                placeholder="Filename contains..."
+                className="flex-grow px-4 py-2 bg-gray-800 text-white rounded"
+              />
+              <button
+                onClick={handleSearch}
+                className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
+              >
+                Search
+              </button>
+            </div>
+            {/* Search Results */}
+            {searchResults.length > 0 && (
+              <div className="mt-4 text-white">
+                <h3 className="text-lg font-semibold">Search Results ({searchResults.length} found)</h3>
+                <ul className="bg-gray-800 p-2 rounded space-y-1">
+                  <li className="p-1 grid grid-cols-12 gap-2 font-semibold text-gray-400">
+                    <span className="col-span-7">Name</span>
+                    <span className="col-span-4">Last Modified</span>
+                    <span className="col-span-1"></span>
+                  </li>
+                  {paginatedSearchResults.map((file) => (
+                    <li key={file.key} className="p-1 grid grid-cols-12 gap-2 items-center hover:bg-gray-700 rounded">
+                      <span className="col-span-7 truncate" title={file.key}>{file.key.split('/').pop()}</span>
+                      <span className="col-span-4 text-sm text-gray-400">
+                        {file.lastModified ? new Date(file.lastModified).toLocaleString() : 'N/A'}
+                      </span>
+                      <span className="col-span-1 flex justify-end">
+                        <button
+                          onClick={() => handleDeleteS3File(file.key)}
+                          className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
+                        >
+                          Delete
+                        </button>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {/* Pagination Controls for Search */}
+                <div className="flex justify-between items-center mt-4">
+                  <button
+                    onClick={() => setSearchPage(prev => Math.max(prev - 1, 1))}
+                    disabled={searchPage === 1}
+                    className="px-4 py-2 bg-gray-600 text-white rounded disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-white">
+                    Page {searchPage} of {totalSearchPages}
+                  </span>
+                  <button
+                    onClick={() => setSearchPage(prev => Math.min(prev + 1, totalSearchPages))}
+                    disabled={searchPage === totalSearchPages}
+                    className="px-4 py-2 bg-gray-600 text-white rounded disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div>
+            {/* Browser UI */}
+            <div className="flex items-center gap-2 p-2 bg-gray-700 rounded-t-md">
+              {currentPrefix.split("/").filter(Boolean).map((part, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span
+                    onClick={() => handleBreadcrumbClick(index)}
+                    className="cursor-pointer hover:underline"
+                  >
+                    {part}
+                  </span>
+                  <span>/</span>
+                </div>
+              ))}
+            </div>
+            <div className="bg-gray-800 p-2 rounded-b-md min-h-[200px]">
+              <div className="text-sm text-gray-400 mb-2 px-1">
+                {s3Directories.length} directories, {s3Files.length} files
+              </div>
+              <ul className="space-y-1">
+                {/* Table Header */}
+                <li className="p-1 grid grid-cols-12 gap-2 font-semibold text-gray-400">
+                  <span className="col-span-7">Name</span>
+                  <span className="col-span-4">Last Modified</span>
+                  <span className="col-span-1"></span>
+                </li>
+                {paginatedItems.map((item) => {
+                  if (item.type === 'dir') {
+                    return (
+                      <li
+                        key={item.key}
+                        onClick={() => handleDirectoryClick(item.key)}
+                        className="p-1 grid grid-cols-12 gap-2 items-center cursor-pointer hover:bg-gray-700 rounded"
+                      >
+                        <span className="col-span-7 flex items-center gap-2 truncate" title={item.key.replace(currentPrefix, "").replace("/", "")}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" />
+                          </svg>
+                          {item.key.replace(currentPrefix, "").replace("/", "")}
+                        </span>
+                        <span className="col-span-4"></span>
+                        <span className="col-span-1"></span>
+                      </li>
+                    );
+                  } else {
+                    return (
+                      <li key={item.key} className="p-1 grid grid-cols-12 gap-2 items-center hover:bg-gray-700 rounded">
+                        <span className="col-span-7 flex items-center gap-2 truncate" title={item.key.replace(currentPrefix, "")}>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 flex-shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+                          </svg>
+                          {item.key.replace(currentPrefix, "")}
+                        </span>
+                        <span className="col-span-4 text-sm text-gray-400">
+                          {item.lastModified ? new Date(item.lastModified).toLocaleString() : 'N/A'}
+                        </span>
+                        <span className="col-span-1 flex justify-end">
+                          <button
+                            onClick={() => handleDeleteS3File(item.key)}
+                            className="px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600 text-xs"
+                          >
+                            Delete
+                          </button>
+                        </span>
+                      </li>
+                    );
+                  }
+                })}
+              </ul>
+
+              {/* Pagination Controls */}
+              <div className="flex justify-between items-center mt-4">
+                <button
+                  onClick={() => setClientPage(prev => Math.max(prev - 1, 1))}
+                  disabled={clientPage === 1}
+                  className="px-4 py-2 bg-gray-600 text-white rounded disabled:opacity-50"
+                >
+                  Previous
+                </button>
+                <span className="text-white">
+                  Page {clientPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setClientPage(prev => Math.min(prev + 1, totalPages))}
+                  disabled={clientPage === totalPages}
+                  className="px-4 py-2 bg-gray-600 text-white rounded disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+
+              {nextContinuationToken && (
+                <div className="flex justify-center mt-4">
+                  <button
+                    onClick={handleLoadMore}
+                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                  >
+                    Load More from S3
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>

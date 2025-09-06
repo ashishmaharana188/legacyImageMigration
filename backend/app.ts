@@ -134,6 +134,8 @@ app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
 app.post("/transfer-to-mongo", fileController.transferDataToMongo);
 app.post("/upload-to-s3", fileController.uploadToS3);
 app.get("/api/s3/list", fileController.listS3Files);
+app.post("/api/s3/delete", fileController.deleteS3Files);
+app.get("/api/s3/search", fileController.searchS3Files);
 
 // WebSocket server setup
 const wss = new WebSocketServer({ noServer: true });

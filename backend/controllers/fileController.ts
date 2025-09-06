@@ -14,7 +14,7 @@ import {
 } from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
-import { listFiles, deleteFiles } from "../services/s3Manager";
+import { listFiles, deleteFiles, searchFiles } from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -372,14 +372,10 @@ class FileController {
 
   async listS3Files(req: Request, res: Response) {
     try {
-      const prefix = req.query.prefix as string;
-      if (!prefix) {
-        return res
-          .status(400)
-          .json({ statusCode: 400, error: "Prefix is required" });
-      }
-      const files = await listFiles(prefix);
-      res.status(200).json({ statusCode: 200, files });
+      const prefix = (req.query.prefix as string) || "";
+      const continuationToken = req.query.continuationToken as string | undefined;
+      const data = await listFiles(prefix, continuationToken);
+      res.status(200).json({ statusCode: 200, ...data });
     } catch (error) {
       console.error("S3 list error:", error);
       res.status(500).json({
@@ -409,6 +405,31 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to delete S3 files",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async searchS3Files(req: Request, res: Response) {
+    try {
+      const prefix = (req.query.prefix as string) || "";
+      const transactionPattern = (req.query.transactionPattern as string) || '\d+';
+      const filenamePattern = (req.query.filenamePattern as string) || '.*';
+
+      // Extract the client code from the prefix for more accurate regex construction.
+      const clientCodeMatch = prefix.match(/CLIENT_CODE_(\d+)/);
+      const clientCode = clientCodeMatch ? clientCodeMatch[1] : '\d+';
+
+      const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionPattern}`;
+      const fullPattern = `${transactionPart}/${filenamePattern}`;
+
+      const files = await searchFiles(prefix, fullPattern);
+      res.status(200).json({ statusCode: 200, files });
+    } catch (error) {
+      console.error("S3 search error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to search S3 files",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }

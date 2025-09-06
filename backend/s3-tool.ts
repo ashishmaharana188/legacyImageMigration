@@ -18,11 +18,22 @@ async function main() {
   const prefix = args[1];
 
   if (command === "list") {
-    const files = await listFiles(prefix);
+    const { directories, files } = await listFiles(prefix);
+
+    if (directories.length > 0) {
+      console.log("Directories found:");
+      directories.forEach((dir) => console.log(dir));
+    }
+
     if (files.length > 0) {
       console.log("Files found:");
-      files.forEach((file) => console.log(file));
+      files.forEach((file) => console.log(file.key));
     }
+
+    if (directories.length === 0 && files.length === 0) {
+      console.log("No files or directories found at that prefix.");
+    }
+
     rl.close();
   } else {
     console.log(`Unknown command: ${command}`);
