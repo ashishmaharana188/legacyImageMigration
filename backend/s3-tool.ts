@@ -1,4 +1,4 @@
-import { listFiles } from "./services/s3Manager";
+import { listFiles, deleteFiles } from "./services/s3Manager";
 import * as readline from "readline";
 import "dotenv/config";
 
