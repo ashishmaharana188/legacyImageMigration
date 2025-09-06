@@ -245,28 +245,6 @@ class FileController {
         return res.status(200).json({ statusCode: 200, message: message });
       }
 
-      console.log("--- AWS Credential Check (from fileController) ---");
-      console.log(
-        "AWS_ACCESS_KEY_ID:",
-        process.env.AWS_ACCESS_KEY_ID ? "Set" : "Not Set"
-      );
-      console.log(
-        "AWS_SECRET_ACCESS_KEY:",
-        process.env.AWS_SECRET_ACCESS_KEY ? "Set (Masked)" : "Not Set"
-      );
-      console.log(
-        "AWS_SESSION_TOKEN:",
-        process.env.AWS_SESSION_TOKEN ? "Set" : "Not Set"
-      );
-      console.log(
-        "AWS_DEFAULT_REGION:",
-        process.env.AWS_DEFAULT_REGION || "ap-south-1"
-      );
-      console.log(
-        "S3_BUCKET_NAME:",
-        S3_BUCKET_NAME // Using centralized config
-      );
-      console.log("--------------------------------------------------");
 
       const outputRoot = path.join(__dirname, "../../output");
       const bucket = S3_BUCKET_NAME; // Using centralized config

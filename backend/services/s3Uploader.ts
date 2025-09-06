@@ -86,5 +86,18 @@ export async function uploadSplitFilesToS3(
   bucket: string,
   prefix: string
 ) {
-  throw new Error("Method not implemented.");
+  const entries = fs.readdirSync(localDir, { withFileTypes: true });
+
+  for (const entry of entries) {
+    const entryPath = path.join(localDir, entry.name);
+    const entryKey = `${prefix}/${entry.name}`;
+
+    if (entry.isDirectory()) {
+      // Recurse into subdirectory
+      await uploadSplitFilesToS3(entryPath, bucket, entryKey);
+    } else {
+      // Upload file
+      await uploadFile(entryPath, bucket, entryKey);
+    }
+  }
 }
