@@ -1,4 +1,30 @@
-> check the updateTransactionQuery for ts.clientId in where condition, since this applcation is going to be used in client specifc ways. I want a front end option that          │
-│   queries all the client codes from select* from fund.client_master and dispalys them in a dropdown with select client code as the title. once user selects the client           │
-│   code the full application is set to use this clientCode or its associated id where ever its needed. This initla client code fetch needs to happen from the database by         │
-│   connecting to it and running the query. can this be done?  
+we have to centralise the frontend now.
+
+List of things to do in the same serial order - 
+
+
+we have to centralise the frontend now.
+
+List of things to do in the same serial order - 
+
+NOTE: EVERYTHING IS ALREADY AVAILABLE AT App.tsx. JUST TAKE WHATEVER IS REQURIED FROM THERE AND FULLFILL MY REUIREMENTS.
+
+1. Create folder components/action and components/UI
+
+2. Move all function calling and handling that is happening inside APp.tsx to components/tasks. 
+
+3. handleFileChange,handleUpload,handleSplitFiles(1 task component), handleUploadSplitFilesToS3, handleUploadToS3,handleTransferToMongo(2nd task component),handleGenerateSql,handleExecuteSql,handleupdateFolioAndTransaction(2nd task component),handleSanityCheck(4th component), s3 handleLoadMore, handleDeleteS3File,fetchS3Objects,handleDirectoryClick,handleBreadcrumbClick,handleSearch, pagination are (5th component).
+
+4. Move all UI elements to components/UI. Similar to step 3, each task component will have its own UI component.
+
+5. Each group or element is the button itself. Make sure the App.tsx is clean and doesnt have same duplicate code that was already migrated to other folders for clean code.
+
+6. UI elemets use the tasks to render at App.tsx this is the flow. The App.tsx will just render the imported tasks thats all Ap.tsx will be used for.
+
+7. Create a navigation Sidebar that opens and closes on user interation. Create Grouping for each task for UI elemets that expand and collapse when group header is clicked. Each sidebar item is a button that is clickable and opens the furhter menu for the task. We can create required buttons as per the task that is defined in this section.
+
+8. Upload and Script(1), SQL calls and Mongo calls(2), S3 uploads, file search(3), Sanity Checks(4). (Only for UI visual grouping)
+
+9. Each group will have icons and they if sidebar is closed only icons will be visible, if side bar is open icons+text. Use MUI Library for icons.
+
+10. #2057A6 primary accent color. Whitesmoke is the default backgroup color. Make these and inherit everywhere.
