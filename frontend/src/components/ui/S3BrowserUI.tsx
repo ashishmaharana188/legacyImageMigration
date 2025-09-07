@@ -1,5 +1,4 @@
-
-import React from 'react';
+import React from "react";
 
 interface S3File {
   key: string;
@@ -32,6 +31,7 @@ interface S3BrowserUIProps {
   handleDirectoryClick: (directoryKey: string) => void;
   handleBreadcrumbClick: (index: number) => void;
   handleSearch: () => Promise<void>;
+  fetchS3Objects: () => Promise<void>;
 }
 
 const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
@@ -60,21 +60,30 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   handleDirectoryClick,
   handleBreadcrumbClick,
   handleSearch,
+  fetchS3Objects,
 }) => {
   return (
     <div className="mt-8 w-full max-w-2xl">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-white">S3 Browser</h2>
-        <button
-          onClick={() => setIsFilterMode(!isFilterMode)}
-          className={`px-4 py-2 text-white rounded ${
-            isFilterMode
-              ? "bg-red-500 hover:bg-red-600"
-              : "bg-indigo-500 hover:bg-indigo-600"
-          }`}
-        >
-          {isFilterMode ? "Cancel Search" : "Search / Filter"}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={fetchS3Objects}
+            className="px-4 py-2 bg-green-500 text-white rounded hover:bg-green-600"
+          >
+            Reload S3
+          </button>
+          <button
+            onClick={() => setIsFilterMode(!isFilterMode)}
+            className={`px-4 py-2 text-white rounded ${
+              isFilterMode
+                ? "bg-red-500 hover:bg-red-600"
+                : "bg-indigo-500 hover:bg-indigo-600"
+            }`}
+          >
+            {isFilterMode ? "Cancel Search" : "Search / Filter"}
+          </button>
+        </div>
       </div>
 
       {isFilterMode ? (
@@ -109,7 +118,7 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
                 Search Results ({searchResults.length} found)
               </h3>
               <ul className="bg-gray-800 p-2 rounded space-y-1">
-                <li className="p-1 grid grid-cols-12 gap-2 font-semibold text-gray-400">
+                <li className="p-1 grid grid-cols-12 gap-2 font-semibold text-black">
                   <span className="col-span-7">Name</span>
                   <span className="col-span-4">Last Modified</span>
                   <span className="col-span-1"></span>
@@ -141,9 +150,7 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
               {/* Pagination Controls for Search */}
               <div className="flex justify-between items-center mt-4">
                 <button
-                  onClick={() =>
-                    setSearchPage((prev) => Math.max(prev - 1, 1))
-                  }
+                  onClick={() => setSearchPage((prev) => Math.max(prev - 1, 1))}
                   disabled={searchPage === 1}
                   className="px-4 py-2 bg-gray-600 text-white rounded disabled:opacity-50"
                 >
@@ -170,12 +177,12 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
       ) : (
         <div>
           {/* Browser UI */}
-          <div className="flex items-center gap-2 p-2 bg-gray-700 rounded-t-md">
+          <div className="flex items-center gap-2 p-2 bg-[#2057A6] brightness-140 rounded-t-md">
             {currentPrefix
               .split("/")
               .filter(Boolean)
               .map((part, index) => (
-                <div key={index} className="flex items-center gap-2">
+                <div key={index} className="flex items-center gap-2 text-white">
                   <span
                     onClick={() => handleBreadcrumbClick(index)}
                     className="cursor-pointer hover:underline"
@@ -186,13 +193,13 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
                 </div>
               ))}
           </div>
-          <div className="bg-gray-800 p-2 rounded-b-md min-h-[200px]">
-            <div className="text-sm text-gray-400 mb-2 px-1">
+          <div className="bg-[#F5F8FC] p-2 rounded-b-md min-h-[200px]">
+            <div className="text-sm text-black mb-2 px-1">
               {s3Directories.length} directories, {s3Files.length} files
             </div>
             <ul className="space-y-1">
               {/* Table Header */}
-              <li className="p-1 grid grid-cols-12 gap-2 font-semibold text-gray-400">
+              <li className="p-1 grid grid-cols-12 gap-2 font-semibold text-black">
                 <span className="col-span-7">Name</span>
                 <span className="col-span-4">Last Modified</span>
                 <span className="col-span-1"></span>
@@ -309,4 +316,5 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   );
 };
 
+// This is a test comment to force re-evaluation
 export default S3BrowserUI;

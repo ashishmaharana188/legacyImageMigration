@@ -51,14 +51,14 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
   }, [searchResults, searchPage, itemsPerPage]);
 
   const fetchS3Objects = useCallback(
-    async (prefix: string = "", continuationToken?: string) => {
+    async (prefix: string = "Data/", continuationToken?: string) => {
       setLogs((prev) => ({
         ...prev,
         status: "Fetching S3 objects...",
         errors: [],
       }));
       try {
-        const res = await axios.get("http://localhost:3001/s3-list-objects", {
+        const res = await axios.get("http://localhost:3000/s3-list-objects", {
           params: { prefix, continuationToken },
         });
         const {
@@ -111,14 +111,18 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
 
   const handleDeleteS3File = useCallback(
     async (key: string) => {
+      // Add confirmation dialog
+      if (!window.confirm(`Are you sure you want to delete "${key}"?`)) {
+        return; // User cancelled the deletion
+      }
       setLogs((prev) => ({
         ...prev,
         status: `Deleting ${key}...`,
         errors: [],
       }));
       try {
-        await axios.delete("http://localhost:3001/s3-delete-object", {
-          data: { key },
+        await axios.post("http://localhost:3000/s3-delete-object", {
+          keys: [key],
         });
         setLogs((prev) => ({
           ...prev,
@@ -172,7 +176,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
   const handleSearch = useCallback(async () => {
     setLogs((prev) => ({ ...prev, status: "Searching S3...", errors: [] }));
     try {
-      const res = await axios.get("http://localhost:3001/s3-search", {
+      const res = await axios.get("http://localhost:3000/s3-search", {
         params: {
           transactionNumberPattern,
           filenamePattern,
@@ -228,6 +232,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       handleDirectoryClick={handleDirectoryClick}
       handleBreadcrumbClick={handleBreadcrumbClick}
       handleSearch={handleSearch}
+      fetchS3Objects={fetchS3Objects} // Pass fetchS3Objects to UI component
     />
   );
 };
