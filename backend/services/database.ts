@@ -363,6 +363,21 @@ page_count, client_id
       await client.query("BEGIN");
       this.logger.info("executeSql: BEGIN started");
 
+      // --- Start of new logic for client_id lookup ---
+      const uniqueIdFunds = [...new Set(transactions.map(t => String(t.id_fund)))];
+      this.logger.info(`executeSql: found ${uniqueIdFunds.length} unique id_fund values`);
+
+      const clientIdMap: Map<string, number> = new Map();
+      if (uniqueIdFunds.length > 0) {
+        const clientMasterQuery = `SELECT id, client_code FROM fund.client_master WHERE client_code = ANY($1::text[])`;
+        const clientMasterRes = await client.query(clientMasterQuery, [uniqueIdFunds]);
+        clientMasterRes.rows.forEach(row => {
+          clientIdMap.set(row.client_code, row.id);
+        });
+        this.logger.info(`executeSql: fetched ${clientIdMap.size} client_id mappings`);
+      }
+      // --- End of new logic for client_id lookup ---
+
       const queryText = `
 INSERT INTO investor.aif_document_details(
 document_process, document_activity, document_type, document_format, document_path,
@@ -408,8 +423,17 @@ page_count, client_id
         }
 
         const format = ext.replace(".", "").toUpperCase();
-        const clientId = parseInt(String(data.id_fund), 10); // Convert to integer
-        const finalClientId = isNaN(clientId) ? null : clientId; // Set to null if not a valid number
+        const actualClientId = clientIdMap.get(String(data.id_fund));
+        const finalClientId = actualClientId !== undefined ? actualClientId : null; // Use null if not found
+        if (finalClientId === null) {
+          this.logger.warn(`executeSql: client_id not found for id_fund: ${data.id_fund} at row ${index + 2}`);
+          logs.push({
+            row: index + 2,
+            status: "error",
+            message: `Client ID not found for id_fund: ${data.id_fund}`,
+          });
+          continue; // Skip this row if client_id is not found
+        }
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
         const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
