@@ -364,17 +364,25 @@ page_count, client_id
       this.logger.info("executeSql: BEGIN started");
 
       // --- Start of new logic for client_id lookup ---
-      const uniqueIdFunds = [...new Set(transactions.map(t => String(t.id_fund)))];
-      this.logger.info(`executeSql: found ${uniqueIdFunds.length} unique id_fund values`);
+      const uniqueIdFunds = [
+        ...new Set(transactions.map((t) => String(t.id_fund))),
+      ];
+      this.logger.info(
+        `executeSql: found ${uniqueIdFunds.length} unique id_fund values`
+      );
 
       const clientIdMap: Map<string, number> = new Map();
       if (uniqueIdFunds.length > 0) {
         const clientMasterQuery = `SELECT id, client_code FROM fund.client_master WHERE client_code = ANY($1::text[])`;
-        const clientMasterRes = await client.query(clientMasterQuery, [uniqueIdFunds]);
-        clientMasterRes.rows.forEach(row => {
+        const clientMasterRes = await client.query(clientMasterQuery, [
+          uniqueIdFunds,
+        ]);
+        clientMasterRes.rows.forEach((row) => {
           clientIdMap.set(row.client_code, row.id);
         });
-        this.logger.info(`executeSql: fetched ${clientIdMap.size} client_id mappings`);
+        this.logger.info(
+          `executeSql: fetched ${clientIdMap.size} client_id mappings`
+        );
       }
       // --- End of new logic for client_id lookup ---
 
@@ -424,9 +432,14 @@ page_count, client_id
 
         const format = ext.replace(".", "").toUpperCase();
         const actualClientId = clientIdMap.get(String(data.id_fund));
-        const finalClientId = actualClientId !== undefined ? actualClientId : null; // Use null if not found
+        const finalClientId =
+          actualClientId !== undefined ? actualClientId : null; // Use null if not found
         if (finalClientId === null) {
-          this.logger.warn(`executeSql: client_id not found for id_fund: ${data.id_fund} at row ${index + 2}`);
+          this.logger.warn(
+            `executeSql: client_id not found for id_fund: ${
+              data.id_fund
+            } at row ${index + 2}`
+          );
           logs.push({
             row: index + 2,
             status: "error",
@@ -593,7 +606,7 @@ FROM (
         (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
     )
     UPDATE investor.aif_document_details AS d
-      SET folio_id = f.id, client_id = f.client_id
+      SET folio_id = f.id
     FROM client_folio AS f
     JOIN fund.client_master cm on f.client_id=cm.id
       LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
@@ -854,11 +867,77 @@ WHERE r2.rn > 1;
     }
   }
 
-  public async getAifDocumentDetails(
-    cutoffTms: string = "2025-08-31T00:00:00.0000"
-  ): Promise<any[]> {
+  private async getProcessedFolioNumbers(): Promise<string[]> {
+    const csvPath = path.join(__dirname, "../../processed");
+    this.logger.info("getProcessedFolioNumbers: Reading processed directory");
+    try {
+      const files = await fs.readdir(csvPath);
+      this.logger.info(
+        `getProcessedFolioNumbers: found ${files.length} files in processed`
+      );
+
+      const latestCsv = files
+        .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
+        .sort()
+        .pop();
+
+      if (!latestCsv) {
+        this.logger.warn("getProcessedFolioNumbers: no processed_*.csv found");
+        return [];
+      }
+
+      const csvFullPath = path.join(csvPath, latestCsv);
+      this.logger.info(
+        `getProcessedFolioNumbers: Reading CSV file: ${csvFullPath}`
+      );
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = await workbook.csv.readFile(csvFullPath);
+      this.logger.info("getProcessedFolioNumbers: CSV loaded into workbook");
+
+      const idAcnos: string[] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Skip header
+        try {
+          const idAcnoCell = row.getCell(5);
+          if (idAcnoCell && idAcnoCell.text) {
+            const idAcno = idAcnoCell.text.trim();
+            if (idAcno) {
+              idAcnos.push(idAcno);
+            }
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          this.logger.warn(
+            `getProcessedFolioNumbers: parse error at row ${rowNumber}: ${msg}`
+          );
+        }
+      });
+
+      const uniqueIdAcnos = [...new Set(idAcnos)];
+      this.logger.info(
+        `getProcessedFolioNumbers: found ${uniqueIdAcnos.length} unique id_acno values`
+      );
+      return uniqueIdAcnos;
+    } catch (error) {
+      this.logger.error(
+        `getProcessedFolioNumbers: Error reading processed folder or CSV file: ${error}`
+      );
+      return []; // Return empty array on error to avoid breaking the main query
+    }
+  }
+
+  public async getAifDocumentDetails(): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
+      const processedFolioNumbers = await this.getProcessedFolioNumbers();
+      if (processedFolioNumbers.length === 0) {
+        this.logger.warn(
+          "getAifDocumentDetails: No processed folio numbers found from CSV. Returning empty array."
+        );
+        return [];
+      }
+
       client = await this.getPool().connect();
       const query = `
         SELECT
@@ -894,11 +973,11 @@ WHERE r2.rn > 1;
           page_count,
           client_id
         FROM investor.aif_document_details
-        WHERE last_update_tms >= $1::timestamptz;
+        WHERE user_attr2 = ANY($1::text[]);
       `;
-      const res = await client.query(query, [cutoffTms]);
+      const res = await client.query(query, [processedFolioNumbers]);
       this.logger.info(
-        `Fetched ${res.rows.length} rows from aif_document_details.`
+        `Fetched ${res.rows.length} rows from aif_document_details based on ${processedFolioNumbers.length} processed folios.`
       );
       return res.rows;
     } catch (error) {
