@@ -1,11 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
-import axios from "axios";
+import { useState } from "react";
 import UploadAndScriptTask from "./components/action/UploadAndScriptTask";
 import SQLAndMongoTask from "./components/action/SQLAndMongoTask";
 import S3BrowserTask from "./components/action/S3BrowserTask";
 import SanityCheckTask from "./components/action/SanityCheckTask";
 import Sidebar from "./components/ui/Sidebar";
 import SummaryDisplay from "./components/ui/SummaryDisplay";
+
+interface SplitFile {
+  originalPath: string;
+  url: string;
+  page: number;
+}
 
 interface FileResponse {
   statusCode?: number;
@@ -32,7 +37,7 @@ interface FileResponse {
   };
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitFiles?: string[];
+  splitFiles?: SplitFile[];
   error?: string;
   directories?: string[];
   files?: S3File[];
@@ -65,8 +70,8 @@ const App: React.FC = () => {
     status: "",
     errors: [],
   });
-  const [updateFolioResult, setUpdateFolioResult] = useState<unknown>(null);
-  const [sanityCheckResult, setSanityCheckResult] = useState<unknown>(null);
+  const [, setUpdateFolioResult] = useState<unknown>(null);
+  const [, setSanityCheckResult] = useState<unknown>(null);
 
   return (
     <div

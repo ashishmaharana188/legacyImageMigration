@@ -2,6 +2,12 @@ import React, { useState, useCallback } from "react";
 import axios, { AxiosError } from "axios";
 import SQLAndMongoUI from "../ui/SQLAndMongoUI";
 
+interface SplitFile {
+  originalPath: string;
+  url: string;
+  page: number;
+}
+
 interface FileResponse {
   statusCode?: number;
   message?: string;
@@ -27,7 +33,7 @@ interface FileResponse {
   };
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitFiles?: string[];
+  splitFiles?: SplitFile[];
   error?: string;
   directories?: string[];
   files?: S3File[];
@@ -58,7 +64,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     setLoading(true);
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3001/upload-split-to-s3"
+        "http://localhost:3000/upload-split-files-to-s3"
       );
       setResponse(res.data);
       setLogs((prev) => ({
@@ -94,7 +100,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     setLoading(true);
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3001/upload-processed-to-s3"
+        "http://localhost:3000/upload-to-s3"
       );
       setResponse(res.data);
       setLogs((prev) => ({
@@ -130,7 +136,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     setLoading(true);
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3001/transfer-to-mongo"
+        "http://localhost:3000/transfer-to-mongo"
       );
       setResponse(res.data);
       setLogs((prev) => ({
@@ -166,7 +172,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     setLoading(true);
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3001/generate-sql"
+        "http://localhost:3000/generate-sql"
       );
       setResponse(res.data);
       setLogs((prev) => ({
@@ -202,7 +208,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     setLoading(true);
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3001/execute-sql"
+        "http://localhost:3000/execute-sql"
       );
       setResponse(res.data);
       setLogs((prev) => ({
@@ -238,7 +244,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     setLoading(true);
     try {
       const res = await axios.post(
-        "http://localhost:3001/update-folio-and-transaction"
+        "http://localhost:3000/updateFolioAndTransaction-sql"
       );
       setUpdateFolioResult(res.data);
       setLogs((prev) => ({

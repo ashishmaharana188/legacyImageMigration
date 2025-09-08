@@ -1,5 +1,11 @@
 import React from 'react';
 
+interface SplitFile {
+  originalPath: string;
+  url: string;
+  page: number;
+}
+
 interface FileResponse {
   statusCode?: number;
   message?: string;
@@ -25,7 +31,7 @@ interface FileResponse {
   };
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitFiles?: string[];
+  splitFiles?: SplitFile[];
   error?: string;
   directories?: string[];
   files?: S3File[];
