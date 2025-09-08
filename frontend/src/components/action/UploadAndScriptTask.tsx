@@ -25,24 +25,30 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
 
   const handleUpload = useCallback(async () => {
     if (!selectedFile) {
-      setUploadMessage('Please select a file first.');
+      setUploadMessage("Please select a file first.");
       return;
     }
 
     setLoading(true);
-    setUploadMessage('Uploading...');
+    setUploadMessage("Uploading...");
     const formData = new FormData();
-    formData.append('pdf', selectedFile);
+    formData.append("excel", selectedFile);
 
     try {
-      const response = await axios.post('http://localhost:3001/upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await axios.post(
+        "http://localhost:3000/upload-excel",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
       setUploadMessage(response.data.message);
     } catch (error: any) {
-      setUploadMessage(`Upload failed: ${error.response?.data?.message || error.message}`);
+      setUploadMessage(
+        `Upload failed: ${error.response?.data?.message || error.message}`
+      );
     } finally {
       setLoading(false);
     }
@@ -50,18 +56,22 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
 
   const handleSplitFiles = useCallback(async () => {
     if (!selectedFile) {
-      setSplitMessage('Please upload a file first.');
+      setSplitMessage("Please upload a file first.");
       return;
     }
 
     setLoading(true);
-    setSplitMessage('Splitting files...');
+    setSplitMessage("Splitting files...");
     try {
-      const response = await axios.post('http://localhost:3001/split', { filename: selectedFile.name });
+      const response = await axios.post("http://localhost:3000/split-files", {
+        filename: selectedFile.name,
+      });
       setSplitFiles(response.data.splitFiles);
       setSplitMessage(response.data.message);
     } catch (error: any) {
-      setSplitMessage(`Splitting failed: ${error.response?.data?.message || error.message}`);
+      setSplitMessage(
+        `Splitting failed: ${error.response?.data?.message || error.message}`
+      );
     } finally {
       setLoading(false);
     }

@@ -23,7 +23,6 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
 }) => {
   return (
     <div>
-      <h3 className="text-bold">Upload and Script</h3>
       <div>
         <input type="file" onChange={handleFileChange} />
         <button onClick={handleUpload} disabled={loading || !selectedFile}>
