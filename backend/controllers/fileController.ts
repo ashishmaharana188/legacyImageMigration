@@ -107,6 +107,7 @@ class FileController {
       res.status(200).json({
         statusCode: 200,
         message: "Files split successfully",
+        splitSummary: result.summary, // Changed from splitFiles to splitSummary
         splitFiles: result.splitFiles.map((file: any) => ({
           originalPath: file.originalPath,
           url: `/download-file/${encodeURIComponent(file.splitPath)}`,

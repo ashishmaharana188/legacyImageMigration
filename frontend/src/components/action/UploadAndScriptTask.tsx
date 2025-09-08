@@ -3,15 +3,52 @@ import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 import UploadAndScriptUI from '../ui/UploadAndScriptUI';
 
-interface UploadAndScriptTaskProps {
-  // Define any props that might be passed down from App.tsx
+interface SplitFile {
+  originalPath: string;
+  url: string;
+  page: number;
 }
 
-const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
+interface FileResponse {
+  statusCode?: number;
+  message?: string;
+  originalFile?: string;
+  processedFile?: string;
+  nextContinuationToken?: string;
+  summary?: {
+    totalRows: number;
+    successfulRows: number;
+    errors: number;
+    notFound: number;
+    successfulInserts: number;
+    unsuccessfulCount: number;
+    totalPageCount: number;
+    totalSplitImages: number;
+  };
+  splitSummary?: {
+    totalOriginalFilesProcessed: number;
+    totalExpectedSplits: number;
+    totalSplitFilesGenerated: number;
+    splitErrors: number;
+    totalExpectedPagesFromCsv: number;
+  };
+  downloadUrl?: string;
+  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
+  splitFiles?: SplitFile[];
+  error?: string;
+  directories?: string[];
+  files?: any[]; // Replace 'any' with a specific type if you have one for S3 files
+}
+
+interface UploadAndScriptTaskProps {
+  setResponse: React.Dispatch<React.SetStateAction<FileResponse | null>>;
+}
+
+const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const [splitMessage, setSplitMessage] = useState<string>('');
-  const [splitFiles, setSplitFiles] = useState<string[]>([]);
+  const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
   const handleFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
@@ -35,7 +72,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
     formData.append("excel", selectedFile);
 
     try {
-      const response = await axios.post(
+      const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-excel",
         formData,
         {
@@ -44,7 +81,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
           },
         }
       );
-      setUploadMessage(response.data.message);
+      setUploadMessage(res.data.message || 'Upload successful');
+      setResponse(res.data);
     } catch (error: any) {
       setUploadMessage(
         `Upload failed: ${error.response?.data?.message || error.message}`
@@ -52,7 +90,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedFile]);
+  }, [selectedFile, setResponse]);
 
   const handleSplitFiles = useCallback(async () => {
     if (!selectedFile) {
@@ -63,11 +101,12 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
     setLoading(true);
     setSplitMessage("Splitting files...");
     try {
-      const response = await axios.post("http://localhost:3000/split-files", {
+      const res = await axios.post<FileResponse>("http://localhost:3000/split-files", {
         filename: selectedFile.name,
       });
-      setSplitFiles(response.data.splitFiles);
-      setSplitMessage(response.data.message);
+      setSplitFiles(res.data.splitFiles || []);
+      setSplitMessage(res.data.message || 'Splitting successful');
+      setResponse(res.data);
     } catch (error: any) {
       setSplitMessage(
         `Splitting failed: ${error.response?.data?.message || error.message}`
@@ -75,7 +114,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedFile]);
+  }, [selectedFile, setResponse]);
 
   return (
     <UploadAndScriptUI

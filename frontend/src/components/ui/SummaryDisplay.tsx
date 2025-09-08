@@ -79,6 +79,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ response, logs }) => {
               Total Expected Pages (from CSV):{" "}
               {response.splitSummary.totalExpectedPagesFromCsv}
             </p>
+            <p>Split Errors: {response.splitSummary.splitErrors}</p>
           </div>
         )}
       </div>

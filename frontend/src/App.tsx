@@ -84,7 +84,7 @@ const App: React.FC = () => {
         {!selectedTask && (
           <p className="text-black">Please select a task from the sidebar.</p>
         )}
-        {selectedTask === "uploadAndScript" && <UploadAndScriptTask />}
+        {selectedTask === "uploadAndScript" && <UploadAndScriptTask setResponse={setResponse} />}
         {selectedTask === "sqlAndMongo" && (
           <SQLAndMongoTask
             setResponse={setResponse}
