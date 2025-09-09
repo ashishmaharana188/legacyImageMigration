@@ -35,8 +35,8 @@ export class MongoDatabase {
           branchId: String,
           clientId: Number,
           createdBy: String,
-          createdFrom: Date,
-          createdOn: Date,
+          createdFrom: String,
+          createdOn: String,
           currentStage: Number,
           documentFormat: String,
           documentPath: String,
@@ -44,7 +44,7 @@ export class MongoDatabase {
           documentType: String,
           lastUpdatedBy: String,
           lastUpdatedFrom: String,
-          lastUpdatedOn: Date,
+          lastUpdatedOn: String,
           mimeType: String,
           processCode: String,
           sourceUser: String,
@@ -52,7 +52,7 @@ export class MongoDatabase {
           transactionCode: String,
           transactionNo: String,
           transactionType: String,
-          workDate: Date,
+          workDate: String,
         },
         { collection: "fnxTransactionInitiationDocUpload", versionKey: false }
       );
@@ -114,11 +114,6 @@ export class MongoDatabase {
             await mongoose.disconnect();
             process.exit(1);
           } else {
-            const count = await mongoose.connection.db
-              .collection(collectionName)
-              .find()
-              .sort({ _id: -1 })
-              .toArray();
             logger.info(
               `MongoDB collection '${collectionName}' accessed successfully.`
             );
@@ -139,10 +134,21 @@ export class MongoDatabase {
     }
   }
 
+  public getDb() {
+    return mongoose.connection.db;
+  }
+
   public async insertDocument(document: any): Promise<void> {
     try {
-      await this.model.insertMany(document, { ordered: false });
-      logger.info(`${document.length} documents inserted successfully`);
+      const result = await this.model.insertMany(document, { ordered: false });
+      const insertedInfo = document.map((doc: any) => ({
+        transactionNo: doc.transactionNo,
+        clientId: doc.clientId,
+      }));
+      logger.info({
+        message: `${result.length} documents inserted successfully`,
+        inserted: insertedInfo,
+      });
     } catch (error: any) {
       // If some failed, Mongoose will throw a BulkWriteError
       if (error.writeErrors) {
@@ -174,6 +180,11 @@ export class MongoDatabase {
         logger.warn("MongoDB not connected. Attempting to connect...");
         await this.connect();
       }
+      const db = this.getDb();
+      if (!db) {
+        logger.error("Database connection is not available.");
+        return [];
+      }
 
       const result = await this.model.find({}).limit(1).lean();
       logger.info(
@@ -192,6 +203,11 @@ export class MongoDatabase {
     try {
       const database = new Database();
       await this.connect();
+      const db = this.getDb();
+      if (!db) {
+        logger.error("Database connection is not available.");
+        return { transferredCount: 0 };
+      }
 
       const transactionsMap: Record<string, string> = {
         IC: "ICP",
@@ -199,16 +215,28 @@ export class MongoDatabase {
       };
 
       const pgData = await database.getAifDocumentDetails();
+      const documentsToInsert = [];
 
       for (const data of pgData) {
         const docType = data.document_type;
         const docProcess = data.process_code;
+
+        // Custom clientId conversion logic as requested
+        const clientIdStr = data.client_id.toString();
+        let clientIdNum = 0;
+        for (let i = 0; i < clientIdStr.length; i += 2) {
+          const chunk = clientIdStr.substring(i, i + 2);
+          if (chunk.length === 2) {
+            clientIdNum += parseInt(chunk, 10);
+          }
+        }
+
         const doc = {
           activityStatus: data.activity_status || "O",
           applicationId: data.application_id || null,
           barcode: data.barcode || null,
           branchId: data.branch_id || "BR01",
-          clientId: data.client_id,
+          clientId: clientIdNum, // Use the converted number
           createdBy: data.created_by || "system",
           createdFrom: new Date(data.created_from)
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -237,7 +265,11 @@ export class MongoDatabase {
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
             .toLocaleUpperCase(),
         };
-        await this.insertDocument(doc);
+        documentsToInsert.push(doc);
+      }
+
+      if (documentsToInsert.length > 0) {
+        await this.insertDocument(documentsToInsert);
       }
 
       await this.disconnect();

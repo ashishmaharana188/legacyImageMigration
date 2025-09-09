@@ -148,6 +148,66 @@ export class Database {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
+  private async getProcessedFolioNumbers(): Promise<string[]> {
+    const csvPath = path.join(__dirname, "../../processed");
+    this.logger.info("getProcessedFolioNumbers: Reading processed directory");
+    try {
+      const files = await fs.readdir(csvPath);
+      this.logger.info(
+        `getProcessedFolioNumbers: found ${files.length} files in processed`
+      );
+
+      const latestCsv = files
+        .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
+        .sort()
+        .pop();
+
+      if (!latestCsv) {
+        this.logger.warn("getProcessedFolioNumbers: no processed_*.csv found");
+        return [];
+      }
+
+      const csvFullPath = path.join(csvPath, latestCsv);
+      this.logger.info(
+        `getProcessedFolioNumbers: Reading CSV file: ${csvFullPath}`
+      );
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = await workbook.csv.readFile(csvFullPath);
+      this.logger.info("getProcessedFolioNumbers: CSV loaded into workbook");
+
+      const idAcnos: string[] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Skip header
+        try {
+          const idAcnoCell = row.getCell(5);
+          if (idAcnoCell && idAcnoCell.text) {
+            const idAcno = idAcnoCell.text.trim();
+            if (idAcno) {
+              idAcnos.push(idAcno);
+            }
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          this.logger.warn(
+            `getProcessedFolioNumbers: parse error at row ${rowNumber}: ${msg}`
+          );
+        }
+      });
+
+      const uniqueIdAcnos = [...new Set(idAcnos)];
+      this.logger.info(
+        `getProcessedFolioNumbers: found ${uniqueIdAcnos.length} unique id_acno values`
+      );
+      return uniqueIdAcnos;
+    } catch (error) {
+      this.logger.error(
+        `getProcessedFolioNumbers: Error reading processed folder or CSV file: ${error}`
+      );
+      return []; // Return empty array on error to avoid breaking the main query
+    }
+  }
+
   async generateSql(): Promise<{
     sql: string;
     transactions: {
@@ -528,6 +588,7 @@ page_count, client_id
     this.logger.info("Starting updateFolioAndTransaction");
     const { transactions } = await this.generateSql();
 
+    const processedFolioNumbers = await this.getProcessedFolioNumbers();
     // Get unique id_fund values
     const uniqueClientCodes = [
       ...new Set(transactions.map((tx) => tx.id_fund)),
@@ -540,6 +601,11 @@ page_count, client_id
     let client: PoolClient | null = null;
 
     try {
+      if (processedFolioNumbers.length === 0) {
+        this.logger.warn(
+          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
+        );
+      }
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
       client = await this.getPool().connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
@@ -582,6 +648,7 @@ FROM (
   WHERE cm.client_code = $1
     AND ts.created_by = 'aifappendersvc'
     AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
+    AND fo.folio_number = ANY($1::text[])
 ) AS cte;
 `;
         this.logger.info(
@@ -867,73 +934,13 @@ WHERE r2.rn > 1;
     }
   }
 
-  private async getProcessedFolioNumbers(): Promise<string[]> {
-    const csvPath = path.join(__dirname, "../../processed");
-    this.logger.info("getProcessedFolioNumbers: Reading processed directory");
-    try {
-      const files = await fs.readdir(csvPath);
-      this.logger.info(
-        `getProcessedFolioNumbers: found ${files.length} files in processed`
-      );
-
-      const latestCsv = files
-        .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
-        .sort()
-        .pop();
-
-      if (!latestCsv) {
-        this.logger.warn("getProcessedFolioNumbers: no processed_*.csv found");
-        return [];
-      }
-
-      const csvFullPath = path.join(csvPath, latestCsv);
-      this.logger.info(
-        `getProcessedFolioNumbers: Reading CSV file: ${csvFullPath}`
-      );
-
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = await workbook.csv.readFile(csvFullPath);
-      this.logger.info("getProcessedFolioNumbers: CSV loaded into workbook");
-
-      const idAcnos: string[] = [];
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return; // Skip header
-        try {
-          const idAcnoCell = row.getCell(5);
-          if (idAcnoCell && idAcnoCell.text) {
-            const idAcno = idAcnoCell.text.trim();
-            if (idAcno) {
-              idAcnos.push(idAcno);
-            }
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn(
-            `getProcessedFolioNumbers: parse error at row ${rowNumber}: ${msg}`
-          );
-        }
-      });
-
-      const uniqueIdAcnos = [...new Set(idAcnos)];
-      this.logger.info(
-        `getProcessedFolioNumbers: found ${uniqueIdAcnos.length} unique id_acno values`
-      );
-      return uniqueIdAcnos;
-    } catch (error) {
-      this.logger.error(
-        `getProcessedFolioNumbers: Error reading processed folder or CSV file: ${error}`
-      );
-      return []; // Return empty array on error to avoid breaking the main query
-    }
-  }
-
   public async getAifDocumentDetails(): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
       const processedFolioNumbers = await this.getProcessedFolioNumbers();
       if (processedFolioNumbers.length === 0) {
         this.logger.warn(
-          "getAifDocumentDetails: No processed folio numbers found from CSV. Returning empty array."
+          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
         );
         return [];
       }
