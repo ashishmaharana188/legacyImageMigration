@@ -195,6 +195,7 @@ class FileController {
       const result = await processor.sanityCheckDuplicates({
         dryRun,
         normalize,
+        cutoffTms,
       });
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {

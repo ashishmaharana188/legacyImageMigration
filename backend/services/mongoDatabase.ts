@@ -219,7 +219,7 @@ export class MongoDatabase {
 
       for (const data of pgData) {
         const docType = data.document_type;
-        const docProcess = data.process_code;
+        const docProcess = data.document_process;
 
         // Custom clientId conversion logic as requested
         const clientIdStr = data.client_id.toString();
@@ -258,7 +258,7 @@ export class MongoDatabase {
           processCode: transactionsMap[docProcess],
           sourceUser: data.source_user || "system",
           totalPageCount: data.total_page_count || null,
-          transactionCode: data.transaction_code,
+          transactionCode: data.document_process,
           transactionNo: data.transaction_reference_id,
           transactionType: docType.replace("Form", "").trim(),
           workDate: new Date()

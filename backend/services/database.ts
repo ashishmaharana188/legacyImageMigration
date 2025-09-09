@@ -42,10 +42,9 @@ export class Database {
         ? parseInt(process.env.DB_PORT || "5433", 10)
         : parseInt(process.env.DB_PORT || "5432", 10),
       max: 20,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 10000, // 10 seconds
       connectionTimeoutMillis: 10000,
-      // Consider allowExitOnIdle in serverless/background contexts
-      // allowExitOnIdle: true,
+      keepAlive: true,
     });
 
     // Lifecycle diagnostics
@@ -78,27 +77,9 @@ export class Database {
         this.logger.info("pool warm-up: connect/release successful");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`);
+        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`, e);
       }
     })();
-
-    // Background health check every 5 min (never recreates or nulls the pool)
-    setInterval(async () => {
-      let client: PoolClient | null = null;
-      try {
-        client = await newPool.connect();
-        const onClientError = (e: Error) =>
-          this.logger.error(`health-check client error: ${e.message}`);
-        client.on("error", onClientError);
-        await client.query("SELECT 1");
-        client.off("error", onClientError);
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        this.logger.error(`health-check connection error: ${msg}`);
-      } finally {
-        if (client) client.release();
-      }
-    }, 300000);
 
     this.logger.info("Postgres pool created");
     const poolConfig = {
@@ -121,21 +102,43 @@ export class Database {
   }
 
   public async warmup() {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2000; // 2 seconds
     let client: PoolClient | null = null;
-    try {
-      client = await this.getPool().connect();
-      const onClientError = (e: Error) =>
-        this.logger.error(`warmup client error: ${e.message}`);
-      client.on("error", onClientError);
-      // A simple ping ensures the backend is reachable
-      await client.query("SELECT 1");
-      client.off("error", onClientError);
-      this.logger.info("🔥 Database connection warm-up successful");
-    } catch (err) {
-      this.logger.warn("Database warm-up failed (tolerated):", err);
-    } finally {
-      if (client) client.release();
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        this.logger.info(
+          `Attempting database warm-up (attempt ${i + 1}/${MAX_RETRIES})...`
+        );
+        client = await this.getPool().connect();
+        const onClientError = (e: Error) =>
+          this.logger.error(`warmup client error: ${e.message}`);
+        client.on("error", onClientError);
+        // A simple ping ensures the backend is reachable
+        await client.query("SELECT 1");
+        client.off("error", onClientError);
+        this.logger.info("🔥 Database connection warm-up successful");
+        return; // Success, exit the loop
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        this.logger.warn(
+          `Database warm-up failed (attempt ${i + 1}/${MAX_RETRIES}): ${msg}`,
+          err
+        );
+        if (client) {
+          client.release();
+          client = null;
+        }
+        if (i < MAX_RETRIES - 1) {
+          this.logger.info(`Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        }
+      } finally {
+        if (client) client.release();
+      }
     }
+    this.logger.error(`Database warm-up failed after ${MAX_RETRIES} attempts.`);
   }
 
   private readonly logger = winston.createLogger({
@@ -775,8 +778,9 @@ WHERE ts.client_id = d.client_id
   }
 
   public async sanityCheckDuplicates(params: {
-    dryRun?: boolean; // if true, does not delete; returns rows that would be deleted
-    normalize?: boolean; // if true, compares TRIM(LOWER(user_attr1)) for robustness
+    dryRun?: boolean;
+    normalize?: boolean;
+    cutoffTms?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
@@ -786,8 +790,14 @@ WHERE ts.client_id = d.client_id
     logs: SqlLog[];
   }> {
     const logs: SqlLog[] = [];
-    const { dryRun = true, normalize = false } = params;
-    const cutoffTms = "2025-09-05T00:00:00.0000"; // Hardcoded cutoff time
+    const {
+      dryRun = true,
+      normalize = false,
+      cutoffTms = "2025-09-09T00:00:00.0000",
+    } = params;
+    this.logger.info(
+      `sanityCheckDuplicates: Received cutoffTms: ${cutoffTms}, dryRun: ${dryRun}, normalize: ${normalize}`
+    );
     let client: PoolClient | null = null;
 
     const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";

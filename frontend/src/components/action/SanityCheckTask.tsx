@@ -1,50 +1,99 @@
-import React, { useCallback } from "react";
-import axios, { AxiosError } from "axios";
+import React, { useCallback, useState } from "react";
+import axios from "axios";
 import SanityCheckUI from "../ui/SanityCheckUI";
+import dayjs from "dayjs";
 
 interface SanityCheckTaskProps {
   setLogs: React.Dispatch<
     React.SetStateAction<{ status: string; errors: string[] }>
   >;
-  setSanityCheckResult: React.Dispatch<React.SetStateAction<unknown>>;
+  setSanityCheckResult: React.Dispatch<React.SetStateAction<any>>;
 }
 
 const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   setLogs,
   setSanityCheckResult,
 }) => {
-  const handleSanityCheck = useCallback(async () => {
-    setLogs({ status: "Performing sanity check...", errors: [] });
-    try {
-      const res = await axios.get("http://localhost:3001/sanity-check");
-      setSanityCheckResult(res.data);
-      setLogs((prev) => ({
-        ...prev,
-        status: res.data.message || "Sanity check successful!",
-      }));
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        setLogs((prev) => ({
-          ...prev,
-          status: "Sanity check failed.",
-          errors: [
-            ...prev.errors,
-            error.response?.data?.error || "An unknown error occurred.",
-          ],
-        }));
-        setSanityCheckResult(error.response?.data || null);
-      } else {
-        setLogs((prev) => ({
-          ...prev,
-          status: "Sanity check failed.",
-          errors: [...prev.errors, "An unknown error occurred."],
-        }));
-        setSanityCheckResult(null);
-      }
-    }
-  }, [setLogs, setSanityCheckResult]);
+  const [isDeleteEnabled, setIsDeleteEnabled] = useState(false);
+  const [normalize, setNormalize] = useState(false);
+  const [cutoffDate, setCutoffDate] = useState<dayjs.Dayjs | null>(
+    dayjs("2025-09-05")
+  );
+  const [isLoading, setIsLoading] = useState(false);
 
-  return <SanityCheckUI handleSanityCheck={handleSanityCheck} />;
+  const handleSanityCheck = useCallback(
+    async (dryRun: boolean) => {
+      if (!cutoffDate) {
+        setLogs({
+          status: "Sanity check failed.",
+          errors: ["Please select a cutoff date."],
+        });
+        return;
+      }
+
+      const action = dryRun ? "Finding" : "Deleting";
+      setLogs({ status: `${action} duplicates...`, errors: [] });
+      setIsLoading(true);
+      setSanityCheckResult(null);
+
+      // Format the date to YYYY-MM-DD and append T00:00:00.0000
+      const cutoffTms = `${cutoffDate.format("YYYY-MM-DD")}T00:00:00.0000`;
+      console.log("Frontend sending cutoffTms:", cutoffTms);
+
+      try {
+        const res = await axios.post(
+          "http://localhost:3000/sanity-check-duplicates",
+          {
+            dryRun,
+            normalize,
+            cutoffTms,
+          }
+        );
+        setSanityCheckResult(res.data);
+        if (dryRun) {
+          setLogs((prev) => ({
+            ...prev,
+            status: `Found ${
+              res.data.rows?.length || 0
+            } potential duplicates.`,
+          }));
+        } else {
+          setLogs((prev) => ({
+            ...prev,
+            status: `Successfully deleted ${
+              res.data.deletedCount || 0
+            } rows.`,
+          }));
+        }
+      } catch (error: unknown) {
+        const axiosError = error as any;
+        const errorMessage =
+          axiosError.response?.data?.error || "An unknown error occurred.";
+        setLogs((prev) => ({
+          ...prev,
+          status: "Sanity check failed.",
+          errors: [...prev.errors, errorMessage],
+        }));
+        setSanityCheckResult(axiosError.response?.data || null);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [normalize, cutoffDate, setLogs, setSanityCheckResult]
+  );
+
+  return (
+    <SanityCheckUI
+      handleSanityCheck={handleSanityCheck}
+      isDeleteEnabled={isDeleteEnabled}
+      setIsDeleteEnabled={setIsDeleteEnabled}
+      normalize={normalize}
+      setNormalize={setNormalize}
+      cutoffDate={cutoffDate}
+      setCutoffDate={setCutoffDate}
+      isLoading={isLoading}
+    />
+  );
 };
 
 export default SanityCheckTask;

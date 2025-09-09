@@ -1,8 +1,19 @@
 import dotenv from "dotenv";
 import os from "os";
 import path from "path";
-
 import * as fs from "fs";
+
+// Graceful shutdown and error handling
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  // Optionally, you can add more robust logging or graceful shutdown logic here
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+  // It's often recommended to restart the process after an uncaught exception
+  process.exit(1);
+});
 
 const isProduction = process.env.NODE_ENV === "production";
 const envFile = isProduction ? ".env.production" : ".env.development";
@@ -195,6 +206,10 @@ const startServer = async () => {
       error
     );
   }
+
+  // Initialize and warm up PostgreSQL database
+  const database = new Database();
+  await database.warmup();
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
