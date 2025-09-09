@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import os from "os";
 import path from "path";
 import * as fs from "fs";
+import { Database } from "./services/database";
 
 // Graceful shutdown and error handling
 process.on("unhandledRejection", (reason, promise) => {

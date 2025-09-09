@@ -42,7 +42,7 @@ export class Database {
         ? parseInt(process.env.DB_PORT || "5433", 10)
         : parseInt(process.env.DB_PORT || "5432", 10),
       max: 20,
-      idleTimeoutMillis: 10000, // 10 seconds
+      idleTimeoutMillis: 30000, // 10 seconds
       connectionTimeoutMillis: 10000,
       keepAlive: true,
     });
@@ -118,7 +118,7 @@ export class Database {
         // A simple ping ensures the backend is reachable
         await client.query("SELECT 1");
         client.off("error", onClientError);
-        this.logger.info("🔥 Database connection warm-up successful");
+        this.logger.info("Database connection warm-up successful");
         return; // Success, exit the loop
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
