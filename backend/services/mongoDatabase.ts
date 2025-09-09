@@ -238,10 +238,10 @@ export class MongoDatabase {
           branchId: data.branch_id || "BR01",
           clientId: clientIdNum, // Use the converted number
           createdBy: data.created_by || "system",
-          createdFrom: new Date(data.created_from)
+          createdFrom: new Date(data.creation_date)
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
             .toLocaleUpperCase(),
-          createdOn: new Date(data.created_on)
+          createdOn: new Date(data.creation_date)
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
             .toLocaleUpperCase(),
           currentStage: data.current_stage || 15,
