@@ -33,7 +33,7 @@ export class MongoDatabase {
           applicationId: String,
           barcode: String,
           branchId: String,
-          clientId: Number,
+          clientId: String,
           createdBy: String,
           createdFrom: String,
           createdOn: String,

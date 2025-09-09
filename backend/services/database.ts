@@ -92,12 +92,26 @@ export class Database {
         client.on("error", onClientError);
         await client.query("SELECT 1");
         client.off("error", onClientError);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        this.logger.error(`health-check connection error: ${msg}`);
       } finally {
         if (client) client.release();
       }
     }, 300000);
 
     this.logger.info("Postgres pool created");
+    const poolConfig = {
+      user: useSshTunnel ? process.env.DB_USER : "postgres",
+      host: useSshTunnel ? process.env.DB_HOST : "localhost",
+      database: useSshTunnel ? process.env.DB_NAME : "test",
+      port: useSshTunnel
+        ? parseInt(process.env.DB_PORT || "5433", 10)
+        : parseInt(process.env.DB_PORT || "5432", 10),
+    };
+    this.logger.info(
+      `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`
+    );
     return newPool;
   }
 
@@ -633,38 +647,34 @@ DELETE FROM public.temp_images_1;
       this.logger.info("updateFolioAndTransaction: deleted temp_images_1");
 
       // Query 2: Insert into temp_images_1
-      for (const clientCode of uniqueClientCodes) {
-        const insertTempQuery = `
+      const insertTempQuery = `
 INSERT INTO public.temp_images_1 (client_code, folio_number, IHNO)
-SELECT client_code, folio_number, IHNO
-FROM (
-  SELECT DISTINCT
+SELECT DISTINCT
     cm.client_code,
     fo.folio_number,
     ts.user_attr5 AS ihno
   FROM trxn.aif_transaction_summary ts
   JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
   JOIN fund.client_master cm ON cm.id = fo.client_id
-  WHERE cm.client_code = $1
+  WHERE fo.folio_number = ANY($1::text[])
     AND ts.created_by = 'aifappendersvc'
-    AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-    AND fo.folio_number = ANY($1::text[])
-) AS cte;
+    AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
-        this.logger.info(
-          `updateFolioAndTransaction: inserting temp for client_code=${clientCode}`
-        );
-        const insertResult = await client.query(insertTempQuery, [clientCode]);
-        logs.push({
-          row: 0,
-          status: "executed",
-          message: `Inserted ${insertResult.rowCount} rows into temp_images_1`,
-          sql: insertTempQuery,
-        });
-        this.logger.info(
-          `updateFolioAndTransaction: inserted ${insertResult.rowCount} temp rows for client_code=${clientCode}`
-        );
-      }
+      this.logger.info(
+        `updateFolioAndTransaction: inserting temp for ${processedFolioNumbers.length} folios`
+      );
+      const insertResult = await client.query(insertTempQuery, [
+        processedFolioNumbers,
+      ]);
+      logs.push({
+        row: 0,
+        status: "executed",
+        message: `Inserted ${insertResult.rowCount} rows into temp_images_1`,
+        sql: insertTempQuery,
+      });
+      this.logger.info(
+        `updateFolioAndTransaction: inserted ${insertResult.rowCount} temp rows`
+      );
 
       // Query 3: Update folio_id using id_acno
       const updateFolioQuery = `
@@ -677,11 +687,14 @@ FROM (
     FROM client_folio AS f
     JOIN fund.client_master cm on f.client_id=cm.id
       LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
-    WHERE d.user_attr2 = f.folio_number
-        OR d.transaction_reference_id = t.ihno
+    WHERE (d.user_attr2 = f.folio_number
+        OR d.transaction_reference_id = t.ihno)
+      AND d.user_attr2 = ANY($1::text[])
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
-      const updateFolioResult = await client.query(updateFolioQuery);
+      const updateFolioResult = await client.query(updateFolioQuery, [
+        processedFolioNumbers,
+      ]);
       logs.push({
         row: 0,
         status: "updated",
@@ -702,6 +715,7 @@ WHERE ts.client_id = d.client_id
   AND ts.user_attr5 = d.user_attr1
   AND d.created_by = 'system'
   AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))
+  AND d.user_attr2 = ANY($2::text[])
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
   AND ts.created_by = 'aifappendersvc';
 `;
@@ -710,7 +724,7 @@ WHERE ts.client_id = d.client_id
       );
       const updateTransactionResult = await client.query(
         updateTransactionQuery,
-        [uniqueClientCodes]
+        [uniqueClientCodes, processedFolioNumbers]
       );
       logs.push({
         row: 0,
