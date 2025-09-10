@@ -88,54 +88,91 @@ export async function deleteFiles(keys: string[]): Promise<string[]> {
 
 export async function searchFiles(
   prefix: string,
-  pattern: string
-): Promise<{ key: string; lastModified: Date | undefined }[]> {
+  pattern: string,
+  continuationToken?: string
+): Promise<{
+  files: { key: string; lastModified: Date | undefined }[];
+  nextContinuationToken?: string;
+}> {
   const matchedFiles: { key: string; lastModified: Date | undefined }[] = [];
   const regex = new RegExp(pattern);
 
   try {
-    let isTruncated = true;
-    let continuationToken: string | undefined;
+    console.log(
+      "Sending ListObjectsV2Command with ContinuationToken:",
+      continuationToken
+    );
+    const command = new ListObjectsV2Command({
+      Bucket: S3_BUCKET_NAME,
+      Prefix: prefix,
+      ContinuationToken: continuationToken,
+      MaxKeys: 100,
+    });
 
-    while (isTruncated) {
-      console.log(
-        "Sending ListObjectsV2Command with ContinuationToken:",
-        continuationToken
+    const { Contents, IsTruncated, NextContinuationToken } = await s3.send(
+      command
+    );
+    console.log("Received NextContinuationToken:", NextContinuationToken);
+
+    if (Contents) {
+      // Log the keys before filtering
+      console.log("Keys from S3:", Contents.map(c => c.Key));
+
+      const matchingObjects = Contents.filter(
+        (c) => c.Key && regex.test(c.Key)
       );
-      const command = new ListObjectsV2Command({
-        Bucket: S3_BUCKET_NAME,
-        Prefix: prefix,
-        ContinuationToken: continuationToken,
-      });
-
-      const { Contents, IsTruncated, NextContinuationToken } = await s3.send(
-        command
+      matchedFiles.push(
+        ...matchingObjects.map((c) => ({
+          key: c.Key!,
+          lastModified: c.LastModified,
+        }))
       );
-      console.log("Received NextContinuationToken:", NextContinuationToken);
-
-      if (Contents) {
-        const matchingObjects = Contents.filter(
-          (c) => c.Key && regex.test(c.Key)
-        );
-        matchedFiles.push(
-          ...matchingObjects.map((c) => ({
-            key: c.Key!,
-            lastModified: c.LastModified,
-          }))
-        );
-      }
-
-      isTruncated = IsTruncated || false;
-      if (NextContinuationToken) {
-        continuationToken = NextContinuationToken;
-      } else {
-        isTruncated = false;
-      }
     }
 
-    return matchedFiles;
+    return {
+      files: matchedFiles,
+      nextContinuationToken: IsTruncated ? NextContinuationToken : undefined,
+    };
   } catch (err) {
     console.error("Error searching files:", err);
+    throw err;
+  }
+}
+
+export async function searchFolders(
+  prefix: string,
+  pattern: string,
+  continuationToken?: string
+): Promise<{
+  directories: string[];
+  nextContinuationToken?: string;
+}> {
+  const matchedDirectories: string[] = [];
+  const regex = new RegExp(pattern);
+
+  try {
+    const command = new ListObjectsV2Command({
+      Bucket: S3_BUCKET_NAME,
+      Prefix: prefix,
+      Delimiter: "/",
+      ContinuationToken: continuationToken,
+    });
+
+    const { CommonPrefixes, IsTruncated, NextContinuationToken } = await s3.send(command);
+
+    if (CommonPrefixes) {
+      const matchingPrefixes = CommonPrefixes.filter(
+        (p) => p.Prefix && regex.test(p.Prefix)
+      ).map(p => p.Prefix!);
+      matchedDirectories.push(...matchingPrefixes);
+    }
+
+    return {
+      directories: matchedDirectories,
+      nextContinuationToken: IsTruncated ? NextContinuationToken : undefined,
+    };
+  } catch (err) {
+    console.error("Error searching folders:", err);
     throw err;
   }
 }

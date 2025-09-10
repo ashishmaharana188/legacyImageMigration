@@ -1,10 +1,14 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
-import axios, { AxiosError } from "axios";
+import axios from "axios";
 import S3BrowserUI from "../ui/S3BrowserUI";
 
 interface S3File {
   key: string;
   lastModified?: string;
+}
+
+interface S3Item extends S3File {
+  type: "file" | "dir";
 }
 
 interface S3BrowserTaskProps {
@@ -24,10 +28,13 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
   const [transactionNumberPattern, setTransactionNumberPattern] =
     useState<string>("");
   const [filenamePattern, setFilenamePattern] = useState<string>("");
-  const [searchResults, setSearchResults] = useState<S3File[]>([]);
+  const [searchResults, setSearchResults] = useState<S3Item[]>([]);
   const [clientPage, setClientPage] = useState<number>(1);
+  const [searchContinuationToken, setSearchContinuationToken] = useState<
+    string | undefined
+  >(undefined);
   const [searchPage, setSearchPage] = useState<number>(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 100;
 
   const totalPages = Math.ceil(
     (s3Files.length + s3Directories.length) / itemsPerPage
@@ -36,8 +43,8 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
 
   const paginatedItems = useMemo(() => {
     const allItems = [
-      ...s3Directories.map((dir) => ({ key: dir, type: "dir" })),
-      ...s3Files.map((file) => ({ ...file, type: "file" })),
+      ...s3Directories.map((dir) => ({ key: dir, type: "dir" as const })),
+      ...s3Files.map((file) => ({ ...file, type: "file" as const })),
     ];
     const startIndex = (clientPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
@@ -111,9 +118,8 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
 
   const handleDeleteS3File = useCallback(
     async (key: string) => {
-      // Add confirmation dialog
       if (!window.confirm(`Are you sure you want to delete "${key}"?`)) {
-        return; // User cancelled the deletion
+        return;
       }
       setLogs((prev) => ({
         ...prev,
@@ -128,7 +134,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
           ...prev,
           status: `${key} deleted successfully.`,
         }));
-        fetchS3Objects(currentPrefix); // Refresh the list
+        fetchS3Objects(currentPrefix);
       } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
           setLogs((prev) => ({
@@ -153,9 +159,9 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
 
   const handleDirectoryClick = useCallback(
     (directoryKey: string) => {
-      setS3Files([]); // Clear current files
-      setS3Directories([]); // Clear current directories
-      setClientPage(1); // Reset pagination
+      setS3Files([]);
+      setS3Directories([]);
+      setClientPage(1);
       fetchS3Objects(directoryKey);
     },
     [fetchS3Objects]
@@ -173,37 +179,59 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
     [currentPrefix, fetchS3Objects]
   );
 
-  const handleSearch = useCallback(async () => {
-    setLogs((prev) => ({ ...prev, status: "Searching S3...", errors: [] }));
-    try {
-      const res = await axios.get("http://localhost:3000/s3-search", {
-        params: {
-          transactionNumberPattern,
-          filenamePattern,
-        },
-      });
-      setSearchResults(res.data.files);
-      setSearchPage(1); // Reset search pagination
-      setLogs((prev) => ({ ...prev, status: "S3 search complete." }));
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        setLogs((prev) => ({
-          ...prev,
-          status: "S3 search failed.",
-          errors: [
-            ...prev.errors,
-            error.response?.data?.error || "An unknown error occurred.",
-          ],
+  const handleSearch = useCallback(
+    async (continuationToken?: string) => {
+      setLogs((prev) => ({ ...prev, status: "Searching S3...", errors: [] }));
+      try {
+        const res = await axios.get("http://localhost:3000/s3-search", {
+          params: {
+            prefix: currentPrefix,
+            transactionNumberPattern,
+            filenamePattern,
+            continuationToken,
+          },
+        });
+
+        const results: S3Item[] = res.data.files.map((item: S3File) => ({
+          ...item,
+          type: item.key.endsWith("/") ? ("dir" as const) : ("file" as const),
         }));
-      } else {
-        setLogs((prev) => ({
-          ...prev,
-          status: "S3 search failed.",
-          errors: [...prev.errors, "An unknown error occurred."],
-        }));
+
+        setSearchResults((prev) =>
+          continuationToken ? [...prev, ...results] : results
+        );
+        setSearchContinuationToken(res.data.nextContinuationToken);
+        if (!continuationToken) {
+          setSearchPage(1);
+        }
+        setLogs((prev) => ({ ...prev, status: "S3 search complete." }));
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+          setLogs((prev) => ({
+            ...prev,
+            status: "S3 search failed.",
+            errors: [
+              ...prev.errors,
+              error.response?.data?.error || "An unknown error occurred.",
+            ],
+          }));
+        } else {
+          setLogs((prev) => ({
+            ...prev,
+            status: "S3 search failed.",
+            errors: [...prev.errors, "An unknown error occurred."],
+          }));
+        }
       }
+    },
+    [setLogs, transactionNumberPattern, filenamePattern, currentPrefix]
+  );
+
+  const handleLoadMoreSearch = useCallback(() => {
+    if (searchContinuationToken) {
+      handleSearch(searchContinuationToken);
     }
-  }, [setLogs, transactionNumberPattern, filenamePattern]);
+  }, [searchContinuationToken, handleSearch]);
 
   return (
     <S3BrowserUI
@@ -222,6 +250,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       totalSearchPages={totalSearchPages}
       paginatedItems={paginatedItems}
       paginatedSearchResults={paginatedSearchResults}
+      searchContinuationToken={searchContinuationToken}
       setIsFilterMode={setIsFilterMode}
       setTransactionNumberPattern={setTransactionNumberPattern}
       setFilenamePattern={setFilenamePattern}
@@ -232,7 +261,8 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       handleDirectoryClick={handleDirectoryClick}
       handleBreadcrumbClick={handleBreadcrumbClick}
       handleSearch={handleSearch}
-      fetchS3Objects={fetchS3Objects} // Pass fetchS3Objects to UI component
+      handleLoadMoreSearch={handleLoadMoreSearch}
+      fetchS3Objects={fetchS3Objects}
     />
   );
 };

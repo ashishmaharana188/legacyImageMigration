@@ -14,7 +14,7 @@ import {
 } from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
-import { listFiles, deleteFiles, searchFiles } from "../services/s3Manager";
+import { listFiles, deleteFiles, searchFiles, searchFolders } from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -294,9 +294,7 @@ class FileController {
             JSON.stringify({
               type: "s3UploadStatus",
               status: "error",
-              message: `S3 upload failed: ${
-                error instanceof Error ? error.message : "Unknown error"
-              }`,
+              message: `S3 upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
             })
           );
         }
@@ -415,18 +413,32 @@ class FileController {
   async searchS3Files(req: Request, res: Response) {
     try {
       const prefix = (req.query.prefix as string) || "";
-      const transactionPattern = (req.query.transactionPattern as string) || '\d+';
-      const filenamePattern = (req.query.filenamePattern as string) || '.*';
+      const transactionNumberPattern = (req.query.transactionNumberPattern as string) || 'd+';
+      const filenamePattern = (req.query.filenamePattern as string) || '';
+      const continuationToken = req.query.continuationToken as string | undefined;
 
-      // Extract the client code from the prefix for more accurate regex construction.
+      const isFolderSearch = filenamePattern.trim() === '';
+
       const clientCodeMatch = prefix.match(/CLIENT_CODE_(\d+)/);
-      const clientCode = clientCodeMatch ? clientCodeMatch[1] : '\d+';
+      const clientCode = clientCodeMatch ? clientCodeMatch[1] : '\\d+';
+      const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionNumberPattern}`;
 
-      const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionPattern}`;
-      const fullPattern = `${transactionPart}/${filenamePattern}`;
+      let files: { key: string; lastModified: Date | undefined }[] = [];
+      let nextContinuationToken: string | undefined;
 
-      const files = await searchFiles(prefix, fullPattern);
-      res.status(200).json({ statusCode: 200, files });
+      if (isFolderSearch) {
+        const folderPattern = `^${prefix}${transactionPart}/$`;
+        const searchResult = await searchFolders(prefix, folderPattern, continuationToken);
+        files = searchResult.directories.map(dir => ({ key: dir, lastModified: undefined }));
+        nextContinuationToken = searchResult.nextContinuationToken;
+      } else {
+        const fullPattern = `${prefix}${transactionPart}/${filenamePattern}`;
+        const searchResult = await searchFiles(prefix, fullPattern, continuationToken);
+        files = searchResult.files;
+        nextContinuationToken = searchResult.nextContinuationToken;
+      }
+
+      res.status(200).json({ statusCode: 200, files, nextContinuationToken });
     } catch (error) {
       console.error("S3 search error:", error);
       res.status(500).json({
