@@ -1,4 +1,244 @@
-The s3 broswer is not able to fetch the details. "S3BrowserTask.tsx:61 
-       GET http://localhost:3001/s3-list-objects?prefix= net::ERR_CONNECTION_REFUSED"
+s3 browser feature and flow.
 
-    Fix the s3 browser not being able to conet to s3. As a fallback to reload the connection for s3 component without reloading the full server please add a reload button that reload the connection to s3 in s3browser component.
+
+1.User can manually navigate as required, if possible make it so that all the directories inside CLIENT_CODE_%number%/ are in desc which means that last updated folder will be visible first.
+2. The s3 files fetching will work for 100fetches at once and each page shows 10rows of data meaning pagination should be for 10pages.
+3. The search and filter option needs to be global search, meaning it searches for all the files inside s3 using the designed prefix not just the fetched ones.
+4. The transactionPatternNumber is for the folder and filePattern is for the file search. Each are distinct and can also be used together to form a prefix.
+5. If transactionPatternNumber is not there but filePattern is there that mean prefix is half contructed right? in this case we Search for the folder which has the filePattern inside all folders and display all folders that have this file pattern. User can then go inside and check the files inside all these folders like regular.
+6. IF transactionPatternNumber is present but filePattern is not there then its just normal folder display and user can use normal navigation to go inside and look at the files.
+7. Make sure the results for this propelry displayed for all these activites and everything is in sync and works as requested.
+
+
+
+async searchS3Files(req: Request, res: Response) {
+
+
+
+    try {
+
+
+      const prefix = (req.query.prefix as string) || "";
+
+
+      const transactionPattern = (req.query.transactionPattern as string) || '\d+';
+
+
+      const filenamePattern = (req.query.filenamePattern as string) || '.*';
+
+
+
+
+
+      // Extract the client code from the prefix for more accurate regex construction.
+
+
+      const clientCodeMatch = prefix.match(/CLIENT_CODE_(\d+)/);
+
+
+      const clientCode = clientCodeMatch ? clientCodeMatch[1] : '\d+';
+
+
+
+
+
+      const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionPattern}`;
+
+
+      const fullPattern = `${transactionPart}/${filenamePattern}`;
+
+
+
+
+
+      const files = await searchFiles(prefix, fullPattern);
+
+
+      res.status(200).json({ statusCode: 200, files });
+
+
+    } catch (error) {
+
+
+      console.error("S3 search error:", error);
+
+
+      res.status(500).json({
+
+
+        statusCode: 500,
+
+
+        error: "Failed to search S3 files",
+
+
+        details: error instanceof Error ? error.message : "Unknown error",
+
+
+      });
+
+
+    }
+
+
+  }
+
+
+  //
+
+  import { S3Client, ListObjectsV2Command, DeleteObjectsCommand, ObjectIdentifier } from "@aws-sdk/client-s3";
+import { S3_BUCKET_NAME } from "../utils/s3Config";
+
+const s3 = new S3Client({
+  region: process.env.AWS_DEFAULT_REGION || "ap-south-1",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+    sessionToken: process.env.AWS_SESSION_TOKEN!,
+  },
+});
+
+interface S3ListResponse {
+  directories: string[];
+  files: { key: string; lastModified: Date | undefined }[];
+  nextContinuationToken?: string;
+}
+
+export async function listFiles(
+  prefix: string,
+  continuationToken?: string
+): Promise<S3ListResponse> {
+  const command = new ListObjectsV2Command({
+    Bucket: S3_BUCKET_NAME,
+    Prefix: prefix,
+    Delimiter: "/",
+    ContinuationToken: continuationToken,
+  });
+
+  try {
+    const { Contents, CommonPrefixes, NextContinuationToken } = await s3.send(
+      command
+    );
+
+    const page: S3ListResponse = {
+      directories: CommonPrefixes?.map((p) => p.Prefix!) || [],
+      files: Contents?.map((c) => ({ key: c.Key!, lastModified: c.LastModified })) || [],
+      nextContinuationToken: NextContinuationToken,
+    };
+
+    return page;
+  } catch (err) {
+    console.error(err);
+    throw err; // Re-throw to be handled by controller
+  }
+}
+
+export async function deleteFiles(keys: string[]): Promise<string[]> {
+    const filesToDelete = keys.filter(key => !key.endsWith('/'));
+  
+    if (filesToDelete.length === 0) {
+      console.log("No files to delete.");
+      return [];
+    }
+  
+    const deleteParams = {
+      Bucket: S3_BUCKET_NAME,
+      Delete: {
+        Objects: filesToDelete.map(key => ({ Key: key })) as ObjectIdentifier[],
+      },
+    };
+  
+    const command = new DeleteObjectsCommand(deleteParams);
+  
+    try {
+      const { Deleted } = await s3.send(command);
+      const deletedKeys = Deleted?.map(d => d.Key!) || [];
+      console.log(`Successfully deleted ${deletedKeys.length} files from S3.`);
+      return deletedKeys;
+    } catch (err) {
+      console.error("Error deleting files from S3:", err);
+      return [];
+    }
+  }
+
+export async function searchFiles(prefix: string, pattern: string): Promise<{ key: string; lastModified: Date | undefined }[]> {
+  const command = new ListObjectsV2Command({
+    Bucket: S3_BUCKET_NAME,
+    Prefix: prefix,
+  });
+
+  const matchedFiles: { key: string; lastModified: Date | undefined }[] = [];
+  const regex = new RegExp(pattern);
+
+  try {
+    let isTruncated = true;
+    let continuationToken;
+
+    while (isTruncated) {
+      const { Contents, IsTruncated, NextContinuationToken } = await s3.send(command);
+
+      if (Contents) {
+        const matchingObjects = Contents.filter(c => c.Key && regex.test(c.Key));
+        matchedFiles.push(...matchingObjects.map(c => ({ key: c.Key!, lastModified: c.LastModified })));
+      }
+
+      isTruncated = IsTruncated!;
+      continuationToken = NextContinuationToken;
+      command.input.ContinuationToken = continuationToken;
+    }
+
+    return matchedFiles;
+  } catch (err) {
+    console.error("Error searching files:", err);
+    throw err;
+  }
+}
+
+//import { listFiles, deleteFiles } from "./services/s3Manager";
+import * as readline from "readline";
+import "dotenv/config";
+
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+
+async function main() {
+  const args = process.argv.slice(2);
+  if (args.length < 2) {
+    console.log("Usage: ts-node s3-tool.ts <list> <prefix>");
+    process.exit(1);
+  }
+
+  const command = args[0];
+  const prefix = args[1];
+
+  if (command === "list") {
+    const { directories, files } = await listFiles(prefix);
+
+    if (directories.length > 0) {
+      console.log("Directories found:");
+      directories.forEach((dir) => console.log(dir));
+    }
+
+    if (files.length > 0) {
+      console.log("Files found:");
+      files.forEach((file) => console.log(file.key));
+    }
+
+    if (directories.length === 0 && files.length === 0) {
+      console.log("No files or directories found at that prefix.");
+    }
+
+    rl.close();
+  } else {
+    console.log(`Unknown command: ${command}`);
+    console.log("Usage: ts-node s3-tool.ts <list> <prefix>");
+    process.exit(1);
+  }
+}
+
+main().catch((err) => {
+  console.error("An error occurred:", err);
+  process.exit(1);
+});

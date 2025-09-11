@@ -20,10 +20,9 @@ interface S3BrowserUIProps {
   searchResults: S3Item[];
   clientPage: number;
   searchPage: number;
-  itemsPerPage: number;
   totalPages: number;
   totalSearchPages: number;
-  paginatedItems: any[];
+  paginatedItems: S3Item[];
   paginatedSearchResults: S3Item[];
   searchContinuationToken: string | undefined;
   setIsFilterMode: React.Dispatch<React.SetStateAction<boolean>>;
@@ -51,7 +50,6 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   searchResults,
   clientPage,
   searchPage,
-  itemsPerPage,
   totalPages,
   totalSearchPages,
   paginatedItems,

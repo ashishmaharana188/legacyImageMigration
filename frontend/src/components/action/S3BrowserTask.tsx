@@ -34,28 +34,30 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
     string | undefined
   >(undefined);
   const [searchPage, setSearchPage] = useState<number>(1);
-  const itemsPerPage = 100;
+  const DISPLAY_ITEMS_PER_PAGE = 10;
+  const FETCH_LIMIT = 100; // Number of items to fetch from backend at once
+  
 
   const totalPages = Math.ceil(
-    (s3Files.length + s3Directories.length) / itemsPerPage
+    (s3Files.length + s3Directories.length) / DISPLAY_ITEMS_PER_PAGE
   );
-  const totalSearchPages = Math.ceil(searchResults.length / itemsPerPage);
+  const totalSearchPages = Math.ceil(searchResults.length / DISPLAY_ITEMS_PER_PAGE);
 
   const paginatedItems = useMemo(() => {
     const allItems = [
       ...s3Directories.map((dir) => ({ key: dir, type: "dir" as const })),
       ...s3Files.map((file) => ({ ...file, type: "file" as const })),
     ];
-    const startIndex = (clientPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
+    const startIndex = (clientPage - 1) * DISPLAY_ITEMS_PER_PAGE;
+    const endIndex = startIndex + DISPLAY_ITEMS_PER_PAGE;
     return allItems.slice(startIndex, endIndex);
-  }, [s3Files, s3Directories, clientPage, itemsPerPage]);
+  }, [s3Files, s3Directories, clientPage, DISPLAY_ITEMS_PER_PAGE]);
 
   const paginatedSearchResults = useMemo(() => {
-    const startIndex = (searchPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
+    const startIndex = (searchPage - 1) * DISPLAY_ITEMS_PER_PAGE;
+    const endIndex = startIndex + DISPLAY_ITEMS_PER_PAGE;
     return searchResults.slice(startIndex, endIndex);
-  }, [searchResults, searchPage, itemsPerPage]);
+  }, [searchResults, searchPage, DISPLAY_ITEMS_PER_PAGE]);
 
   const fetchS3Objects = useCallback(
     async (prefix: string = "Data/", continuationToken?: string) => {
@@ -74,9 +76,23 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
           nextContinuationToken: newContinuationToken,
         } = res.data;
 
-        setS3Files((prev) => (continuationToken ? [...prev, ...files] : files));
+        // Sort files by lastModified in descending order
+        const sortedFiles = files.sort((a: S3File, b: S3File) => {
+          const dateA = a.lastModified ? new Date(a.lastModified).getTime() : 0;
+          const dateB = b.lastModified ? new Date(b.lastModified).getTime() : 0;
+          return dateB - dateA;
+        });
+
+        // Sort directories alphabetically
+        const sortedDirectories = directories.sort((a: string, b: string) =>
+          a.localeCompare(b)
+        );
+
+        setS3Files((prev) =>
+          continuationToken ? [...prev, ...sortedFiles] : sortedFiles
+        );
         setS3Directories((prev) =>
-          continuationToken ? [...prev, ...directories] : directories
+          continuationToken ? [...prev, ...sortedDirectories] : sortedDirectories
         );
         setCurrentPrefix(prefix);
         setNextContinuationToken(newContinuationToken);
@@ -197,8 +213,29 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
           type: item.key.endsWith("/") ? ("dir" as const) : ("file" as const),
         }));
 
+        let processedResults: S3Item[] = [];
+
+        if (!transactionNumberPattern && filenamePattern) {
+          // Scenario: filenamePattern is present, but transactionNumberPattern is not.
+          // Extract unique transaction folders from the search results.
+          const transactionFolders = new Set<string>();
+          results.forEach((item) => {
+            const match = item.key.match(/(CLIENT_CODE_\d+_TRANSACTION_NUMBER_\d+\/)/);
+            if (match) {
+              transactionFolders.add(match[1]);
+            }
+          });
+          processedResults = Array.from(transactionFolders).map((folder) => ({
+            key: folder,
+            type: "dir" as const,
+          }));
+        } else {
+          // Normal search or transactionPattern is present
+          processedResults = results;
+        }
+
         setSearchResults((prev) =>
-          continuationToken ? [...prev, ...results] : results
+          continuationToken ? [...prev, ...processedResults] : processedResults
         );
         setSearchContinuationToken(res.data.nextContinuationToken);
         if (!continuationToken) {
