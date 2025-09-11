@@ -208,36 +208,23 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
           },
         });
 
-        const results: S3Item[] = res.data.files.map((item: S3File) => ({
-          ...item,
-          type: item.key.endsWith("/") ? ("dir" as const) : ("file" as const),
-        }));
+        const { files, directories, nextContinuationToken: newSearchContinuationToken } = res.data;
 
-        let processedResults: S3Item[] = [];
-
-        if (!transactionNumberPattern && filenamePattern) {
-          // Scenario: filenamePattern is present, but transactionNumberPattern is not.
-          // Extract unique transaction folders from the search results.
-          const transactionFolders = new Set<string>();
-          results.forEach((item) => {
-            const match = item.key.match(/(CLIENT_CODE_\d+_TRANSACTION_NUMBER_\d+\/)/);
-            if (match) {
-              transactionFolders.add(match[1]);
-            }
-          });
-          processedResults = Array.from(transactionFolders).map((folder) => ({
-            key: folder,
+        const combinedResults: S3Item[] = [
+          ...directories.map((dir: string) => ({
+            key: dir,
             type: "dir" as const,
-          }));
-        } else {
-          // Normal search or transactionPattern is present
-          processedResults = results;
-        }
+          })),
+          ...files.map((file: S3File) => ({
+            ...file,
+            type: "file" as const,
+          })),
+        ];
 
         setSearchResults((prev) =>
-          continuationToken ? [...prev, ...processedResults] : processedResults
+          continuationToken ? [...prev, ...combinedResults] : combinedResults
         );
-        setSearchContinuationToken(res.data.nextContinuationToken);
+        setSearchContinuationToken(newSearchContinuationToken);
         if (!continuationToken) {
           setSearchPage(1);
         }
@@ -282,7 +269,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       searchResults={searchResults}
       clientPage={clientPage}
       searchPage={searchPage}
-      itemsPerPage={itemsPerPage}
+      
       totalPages={totalPages}
       totalSearchPages={totalSearchPages}
       paginatedItems={paginatedItems}

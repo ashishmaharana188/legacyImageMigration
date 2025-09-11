@@ -14,7 +14,7 @@ import {
 } from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
-import { listFiles, deleteFiles, searchFiles, searchFolders } from "../services/s3Manager";
+import { listFiles, deleteFiles, searchFiles } from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -294,7 +294,9 @@ class FileController {
             JSON.stringify({
               type: "s3UploadStatus",
               status: "error",
-              message: `S3 upload failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+              message: `S3 upload failed: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`,
             })
           );
         }
@@ -373,7 +375,9 @@ class FileController {
   async listS3Files(req: Request, res: Response) {
     try {
       const prefix = (req.query.prefix as string) || "";
-      const continuationToken = req.query.continuationToken as string | undefined;
+      const continuationToken = req.query.continuationToken as
+        | string
+        | undefined;
       const data = await listFiles(prefix, continuationToken);
       res.status(200).json({ statusCode: 200, ...data });
     } catch (error) {
@@ -412,33 +416,169 @@ class FileController {
 
   async searchS3Files(req: Request, res: Response) {
     try {
-      const prefix = (req.query.prefix as string) || "";
-      const transactionNumberPattern = (req.query.transactionNumberPattern as string) || 'd+';
-      const filenamePattern = (req.query.filenamePattern as string) || '';
-      const continuationToken = req.query.continuationToken as string | undefined;
+      const currentBrowsingPrefix = (req.query.prefix as string) || "";
+      const transactionNumberPattern =
+        (req.query.transactionNumberPattern as string) || "d+";
+      const filenamePattern = (req.query.filenamePattern as string) || ".*"; // Default to '.*' for global file search
 
-      const isFolderSearch = filenamePattern.trim() === '';
-
-      const clientCodeMatch = prefix.match(/CLIENT_CODE_(\d+)/);
-      const clientCode = clientCodeMatch ? clientCodeMatch[1] : '\\d+';
-      const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionNumberPattern}`;
+      const continuationToken = req.query.continuationToken as
+        | string
+        | undefined;
 
       let files: { key: string; lastModified: Date | undefined }[] = [];
+      let directories: string[] = [];
       let nextContinuationToken: string | undefined;
 
-      if (isFolderSearch) {
-        const folderPattern = `^${prefix}${transactionPart}/$`;
-        const searchResult = await searchFolders(prefix, folderPattern, continuationToken);
-        files = searchResult.directories.map(dir => ({ key: dir, lastModified: undefined }));
-        nextContinuationToken = searchResult.nextContinuationToken;
+      const isTransactionPatternProvided = transactionNumberPattern !== "d+";
+      const isFilenamePatternProvided = filenamePattern !== ".*";
+
+      console.log("--- searchS3Files Debug Start ---");
+      console.log("Input - currentBrowsingPrefix:", currentBrowsingPrefix);
+      console.log(
+        "Input - transactionNumberPattern:",
+        transactionNumberPattern
+      );
+      console.log("Input - filenamePattern:", filenamePattern);
+      console.log("Input - continuationToken:", continuationToken);
+      console.log(
+        "Derived - isTransactionPatternProvided:",
+        isTransactionPatternProvided
+      );
+      console.log(
+        "Derived - isFilenamePatternProvided:",
+        isFilenamePatternProvided
+      );
+
+      if (!isTransactionPatternProvided && !isFilenamePatternProvided) {
+        console.log(
+          "Logic Branch: No search patterns provided (normal list operation)."
+        );
+        const listResult = await listFiles(
+          currentBrowsingPrefix,
+          continuationToken
+        );
+        console.log(
+          "listFiles result (no patterns) - directories:",
+          listResult.directories.length,
+          "files:",
+          listResult.files.length
+        );
+        directories = listResult.directories;
+        files = listResult.files;
+        nextContinuationToken = listResult.nextContinuationToken;
+      } else if (isTransactionPatternProvided && !isFilenamePatternProvided) {
+        console.log(
+          "Logic Branch: transactionNumberPattern provided, filenamePattern not (filtered folder display)."
+        );
+        let allDirectories: string[] = [];
+        let currentContinuationToken: string | undefined = continuationToken;
+
+        do {
+          const listResult = await listFiles(
+            currentBrowsingPrefix,
+            currentContinuationToken
+          );
+          console.log(
+            "listFiles result (transaction pattern) - raw directories (page):",
+            listResult.directories
+          );
+          allDirectories = allDirectories.concat(listResult.directories);
+          console.log(
+            "Accumulated allDirectories (current count):",
+            allDirectories.length,
+            "Content:",
+            allDirectories
+          );
+          currentContinuationToken = listResult.nextContinuationToken;
+          console.log(
+            "Next ContinuationToken for transaction pattern search:",
+            currentContinuationToken
+          );
+        } while (currentContinuationToken);
+
+        const transactionRegex = new RegExp(
+          `^${currentBrowsingPrefix}CLIENT_CODE_\d+_TRANSACTION_NUMBER_${transactionNumberPattern === "d+" ? "\\d+" : transactionNumberPattern}`
+        );
+        console.log("Constructed transactionRegex:", transactionRegex.source);
+        directories = allDirectories.filter((dir) =>
+          transactionRegex.test(dir)
+        );
+        console.log(
+          "Filtered directories (by transactionRegex):",
+          directories.length
+        );
+        files = []; // No individual files displayed at this level, only folders
+        nextContinuationToken = undefined; // All results fetched by looping
+      } else if (!isTransactionPatternProvided && isFilenamePatternProvided) {
+        console.log(
+          "Logic Branch: filenamePattern provided, transactionNumberPattern not (global file search, extract folders)."
+        );
+        const s3CommandPrefix = ""; // Global search
+        const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\d+_TRANSACTION_NUMBER_\d+/${filenamePattern}`;
+        console.log("Constructed fileSearchRegex (global):", fileSearchRegex);
+        const allMatchedFiles = await searchFiles(
+          s3CommandPrefix,
+          fileSearchRegex
+        );
+        console.log(
+          "searchFiles result (global) - matched files:",
+          allMatchedFiles.files.length
+        );
+
+        const uniqueTransactionFolders = new Set<string>();
+        allMatchedFiles.files.forEach((file) => {
+          const match = file.key.match(
+            /(CLIENT_CODE_\d+_TRANSACTION_NUMBER_\d+\/)/
+          );
+          if (match) {
+            const fullTransactionFolderPath = currentBrowsingPrefix + match[1];
+            uniqueTransactionFolders.add(fullTransactionFolderPath);
+          }
+        });
+        directories = Array.from(uniqueTransactionFolders).sort();
+        console.log(
+          "Extracted unique transaction folders:",
+          directories.length
+        );
+        files = []; // No individual files displayed at this level, only folders
+        nextContinuationToken = undefined; // All results fetched by searchFiles
       } else {
-        const fullPattern = `${prefix}${transactionPart}/${filenamePattern}`;
-        const searchResult = await searchFiles(prefix, fullPattern, continuationToken);
-        files = searchResult.files;
-        nextContinuationToken = searchResult.nextContinuationToken;
+        console.log(
+          "Logic Branch: Both transactionNumberPattern and filenamePattern provided (specific file search)."
+        );
+        const s3CommandPrefix = ""; // Global search
+        const clientCodeMatch =
+          currentBrowsingPrefix.match(/CLIENT_CODE_(\d+)/);
+        const clientCode = clientCodeMatch ? clientCodeMatch[1] : "d+";
+        console.log("Derived clientCode for specific search:", clientCode);
+
+        const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionNumberPattern}`;
+        const fileSearchRegex = `^${currentBrowsingPrefix}${transactionPart}/${filenamePattern}`;
+        console.log("Constructed fileSearchRegex (specific):", fileSearchRegex);
+
+        const allMatchedFiles = await searchFiles(
+          s3CommandPrefix,
+          fileSearchRegex
+        );
+        console.log(
+          "searchFiles result (specific) - matched files:",
+          allMatchedFiles.files.length
+        );
+        files = allMatchedFiles.files;
+        directories = [];
+        nextContinuationToken = undefined;
       }
 
-      res.status(200).json({ statusCode: 200, files, nextContinuationToken });
+      console.log(
+        "Final Response - directories count:",
+        directories.length,
+        "files count:",
+        files.length
+      );
+      console.log("--- searchS3Files Debug End ---");
+      res
+        .status(200)
+        .json({ statusCode: 200, files, directories, nextContinuationToken });
     } catch (error) {
       console.error("S3 search error:", error);
       res.status(500).json({
