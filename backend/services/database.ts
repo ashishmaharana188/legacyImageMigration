@@ -418,7 +418,7 @@ page_count, client_id
           status: "error",
           message: "No transactions to execute",
         });
-        return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [] } };
+        return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
       }
 
       this.logger.info("executeSql: attempting pool.connect()");
@@ -991,37 +991,39 @@ WHERE r2.rn > 1;
 
   private async writeBadRowsToFile(
     badRows: { id_ihno?: string | number; user_attr1?: string; user_attr2?: string; reason: string }[],
-    filename: string
+    baseFilename: string // Changed from filename to baseFilename
   ): Promise<string | null> {
     if (badRows.length === 0) {
       return null;
     }
 
-    const filePath = path.join(__dirname, "../../split_output", filename);
+    const timestamp = new Date().toISOString().replace(/[:.-]/g, "_"); // YYYY-MM-DDTHH_mm_ss_sssZ
+    const filenameWithTimestamp = `${timestamp}_${baseFilename}`;
+    const filePath = path.join(__dirname, "../../split_output", filenameWithTimestamp);
     let content = "";
 
     if (badRows[0].id_ihno !== undefined) {
       content = "id_ihno,reason\n";
       badRows.forEach(row => {
-        content += `${row.id_ihno},"${row.reason}"\n`;
+        content += `${row.id_ihno},\"${row.reason}\"\n`;
       });
     } else if (badRows[0].user_attr1 !== undefined || badRows[0].user_attr2 !== undefined) {
       content = "user_attr1,user_attr2,reason\n";
       badRows.forEach(row => {
-        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},"${row.reason}"\n`;
+        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},\"${row.reason}\"\n`;
       });
     } else {
       // Fallback if structure is unexpected
       content = "reason\n";
       badRows.forEach(row => {
-        content += `"${row.reason}"\n`;
+        content += `\"${row.reason}\"\n`;
       });
     }
 
     try {
       await fs.writeFile(filePath, content);
       this.logger.info(`Bad rows written to ${filePath}`);
-      return filePath;
+      return filenameWithTimestamp; // Return only the filename with timestamp, not the full path
     } catch (error) {
       this.logger.error(`Error writing bad rows to file ${filePath}: ${error}`);
       return null;
