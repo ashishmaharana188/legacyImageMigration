@@ -12,6 +12,8 @@ interface UploadAndScriptUIProps {
   splitMessage: string;
   splitFiles: SplitFile[];
   loading: boolean;
+  handleUploadSplitFilesToS3: () => Promise<void>;
+  handleUploadToS3: () => Promise<void>;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleUpload: () => Promise<void>;
   handleSplitFiles: () => Promise<void>;
@@ -22,6 +24,8 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
   uploadMessage,
   splitMessage,
   splitFiles,
+  handleUploadSplitFilesToS3,
+  handleUploadToS3,
   loading,
   handleFileChange,
   handleUpload,
@@ -31,16 +35,32 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
     <div>
       <div className="mb-4">
         <input type="file" onChange={handleFileChange} />
-        <button onClick={handleUpload} disabled={loading || !selectedFile} className="btn">
+      </div>
+      <div>
+        <button
+          onClick={handleUpload}
+          disabled={loading || !selectedFile}
+          className="btn"
+        >
           {loading ? "Uploading..." : "Upload PDF"}
         </button>
         {uploadMessage && <p>{uploadMessage}</p>}
-      </div>
-      <div>
-        <button onClick={handleSplitFiles} disabled={loading} className="btn">
+        <button
+          onClick={handleSplitFiles}
+          disabled={loading}
+          className="btn ml-29.5"
+        >
           {loading ? "Splitting..." : "Split PDF"}
         </button>
         {splitMessage && <p>{splitMessage}</p>}
+      </div>
+      <div className="mt-4">
+        <button onClick={handleUploadSplitFilesToS3} className="btn">
+          Upload Split Files to S3
+        </button>
+        <button onClick={handleUploadToS3} className="btn ml-10">
+          Upload Original to S3
+        </button>
       </div>
     </div>
   );
