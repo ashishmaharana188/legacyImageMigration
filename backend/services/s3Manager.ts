@@ -3,6 +3,7 @@ import {
   ListObjectsV2Command,
   DeleteObjectsCommand,
   ObjectIdentifier,
+  ListBucketsCommand,
 } from "@aws-sdk/client-s3";
 import { S3_BUCKET_NAME } from "../utils/s3Config";
 
@@ -14,6 +15,16 @@ const s3 = new S3Client({
     sessionToken: process.env.AWS_SESSION_TOKEN!,
   },
 });
+
+export async function verifyS3Connection(): Promise<void> {
+  try {
+    console.log("Verifying S3 connection...");
+    await s3.send(new ListBucketsCommand({}));
+    console.log("S3 connection successful.");
+  } catch (error) {
+    console.error("S3 connection failed:", error);
+  }
+}
 
 interface S3ListResponse {
   directories: string[];
@@ -148,7 +159,7 @@ export async function searchFolders(
   nextContinuationToken?: string;
 }> {
   const matchedDirectories: string[] = [];
-  const regex = new RegExp(pattern);
+  const regex = new RegExp(pattern, "i");
 
   try {
     const command = new ListObjectsV2Command({
@@ -158,12 +169,18 @@ export async function searchFolders(
       ContinuationToken: continuationToken,
     });
 
-    const { CommonPrefixes, IsTruncated, NextContinuationToken } = await s3.send(command);
+    const { CommonPrefixes, IsTruncated, NextContinuationToken } =
+      await s3.send(command);
 
     if (CommonPrefixes) {
-      const matchingPrefixes = CommonPrefixes.filter(
-        (p) => p.Prefix && regex.test(p.Prefix)
-      ).map(p => p.Prefix!);
+      const matchingPrefixes =
+        CommonPrefixes.filter((p) => {
+          if (!p.Prefix) return false;
+          // Extract the last part of the prefix (the folder name)
+          const parts = p.Prefix.split("/").filter(Boolean);
+          const folderName = parts.pop();
+          return folderName ? regex.test(folderName) : false;
+        }).map((p) => p.Prefix!) || [];
       matchedDirectories.push(...matchingPrefixes);
     }
 

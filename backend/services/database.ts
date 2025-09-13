@@ -487,7 +487,7 @@ page_count, client_id
       };
 
       const mimeType: Record<string, string> = {
-        tif: "image/tif",
+        tif: "image/tiff",
         pdf: "application/pdf",
         tiff: "image/tiff",
       };
@@ -526,6 +526,9 @@ page_count, client_id
         }
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
         const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+
+        const mime = mimeType[ext.replace(".", "")] || "Unknown";
+        this.logger.info(`ext: ${ext}, mime: ${mime}`);
 
         const values = [
           this.trxnMap[data.id_trtype] || "Unknown",

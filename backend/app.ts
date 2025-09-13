@@ -44,6 +44,7 @@ import * as fsp from "fs/promises";
 import { fileController } from "./controllers/fileController";
 import { startSshTunnel, startMongoSshTunnel } from "./services/tunnel";
 import { MongoDatabase } from "./services/mongoDatabase"; // Added this line
+import { verifyS3Connection } from "./services/s3Manager";
 import { WebSocketServer } from "ws"; // Added this line
 
 const app = express();
@@ -147,7 +148,8 @@ app.post("/transfer-to-mongo", fileController.transferDataToMongo);
 app.post("/upload-to-s3", fileController.uploadToS3);
 app.get("/s3-list-objects", fileController.listS3Files);
 app.post("/s3-delete-object", fileController.deleteS3Files);
-app.get("/s3-search", fileController.searchS3Files);
+app.get("/s3-search-files", fileController.searchS3Files);
+app.get("/s3-search-folders", fileController.searchS3Folders);
 
 // WebSocket server setup
 const wss = new WebSocketServer({ noServer: true });
@@ -211,6 +213,8 @@ const startServer = async () => {
   // Initialize and warm up PostgreSQL database
   const database = new Database();
   await database.warmup();
+
+  await verifyS3Connection();
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);

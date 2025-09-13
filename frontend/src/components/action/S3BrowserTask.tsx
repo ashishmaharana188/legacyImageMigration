@@ -25,9 +25,8 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
     string | undefined
   >(undefined);
   const [isFilterMode, setIsFilterMode] = useState<boolean>(false);
-  const [transactionNumberPattern, setTransactionNumberPattern] =
-    useState<string>("");
-  const [filenamePattern, setFilenamePattern] = useState<string>("");
+  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchResults, setSearchResults] = useState<S3Item[]>([]);
   const [clientPage, setClientPage] = useState<number>(1);
   const [searchContinuationToken, setSearchContinuationToken] = useState<
@@ -35,13 +34,13 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
   >(undefined);
   const [searchPage, setSearchPage] = useState<number>(1);
   const DISPLAY_ITEMS_PER_PAGE = 10;
-  const FETCH_LIMIT = 100; // Number of items to fetch from backend at once
-  
 
   const totalPages = Math.ceil(
     (s3Files.length + s3Directories.length) / DISPLAY_ITEMS_PER_PAGE
   );
-  const totalSearchPages = Math.ceil(searchResults.length / DISPLAY_ITEMS_PER_PAGE);
+  const totalSearchPages = Math.ceil(
+    searchResults.length / DISPLAY_ITEMS_PER_PAGE
+  );
 
   const paginatedItems = useMemo(() => {
     const allItems = [
@@ -76,14 +75,12 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
           nextContinuationToken: newContinuationToken,
         } = res.data;
 
-        // Sort files by lastModified in descending order
         const sortedFiles = files.sort((a: S3File, b: S3File) => {
           const dateA = a.lastModified ? new Date(a.lastModified).getTime() : 0;
           const dateB = b.lastModified ? new Date(b.lastModified).getTime() : 0;
           return dateB - dateA;
         });
 
-        // Sort directories alphabetically
         const sortedDirectories = directories.sort((a: string, b: string) =>
           a.localeCompare(b)
         );
@@ -92,7 +89,9 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
           continuationToken ? [...prev, ...sortedFiles] : sortedFiles
         );
         setS3Directories((prev) =>
-          continuationToken ? [...prev, ...sortedDirectories] : sortedDirectories
+          continuationToken
+            ? [...prev, ...sortedDirectories]
+            : sortedDirectories
         );
         setCurrentPrefix(prefix);
         setNextContinuationToken(newContinuationToken);
@@ -196,28 +195,35 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
   );
 
   const handleSearch = useCallback(
-    async (continuationToken?: string) => {
+    async (searchTerm: string, continuationToken?: string) => {
+      if (!searchTerm) {
+        setSearchResults([]);
+        return;
+      }
+      setIsSearching(true);
       setLogs((prev) => ({ ...prev, status: "Searching S3...", errors: [] }));
       try {
-        const res = await axios.get("http://localhost:3000/s3-search", {
-          params: {
-            prefix: currentPrefix,
-            transactionNumberPattern,
-            filenamePattern,
-            continuationToken,
-          },
-        });
+        // For now, we only search for folders as requested
+        const res = await axios.get(
+          "http://localhost:3000/s3-search-folders",
+          {
+            params: {
+              prefix: currentPrefix,
+              pattern: searchTerm,
+              continuationToken,
+            },
+          }
+        );
 
-        const { files, directories, nextContinuationToken: newSearchContinuationToken } = res.data;
+        const {
+          directories,
+          nextContinuationToken: newSearchContinuationToken,
+        } = res.data;
 
         const combinedResults: S3Item[] = [
           ...directories.map((dir: string) => ({
             key: dir,
             type: "dir" as const,
-          })),
-          ...files.map((file: S3File) => ({
-            ...file,
-            type: "file" as const,
           })),
         ];
 
@@ -246,16 +252,28 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
             errors: [...prev.errors, "An unknown error occurred."],
           }));
         }
+      } finally {
+        setIsSearching(false);
       }
     },
-    [setLogs, transactionNumberPattern, filenamePattern, currentPrefix]
+    [setLogs, currentPrefix]
   );
+
+  useEffect(() => {
+    const debounceTimer = setTimeout(() => {
+      handleSearch(searchTerm);
+    }, 500); // 500ms debounce delay
+
+    return () => {
+      clearTimeout(debounceTimer);
+    };
+  }, [searchTerm, handleSearch]);
 
   const handleLoadMoreSearch = useCallback(() => {
     if (searchContinuationToken) {
-      handleSearch(searchContinuationToken);
+      handleSearch(searchTerm, searchContinuationToken);
     }
-  }, [searchContinuationToken, handleSearch]);
+  }, [searchContinuationToken, handleSearch, searchTerm]);
 
   return (
     <S3BrowserUI
@@ -264,27 +282,25 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       currentPrefix={currentPrefix}
       nextContinuationToken={nextContinuationToken}
       isFilterMode={isFilterMode}
-      transactionNumberPattern={transactionNumberPattern}
-      filenamePattern={filenamePattern}
+      searchTerm={searchTerm}
+      isSearching={isSearching}
       searchResults={searchResults}
       clientPage={clientPage}
       searchPage={searchPage}
-      
       totalPages={totalPages}
       totalSearchPages={totalSearchPages}
       paginatedItems={paginatedItems}
       paginatedSearchResults={paginatedSearchResults}
       searchContinuationToken={searchContinuationToken}
       setIsFilterMode={setIsFilterMode}
-      setTransactionNumberPattern={setTransactionNumberPattern}
-      setFilenamePattern={setFilenamePattern}
+      setSearchTerm={setSearchTerm}
       setClientPage={setClientPage}
       setSearchPage={setSearchPage}
       handleLoadMore={handleLoadMore}
       handleDeleteS3File={handleDeleteS3File}
       handleDirectoryClick={handleDirectoryClick}
       handleBreadcrumbClick={handleBreadcrumbClick}
-      handleSearch={handleSearch}
+      handleSearch={() => handleSearch(searchTerm)}
       handleLoadMoreSearch={handleLoadMoreSearch}
       fetchS3Objects={fetchS3Objects}
     />

@@ -14,7 +14,7 @@ import {
 } from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
-import { listFiles, deleteFiles, searchFiles } from "../services/s3Manager";
+import { listFiles, deleteFiles, searchFiles, searchFolders } from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -228,24 +228,7 @@ class FileController {
 
   async uploadToS3(req: Request, res: Response) {
     try {
-      const isProduction = process.env.NODE_ENV === "production";
-      if (!isProduction) {
-        const message = "Skipping S3 upload in development environment.";
-        console.log(message);
-        // Send WebSocket message
-        wss.clients.forEach((client: WebSocket) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(
-              JSON.stringify({
-                type: "s3UploadStatus",
-                status: "skipped",
-                message: message,
-              })
-            );
-          }
-        });
-        return res.status(200).json({ statusCode: 200, message: message });
-      }
+      
 
       const outputRoot = path.join(__dirname, "../../output");
       const bucket = S3_BUCKET_NAME; // Using centralized config
@@ -497,7 +480,7 @@ class FileController {
         } while (currentContinuationToken);
 
         const transactionRegex = new RegExp(
-          `^${currentBrowsingPrefix}CLIENT_CODE_\d+_TRANSACTION_NUMBER_${transactionNumberPattern === "d+" ? "\\d+" : transactionNumberPattern}`
+          `^${currentBrowsingPrefix}CLIENT_CODE_\\d+_TRANSACTION_NUMBER_${transactionNumberPattern}`
         );
         console.log("Constructed transactionRegex:", transactionRegex.source);
         directories = allDirectories.filter((dir) =>
@@ -514,7 +497,7 @@ class FileController {
           "Logic Branch: filenamePattern provided, transactionNumberPattern not (global file search, extract folders)."
         );
         const s3CommandPrefix = ""; // Global search
-        const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\d+_TRANSACTION_NUMBER_\d+/${filenamePattern}`;
+        const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\d+_TRANSACTION_NUMBER_\\d+/${filenamePattern}`;
         console.log("Constructed fileSearchRegex (global):", fileSearchRegex);
         const allMatchedFiles = await searchFiles(
           s3CommandPrefix,
@@ -584,6 +567,25 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to search S3 files",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async searchS3Folders(req: Request, res: Response) {
+    try {
+      const prefix = (req.query.prefix as string) || "";
+      const pattern = (req.query.pattern as string) || "";
+      const continuationToken = req.query.continuationToken as
+        | string
+        | undefined;
+      const data = await searchFolders(prefix, pattern, continuationToken);
+      res.status(200).json({ statusCode: 200, ...data });
+    } catch (error) {
+      console.error("S3 folder search error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to search S3 folders",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }

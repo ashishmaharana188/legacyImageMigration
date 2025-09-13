@@ -15,8 +15,8 @@ interface S3BrowserUIProps {
   currentPrefix: string;
   nextContinuationToken: string | undefined;
   isFilterMode: boolean;
-  transactionNumberPattern: string;
-  filenamePattern: string;
+  searchTerm: string;
+  isSearching: boolean;
   searchResults: S3Item[];
   clientPage: number;
   searchPage: number;
@@ -26,8 +26,7 @@ interface S3BrowserUIProps {
   paginatedSearchResults: S3Item[];
   searchContinuationToken: string | undefined;
   setIsFilterMode: React.Dispatch<React.SetStateAction<boolean>>;
-  setTransactionNumberPattern: React.Dispatch<React.SetStateAction<string>>;
-  setFilenamePattern: React.Dispatch<React.SetStateAction<string>>;
+  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   setClientPage: React.Dispatch<React.SetStateAction<number>>;
   setSearchPage: React.Dispatch<React.SetStateAction<number>>;
   handleLoadMore: () => void;
@@ -45,8 +44,8 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   currentPrefix,
   nextContinuationToken,
   isFilterMode,
-  transactionNumberPattern,
-  filenamePattern,
+  searchTerm,
+  isSearching,
   searchResults,
   clientPage,
   searchPage,
@@ -56,8 +55,7 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   paginatedSearchResults,
   searchContinuationToken,
   setIsFilterMode,
-  setTransactionNumberPattern,
-  setFilenamePattern,
+  setSearchTerm,
   setClientPage,
   setSearchPage,
   handleLoadMore,
@@ -81,11 +79,10 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
           </button>
           <button
             onClick={() => setIsFilterMode(!isFilterMode)}
-            className={`px-4 py-2 text-white rounded ${
-              isFilterMode
+            className={`px-4 py-2 text-white rounded ${isFilterMode
                 ? "bg-red-500 hover:bg-red-600"
                 : "bg-indigo-500 hover:bg-indigo-600"
-            }`}
+              }`}
           >
             {isFilterMode ? "Cancel Search" : "Search / Filter"}
           </button>
@@ -98,24 +95,12 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
           <div className="flex flex-col gap-2">
             <input
               type="text"
-              value={transactionNumberPattern}
-              onChange={(e) => setTransactionNumberPattern(e.target.value)}
-              placeholder="Transaction Number contains..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search for folders..."
               className="flex-grow px-4 py-2 bg-gray-800 text-white rounded"
             />
-            <input
-              type="text"
-              value={filenamePattern}
-              onChange={(e) => setFilenamePattern(e.target.value)}
-              placeholder="Filename contains..."
-              className="flex-grow px-4 py-2 bg-gray-800 text-white rounded"
-            />
-            <button
-              onClick={() => handleSearch()}
-              className="px-4 py-2 bg-teal-500 text-white rounded hover:bg-teal-600"
-            >
-              Search
-            </button>
+            {isSearching && <div className="text-white">Searching...</div>}
           </div>
           {/* Search Results */}
           {searchResults.length > 0 && (
