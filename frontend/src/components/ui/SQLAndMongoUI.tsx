@@ -21,22 +21,16 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
 }) => {
   return (
     <div>
-      <h3>SQL and Mongo Operations</h3>
-      <div>
-        <button onClick={handleUploadSplitFilesToS3}>Upload Split Files to S3</button>
-      </div>
-      <div>
-        <button onClick={handleUploadToS3}>Upload Original to S3</button>
-      </div>
-      <div>
-        <button onClick={handleTransferToMongo}>Transfer to Mongo</button>
-      </div>
-      <div>
-        <button onClick={handleGenerateSql}>Generate SQL</button>
-        <button onClick={handleExecuteSql}>Execute SQL</button>
-      </div>
-      <div>
-        <button onClick={handleupdateFolioAndTransaction}>Update Folio & Transaction</button>
+      <h3 className="text-xl font-bold text-black mb-4">SQL and Mongo Operations</h3>
+      <div className="flex flex-col gap-4">
+        <button onClick={handleUploadSplitFilesToS3} className="btn">Upload Split Files to S3</button>
+        <button onClick={handleUploadToS3} className="btn">Upload Original to S3</button>
+        <button onClick={handleTransferToMongo} className="btn">Transfer to Mongo</button>
+        <div className="flex gap-4">
+          <button onClick={handleGenerateSql} className="btn">Generate SQL</button>
+          <button onClick={handleExecuteSql} className="btn">Execute SQL</button>
+        </div>
+        <button onClick={handleupdateFolioAndTransaction} className="btn">Update Folio & Transaction</button>
       </div>
     </div>
   );

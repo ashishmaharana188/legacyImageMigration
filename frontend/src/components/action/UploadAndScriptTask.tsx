@@ -42,9 +42,10 @@ interface FileResponse {
 
 interface UploadAndScriptTaskProps {
   setResponse: React.Dispatch<React.SetStateAction<FileResponse | null>>;
+  updateTaskLog: (task: string, log: any) => void;
 }
 
-const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse }) => {
+const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse, updateTaskLog }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string>('');
   const [splitMessage, setSplitMessage] = useState<string>('');
@@ -68,6 +69,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse }
 
     setLoading(true);
     setUploadMessage("Uploading...");
+    updateTaskLog('uploadAndScript', 'Uploading...');
     const formData = new FormData();
     formData.append("excel", selectedFile);
 
@@ -83,14 +85,15 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse }
       );
       setUploadMessage(res.data.message || 'Upload successful');
       setResponse(res.data);
+      updateTaskLog('uploadAndScript', res.data.message || 'Upload successful');
     } catch (error: any) {
-      setUploadMessage(
-        `Upload failed: ${error.response?.data?.message || error.message}`
-      );
+      const errorMessage = `Upload failed: ${error.response?.data?.message || error.message}`;
+      setUploadMessage(errorMessage);
+      updateTaskLog('uploadAndScript', errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, setResponse]);
+  }, [selectedFile, setResponse, updateTaskLog]);
 
   const handleSplitFiles = useCallback(async () => {
     if (!selectedFile) {
@@ -100,6 +103,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse }
 
     setLoading(true);
     setSplitMessage("Splitting files...");
+    updateTaskLog('uploadAndScript', 'Splitting files...');
     try {
       const res = await axios.post<FileResponse>("http://localhost:3000/split-files", {
         filename: selectedFile.name,
@@ -107,14 +111,15 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({ setResponse }
       setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || 'Splitting successful');
       setResponse(res.data);
+      updateTaskLog('uploadAndScript', res.data.message || 'Splitting successful');
     } catch (error: any) {
-      setSplitMessage(
-        `Splitting failed: ${error.response?.data?.message || error.message}`
-      );
+      const errorMessage = `Splitting failed: ${error.response?.data?.message || error.message}`;
+      setSplitMessage(errorMessage);
+      updateTaskLog('uploadAndScript', errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, setResponse]);
+  }, [selectedFile, setResponse, updateTaskLog]);
 
   return (
     <UploadAndScriptUI

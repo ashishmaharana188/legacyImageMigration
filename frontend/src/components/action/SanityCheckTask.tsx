@@ -8,11 +8,13 @@ interface SanityCheckTaskProps {
     React.SetStateAction<{ status: string; errors: string[] }>
   >;
   setSanityCheckResult: React.Dispatch<React.SetStateAction<any>>;
+  updateTaskLog: (task: string, log: any) => void;
 }
 
 const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   setLogs,
   setSanityCheckResult,
+  updateTaskLog,
 }) => {
   const [isDeleteEnabled, setIsDeleteEnabled] = useState(false);
   const [normalize, setNormalize] = useState(false);
@@ -24,15 +26,12 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   const handleSanityCheck = useCallback(
     async (dryRun: boolean) => {
       if (!cutoffDate) {
-        setLogs({
-          status: "Sanity check failed.",
-          errors: ["Please select a cutoff date."],
-        });
+        updateTaskLog('sanityCheck', "Please select a cutoff date.");
         return;
       }
 
       const action = dryRun ? "Finding" : "Deleting";
-      setLogs({ status: `${action} duplicates...`, errors: [] });
+      updateTaskLog('sanityCheck', `${action} duplicates...`);
       setIsLoading(true);
       setSanityCheckResult(null);
 
@@ -51,35 +50,21 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
         );
         setSanityCheckResult(res.data);
         if (dryRun) {
-          setLogs((prev) => ({
-            ...prev,
-            status: `Found ${
-              res.data.rows?.length || 0
-            } potential duplicates.`,
-          }));
+          updateTaskLog('sanityCheck', `Found ${res.data.rows?.length || 0} potential duplicates.`);
         } else {
-          setLogs((prev) => ({
-            ...prev,
-            status: `Successfully deleted ${
-              res.data.deletedCount || 0
-            } rows.`,
-          }));
+          updateTaskLog('sanityCheck', `Successfully deleted ${res.data.deletedCount || 0} rows.`);
         }
       } catch (error: unknown) {
         const axiosError = error as any;
         const errorMessage =
           axiosError.response?.data?.error || "An unknown error occurred.";
-        setLogs((prev) => ({
-          ...prev,
-          status: "Sanity check failed.",
-          errors: [...prev.errors, errorMessage],
-        }));
+        updateTaskLog('sanityCheck', `Sanity check failed: ${errorMessage}`);
         setSanityCheckResult(axiosError.response?.data || null);
       } finally {
         setIsLoading(false);
       }
     },
-    [normalize, cutoffDate, setLogs, setSanityCheckResult]
+    [normalize, cutoffDate, setSanityCheckResult, updateTaskLog]
   );
 
   return (

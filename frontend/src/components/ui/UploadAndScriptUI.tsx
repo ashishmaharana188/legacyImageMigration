@@ -29,15 +29,15 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
 }) => {
   return (
     <div>
-      <div>
+      <div className="mb-4">
         <input type="file" onChange={handleFileChange} />
-        <button onClick={handleUpload} disabled={loading || !selectedFile}>
+        <button onClick={handleUpload} disabled={loading || !selectedFile} className="btn">
           {loading ? "Uploading..." : "Upload PDF"}
         </button>
         {uploadMessage && <p>{uploadMessage}</p>}
       </div>
       <div>
-        <button onClick={handleSplitFiles} disabled={loading}>
+        <button onClick={handleSplitFiles} disabled={loading} className="btn">
           {loading ? "Splitting..." : "Split PDF"}
         </button>
         {splitMessage && <p>{splitMessage}</p>}

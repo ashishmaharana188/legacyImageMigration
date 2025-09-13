@@ -15,9 +15,10 @@ interface S3BrowserTaskProps {
   setLogs: React.Dispatch<
     React.SetStateAction<{ status: string; errors: string[] }>
   >;
+  updateTaskLog: (task: string, log: any) => void;
 }
 
-const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
+const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs, updateTaskLog }) => {
   const [s3Files, setS3Files] = useState<S3File[]>([]);
   const [s3Directories, setS3Directories] = useState<string[]>([]);
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
@@ -60,11 +61,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
 
   const fetchS3Objects = useCallback(
     async (prefix: string = "Data/", continuationToken?: string) => {
-      setLogs((prev) => ({
-        ...prev,
-        status: "Fetching S3 objects...",
-        errors: [],
-      }));
+      updateTaskLog('s3Browser', "Fetching S3 objects...");
       try {
         const res = await axios.get("http://localhost:3000/s3-list-objects", {
           params: { prefix, continuationToken },
@@ -95,30 +92,16 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
         );
         setCurrentPrefix(prefix);
         setNextContinuationToken(newContinuationToken);
-        setLogs((prev) => ({
-          ...prev,
-          status: "S3 objects fetched successfully.",
-        }));
+        updateTaskLog('s3Browser', "S3 objects fetched successfully.");
       } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
-          setLogs((prev) => ({
-            ...prev,
-            status: "Failed to fetch S3 objects.",
-            errors: [
-              ...prev.errors,
-              error.response?.data?.error || "An unknown error occurred.",
-            ],
-          }));
+          updateTaskLog('s3Browser', `Failed to fetch S3 objects: ${error.response?.data?.error || "An unknown error occurred."}`);
         } else {
-          setLogs((prev) => ({
-            ...prev,
-            status: "Failed to fetch S3 objects.",
-            errors: [...prev.errors, "An unknown error occurred."],
-          }));
+          updateTaskLog('s3Browser', "Failed to fetch S3 objects: An unknown error occurred.");
         }
       }
     },
-    [setLogs]
+    [updateTaskLog]
   );
 
   useEffect(() => {
@@ -136,40 +119,22 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       if (!window.confirm(`Are you sure you want to delete "${key}"?`)) {
         return;
       }
-      setLogs((prev) => ({
-        ...prev,
-        status: `Deleting ${key}...`,
-        errors: [],
-      }));
+      updateTaskLog('s3Browser', `Deleting ${key}...`);
       try {
         await axios.post("http://localhost:3000/s3-delete-object", {
           keys: [key],
         });
-        setLogs((prev) => ({
-          ...prev,
-          status: `${key} deleted successfully.`,
-        }));
+        updateTaskLog('s3Browser', `${key} deleted successfully.`);
         fetchS3Objects(currentPrefix);
       } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
-          setLogs((prev) => ({
-            ...prev,
-            status: `Failed to delete ${key}.`,
-            errors: [
-              ...prev.errors,
-              error.response?.data?.error || "An unknown error occurred.",
-            ],
-          }));
+          updateTaskLog('s3Browser', `Failed to delete ${key}: ${error.response?.data?.error || "An unknown error occurred."}`);
         } else {
-          setLogs((prev) => ({
-            ...prev,
-            status: `Failed to delete ${key}.`,
-            errors: [...prev.errors, "An unknown error occurred."],
-          }));
+          updateTaskLog('s3Browser', `Failed to delete ${key}: An unknown error occurred.`);
         }
       }
     },
-    [setLogs, fetchS3Objects, currentPrefix]
+    [updateTaskLog, fetchS3Objects, currentPrefix]
   );
 
   const handleDirectoryClick = useCallback(
@@ -204,7 +169,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
         return;
       }
       setIsSearching(true);
-      setLogs((prev) => ({ ...prev, status: "Searching S3...", errors: [] }));
+      updateTaskLog('s3Browser', "Searching S3...");
       try {
         // For now, we only search for folders as requested
         const res = await axios.get(
@@ -237,29 +202,18 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
         if (!continuationToken) {
           setSearchPage(1);
         }
-        setLogs((prev) => ({ ...prev, status: "S3 search complete." }));
+        updateTaskLog('s3Browser', "S3 search complete.");
       } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
-          setLogs((prev) => ({
-            ...prev,
-            status: "S3 search failed.",
-            errors: [
-              ...prev.errors,
-              error.response?.data?.error || "An unknown error occurred.",
-            ],
-          }));
+          updateTaskLog('s3Browser', `S3 search failed: ${error.response?.data?.error || "An unknown error occurred."}`);
         } else {
-          setLogs((prev) => ({
-            ...prev,
-            status: "S3 search failed.",
-            errors: [...prev.errors, "An unknown error occurred."],
-          }));
+          updateTaskLog('s3Browser', "S3 search failed: An unknown error occurred.");
         }
       } finally {
         setIsSearching(false);
       }
     },
-    [setLogs, currentPrefix]
+    [updateTaskLog, currentPrefix]
   );
 
   useEffect(() => {

@@ -1,16 +1,4 @@
 import React from "react";
-import {
-  Button,
-  Checkbox,
-  FormControlLabel,
-  Switch,
-  Box,
-  Typography,
-  Paper,
-} from "@mui/material";
-import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
-import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
-import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 import dayjs from "dayjs";
 
 interface SanityCheckUIProps {
@@ -35,60 +23,52 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
   isLoading,
 }) => {
   return (
-    <Paper elevation={3} sx={{ p: 2, mt: 2 }}>
-      <Typography variant="h6" gutterBottom>
-        Sanity Check for Duplicates
-      </Typography>
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
-        <LocalizationProvider dateAdapter={AdapterDayjs}>
-          <DatePicker
-            label="Cutoff Date"
-            value={cutoffDate}
-            onChange={(newValue) => setCutoffDate(newValue)}
-            disabled={isLoading}
-            slotProps={{ textField: { size: "small" } }}
-          />
-        </LocalizationProvider>
-        <FormControlLabel
-          control={
-            <Checkbox
-              checked={normalize}
-              onChange={(e) => setNormalize(e.target.checked)}
-              disabled={isLoading}
-            />
-          }
-          label="Normalize (trim and lowercase) keys for comparison"
-        />
-        <Button
-          onClick={() => handleSanityCheck(true)}
-          variant="contained"
+    <div className="p-4 mt-2 border rounded">
+      <h3 className="text-xl font-bold text-black mb-4">Sanity Check for Duplicates</h3>
+      <div className="flex flex-col gap-4">
+        <input
+          type="date"
+          value={cutoffDate ? cutoffDate.format("YYYY-MM-DD") : ""}
+          onChange={(e) => setCutoffDate(dayjs(e.target.value))}
           disabled={isLoading}
+          className="p-2 border rounded"
+        />
+        <label>
+          <input
+            type="checkbox"
+            checked={normalize}
+            onChange={(e) => setNormalize(e.target.checked)}
+            disabled={isLoading}
+          />
+          <span className="ml-2">Normalize (trim and lowercase) keys for comparison</span>
+        </label>
+        <button
+          onClick={() => handleSanityCheck(true)}
+          disabled={isLoading}
+          className="btn"
         >
           {isLoading ? "Checking..." : "Find Duplicate Rows (Dry Run)"}
-        </Button>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={isDeleteEnabled}
-              onChange={(e) => setIsDeleteEnabled(e.target.checked)}
-              color="warning"
-              disabled={isLoading}
-            />
-          }
-          label="Enable Deletion Mode"
-        />
-        {isDeleteEnabled && (
-          <Button
-            onClick={() => handleSanityCheck(false)}
-            variant="contained"
-            color="error"
+        </button>
+        <label>
+          <input
+            type="checkbox"
+            checked={isDeleteEnabled}
+            onChange={(e) => setIsDeleteEnabled(e.target.checked)}
             disabled={isLoading}
+          />
+          <span className="ml-2">Enable Deletion Mode</span>
+        </label>
+        {isDeleteEnabled && (
+          <button
+            onClick={() => handleSanityCheck(false)}
+            disabled={isLoading}
+            className="btn-danger"
           >
             {isLoading ? "Deleting..." : "Delete Found Duplicates"}
-          </Button>
+          </button>
         )}
-      </Box>
-    </Paper>
+      </div>
+    </div>
   );
 };
 

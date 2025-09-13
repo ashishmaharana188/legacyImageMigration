@@ -24,3 +24,11 @@
   scrollbar-width: thin;
   scrollbar-color: #4a5568 #2d3748; /* thumb and track color */
 }
+
+.btn {
+  @apply px-4 py-2 bg-gray-200 text-black rounded hover:bg-gray-300 disabled:opacity-50;
+}
+
+.btn-danger {
+  @apply px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 disabled:opacity-50;
+}

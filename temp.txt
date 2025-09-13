@@ -1,6 +1,8 @@
- > we need more customisation to the searh filter in s3Mnager. the transaction fodlerPath variable    │
-│    should be prefix varibale, user can be in any Folder and user can search the foldear names       │
-│    available in that current prefix. Example -User it at Data/ they can search all directories in  │
-│    Data/. User navigattes to Data/Application form, now user can search for any directory name       │
-│    matching inside the Apllication Form Directory and so on. Files are specific and can be searched │
-│    globally, they show with full route path.  
+New UI format.
+
+1. The SumamryDisaly should be at the left side showing all ongoing tasks progress and successful logs.
+2. The Buttons and UI for other components will take up the right side of the screen.
+3. Each components logs will display logs in the summary window and it will tak its own space inside it for logging required details, any udpates to the same function call overrides previous log dislay and shows the output.
+4. Each function runs its own summarydislay block inside the parent summaryDisplay block, this is done for clear distinction between different tasks logs.
+5. Exisitng buttons are only text for now, add minimalist stlye button Ui to them.
+6. IMPORTANT and priority work - The s3 browser needs to be properly implemented for this change, Make sure you keep all the browser activity and code same and just tinker the UI so that its properly alligned with the new UI.

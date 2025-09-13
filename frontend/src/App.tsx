@@ -70,6 +70,12 @@ const App: React.FC = () => {
     status: "",
     errors: [],
   });
+  const [taskLogs, setTaskLogs] = useState<{[key: string]: any}>({});
+
+  const updateTaskLog = (task: string, log: any) => {
+    setTaskLogs(prev => ({...prev, [task]: log}));
+  }
+
   const [, setUpdateFolioResult] = useState<unknown>(null);
   const [, setSanityCheckResult] = useState<unknown>(null);
 
@@ -84,40 +90,42 @@ const App: React.FC = () => {
         handleDrawerClose={handleDrawerClose}
         onSelectTask={handleSelectTask} // Pass the new handler
       />
-      <main className="flex-grow p-4">
-        <h1 className="text-2xl font-bold mb-4 text-black">PDF Processor</h1>
-        {!selectedTask && (
-          <p className="text-black">Please select a task from the sidebar.</p>
-        )}
-        {selectedTask === "uploadAndScript" && <UploadAndScriptTask setResponse={setResponse} />}
-        {selectedTask === "sqlAndMongo" && (
-          <SQLAndMongoTask
-            setResponse={setResponse}
-            setLogs={setLogs}
-            setUpdateFolioResult={setUpdateFolioResult}
-          />
-        )}
-        {selectedTask === "sanityCheck" && (
-          <SanityCheckTask
-            setLogs={setLogs}
-            setSanityCheckResult={setSanityCheckResult}
-          />
-        )}
-        {selectedTask === "s3Browser" && <S3BrowserTask setLogs={setLogs} />}
-        {(logs.status ||
-          logs.errors.length > 0 ||
-          response?.summary ||
-          response?.splitSummary) && (
-          <SummaryDisplay response={response} logs={logs} />
-        )}
-        <div className="flex flex-col items-center justify-center mx-auto">
-          {logs.errors.length > 0 && (
-            <p className="mt-4 text-red-600">
-              {logs.errors[logs.errors.length - 1]}
-            </p>
-          )}
+      <div className="flex-grow flex">
+        <div className="w-1/3 p-4 border-r border-gray-300">
+          <SummaryDisplay taskLogs={taskLogs} />
         </div>
-      </main>
+        <main className="flex-grow p-4 w-2/3">
+          <h1 className="text-2xl font-bold mb-4 text-black">PDF Processor</h1>
+          {!selectedTask && (
+            <p className="text-black">Please select a task from the sidebar.</p>
+          )}
+          {selectedTask === "uploadAndScript" && <UploadAndScriptTask setResponse={setResponse} updateTaskLog={updateTaskLog} />}
+          {selectedTask === "sqlAndMongo" && (
+            <SQLAndMongoTask
+              setResponse={setResponse}
+              setLogs={setLogs}
+              setUpdateFolioResult={setUpdateFolioResult}
+              updateTaskLog={updateTaskLog}
+            />
+          )}
+          {selectedTask === "sanityCheck" && (
+            <SanityCheckTask
+              setLogs={setLogs}
+              setSanityCheckResult={setSanityCheckResult}
+              updateTaskLog={updateTaskLog}
+            />
+          )}
+          {selectedTask === "s3Browser" && <S3BrowserTask setLogs={setLogs} updateTaskLog={updateTaskLog} />}
+          
+          <div className="flex flex-col items-center justify-center mx-auto">
+            {logs.errors.length > 0 && (
+              <p className="mt-4 text-red-600">
+                {logs.errors[logs.errors.length - 1]}
+              </p>
+            )}
+          </div>
+        </main>
+      </div>
     </div>
   );
 };
