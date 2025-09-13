@@ -5,6 +5,12 @@ import S3BrowserTask from "./components/action/S3BrowserTask";
 import SanityCheckTask from "./components/action/SanityCheckTask";
 import Sidebar from "./components/ui/Sidebar";
 import SummaryDisplay from "./components/ui/SummaryDisplay";
+import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
+
+interface SummaryItem {
+  fileName: string;
+  status: string;
+}
 
 interface SplitFile {
   originalPath: string;
@@ -54,7 +60,11 @@ interface S3File {
 
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<string | null>(null); // New state for selected task
+  const [selectedTask, setSelectedTask] = useState<string | null>(null);
+  const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
+    {}
+  );
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -69,10 +79,10 @@ const App: React.FC = () => {
     setOpen(false); // Close sidebar on task selection
   };
 
-  const [taskLogs, setTaskLogs] = useState<{[key: string]: any}>({});
+  const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
 
   const updateTaskLog = useCallback((task: string, log: any) => {
-    setTaskLogs(prev => ({...prev, [task]: log}));
+    setTaskLogs((prev) => ({ ...prev, [task]: log }));
   }, []);
 
   return (
@@ -86,37 +96,56 @@ const App: React.FC = () => {
         handleDrawerClose={handleDrawerClose}
         onSelectTask={handleSelectTask} // Pass the new handler
       />
-      <div className="flex-grow flex">
-        <div className="w-1/3 p-4 border-r border-gray-300">
-          <SummaryDisplay taskLogs={taskLogs} />
-        </div>
-        <main className="flex-grow p-4 w-2/3">
-          <h1 className="text-2xl font-bold mb-4 text-black">PDF Processor</h1>
-          {!selectedTask && (
-            <p className="text-black">Please select a task from the sidebar.</p>
-          )}
-          {selectedTask === "uploadAndScript" && <UploadAndScriptTask updateTaskLog={updateTaskLog} />}
-          {selectedTask === "sqlAndMongo" && (
-            <SQLAndMongoTask
-              updateTaskLog={updateTaskLog}
+      <PanelGroup direction="horizontal" className="flex-grow">
+        <Panel defaultSize={33} minSize={10}>
+          <div className="p-4 border-r border-gray-300 h-full">
+            <SummaryDisplay
+              taskLogs={taskLogs}
+              summaryData={summaryData}
+              uploadProgress={uploadProgress}
             />
-          )}
-          {selectedTask === "sanityCheck" && (
-            <SanityCheckTask
-              updateTaskLog={updateTaskLog}
-            />
-          )}
-          {selectedTask === "s3Browser" && <S3BrowserTask updateTaskLog={updateTaskLog} />}
-          
-          <div className="flex flex-col items-center justify-center mx-auto">
-            {taskLogs.sqlAndMongo && taskLogs.sqlAndMongo.message && taskLogs.sqlAndMongo.message.includes("failed") && (
-              <p className="mt-4 text-red-600">
-                {taskLogs.sqlAndMongo.message}
+          </div>
+        </Panel>
+        <PanelResizeHandle className="w-2 h-250 bg-gray-300 hover:bg-gray-400 cursor-ew-resize" />
+        <Panel defaultSize={67} minSize={20}>
+          <main className="flex-grow p-4 w-full h-full">
+            <h1 className="text-2xl font-bold mb-4 text-black">
+              PDF Processor
+            </h1>
+            {!selectedTask && (
+              <p className="text-black">
+                Please select a task from the sidebar.
               </p>
             )}
-          </div>
-        </main>
-      </div>
+            {selectedTask === "uploadAndScript" && (
+              <UploadAndScriptTask
+                updateTaskLog={updateTaskLog}
+                setSummaryData={setSummaryData}
+                setUploadProgress={setUploadProgress}
+              />
+            )}
+            {selectedTask === "sqlAndMongo" && (
+              <SQLAndMongoTask updateTaskLog={updateTaskLog} />
+            )}
+            {selectedTask === "sanityCheck" && (
+              <SanityCheckTask updateTaskLog={updateTaskLog} />
+            )}
+            {selectedTask === "s3Browser" && (
+              <S3BrowserTask updateTaskLog={updateTaskLog} />
+            )}
+
+            <div className="flex flex-col items-center justify-center mx-auto">
+              {taskLogs.sqlAndMongo &&
+                taskLogs.sqlAndMongo.message &&
+                taskLogs.sqlAndMongo.message.includes("failed") && (
+                  <p className="mt-4 text-red-600">
+                    {taskLogs.sqlAndMongo.message}
+                  </p>
+                )}
+            </div>
+          </main>
+        </Panel>
+      </PanelGroup>
     </div>
   );
 };

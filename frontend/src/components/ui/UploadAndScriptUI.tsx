@@ -44,7 +44,7 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
         >
           {loading ? "Uploading..." : "Upload PDF"}
         </button>
-        {uploadMessage && <p>{uploadMessage}</p>}
+
         <button
           onClick={handleSplitFiles}
           disabled={loading}

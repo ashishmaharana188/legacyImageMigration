@@ -1,11 +1,18 @@
 import React, { useState, useCallback } from 'react';
 import axios from 'axios';
 
-interface SummaryDisplayProps {
-  taskLogs: {[key: string]: any};
+interface SummaryItem {
+  fileName: string;
+  status: string;
 }
 
-const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
+interface SummaryDisplayProps {
+  taskLogs: {[key: string]: any};
+  summaryData: SummaryItem[];
+  uploadProgress: Record<string, number>;
+}
+
+const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs, summaryData, uploadProgress }) => {
 
   const [expandedLogContent, setExpandedLogContent] = useState<string | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
@@ -39,7 +46,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
                 {expandedLogId === logKey ? 'Hide Bad Rows' : 'Show Bad Rows'}
               </button>
               {expandedLogId === logKey && (
-                <pre className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm">
+                <pre className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {expandedLogContent}
                 </pre>
               )}
@@ -58,7 +65,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
                 {expandedLogId === logKey ? 'Hide Bad Rows' : 'Show Bad Rows'}
               </button>
               {expandedLogId === logKey && (
-                <pre className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm">
+                <pre className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {expandedLogContent}
                 </pre>
               )}
@@ -78,7 +85,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
                 {expandedLogId === logKey ? 'Hide Bad Rows' : 'Show Bad Rows'}
               </button>
               {expandedLogId === logKey && (
-                <pre className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm">
+                <pre className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm" style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                   {expandedLogContent}
                 </pre>
               )}
@@ -87,7 +94,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
         </div>
       );
     }
-    return <pre>{JSON.stringify(log, null, 2)}</pre>;
+    return <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{JSON.stringify(log, null, 2)}</pre>;
   }
 
   return (
@@ -107,6 +114,49 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
           </div>
         ))}
       </div>
+
+      {summaryData.length > 0 && (
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold">Summary</h3>
+          <div className="bg-gray-200 p-2 rounded">
+            {summaryData.map((item, index) => (
+              <div key={index} className="mb-2">
+                <p>File: {item.fileName}</p>
+                <p>Status: {item.status}</p>
+                {uploadProgress[item.fileName] !== undefined && (
+                  <div className="w-full bg-gray-300 rounded-full h-2.5 dark:bg-gray-700">
+                    <div
+                      className="bg-blue-600 h-2.5 rounded-full"
+                      style={{ width: `${uploadProgress[item.fileName]}%` }}
+                    ></div>
+                    <span className="text-sm font-medium text-blue-700 dark:text-blue-500">{uploadProgress[item.fileName]}%</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {Object.keys(uploadProgress).length > 0 && summaryData.length === 0 && (
+        <div className="mt-4">
+          <h3 className="text-lg font-semibold">Upload Progress</h3>
+          <div className="bg-gray-200 p-2 rounded">
+            {Object.entries(uploadProgress).map(([fileName, progress]) => (
+              <div key={fileName} className="mb-2">
+                <p>File: {fileName}</p>
+                <div className="w-full bg-gray-300 rounded-full h-2.5 dark:bg-gray-700">
+                  <div
+                    className="bg-blue-600 h-2.5 rounded-full"
+                    style={{ width: `${progress}%` }}
+                  ></div>
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-500">{progress}%</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

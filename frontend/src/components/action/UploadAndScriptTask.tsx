@@ -2,6 +2,11 @@ import React, { useState, useCallback } from "react";
 import axios from "axios";
 import UploadAndScriptUI from "../ui/UploadAndScriptUI";
 
+interface SummaryItem {
+  fileName: string;
+  status: string;
+}
+
 interface SplitFile {
   originalPath: string;
   url: string;
@@ -45,10 +50,14 @@ interface FileResponse {
 
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
+  setSummaryData: React.Dispatch<React.SetStateAction<SummaryItem[]>>;
+  setUploadProgress: React.Dispatch<React.SetStateAction<Record<string, number>>>;
 }
 
 const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   updateTaskLog,
+  setSummaryData,
+  setUploadProgress,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string>("");
@@ -142,6 +151,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     setLoading(true);
     setUploadMessage("Uploading to S3...");
     updateTaskLog("uploadAndScript", "Uploading to S3...");
+    setSummaryData([]); // Clear previous summary data
+    setUploadProgress({}); // Clear previous upload progress
     const formData = new FormData();
     formData.append("file", selectedFile);
 
@@ -153,10 +164,18 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
           headers: {
             "Content-Type": "multipart/form-data",
           },
+          onUploadProgress: (progressEvent) => {
+            if (progressEvent.total) {
+              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+              setUploadProgress({ [selectedFile.name]: percentCompleted });
+              setUploadMessage(`Uploading to S3: ${percentCompleted}%`);
+            }
+          },
         }
       );
       setUploadMessage(res.data.message || "Upload to S3 successful");
       updateTaskLog("uploadAndScript", res.data);
+      setSummaryData([{ fileName: selectedFile.name, status: res.data.message || "Upload successful" }]);
     } catch (error: any) {
       const errorMessage = `Upload to S3 failed: ${
         error.response?.data?.message || error.message

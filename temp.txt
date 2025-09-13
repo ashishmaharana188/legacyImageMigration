@@ -1,6 +1,3 @@
-New additions to summary display
+S3 Upload progress implementation in UI.
 
-1. │ > remove all sql and mongo logs from console. Make sure to add them into summaryDisplay. Just like we are checking for       │
-│   Total rows, total succesful rows and bad rows, i want same concept for all sql tasks. The count of rows inserted,         │
-│   the count of bad rows and a list of their id_ihno in .txt file.
-2. The update folio needs to show total rows of updated folioId, total rows of updated tranasctrion reference number and total of rows where either of them was not updated(the bad rows will be logged in text file for download with the user-attr1 and usert_attr2)  
+1. We need to check file upload percentage of each file and keep on checking for each new file upload by overwriting the previously completed file status, this will keep the progress dynamic. Include this feature in summaryDisplau UI area
