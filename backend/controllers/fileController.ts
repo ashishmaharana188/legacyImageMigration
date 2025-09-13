@@ -14,7 +14,12 @@ import {
 } from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
-import { listFiles, deleteFiles, searchFiles, searchFolders } from "../services/s3Manager";
+import {
+  listFiles,
+  deleteFiles,
+  searchFiles,
+  searchFolders,
+} from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
@@ -143,6 +148,53 @@ class FileController {
     }
   }
 
+  async processSqlMongo(req: Request, res: Response) {
+    const { action } = req.body;
+    const database = new Database();
+
+    if (action === "executeSql") {
+      const { result, summary } = await database.executeSql();
+      if (result === "success") {
+        return res.json({
+          message: "SQL executed successfully",
+          totalRows: summary.insertedRows + summary.errorRows,
+          successfulRows: summary.insertedRows,
+          badRows: summary.errorRows,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      } else {
+        return res.status(500).json({
+          message: "Failed to execute SQL",
+          totalRows: summary.insertedRows + summary.errorRows,
+          successfulRows: summary.insertedRows,
+          badRows: summary.errorRows,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      }
+    } else if (action === "updateFolioAndTransaction") {
+      const { result, summary } = await database.updateFolioAndTransaction();
+      if (result === "success") {
+        return res.json({
+          message: "Folio and Transaction updated successfully",
+          updatedFolioRows: summary.updatedFolioRows,
+          updatedTransactionRows: summary.updatedTransactionRows,
+          badRows: summary.badRows.length,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      } else {
+        return res.status(500).json({
+          message: "Failed to update Folio and Transaction",
+          updatedFolioRows: summary.updatedFolioRows,
+          updatedTransactionRows: summary.updatedTransactionRows,
+          badRows: summary.badRows.length,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid action" });
+    }
+  }
+
   async executeSql(req: Request, res: Response) {
     try {
       const processor = new Database();
@@ -155,6 +207,7 @@ class FileController {
             : "SQL execution failed",
         result: result.result,
         logs: result.logs,
+        summary: result.summary,
       });
     } catch (error) {
       console.error("SQL execution error:", error);
@@ -178,6 +231,7 @@ class FileController {
             : "Folio_id update failed",
         result: result.result,
         logs: result.logs,
+        summary: result.summary,
       });
     } catch (error) {
       res.status(500).json({
@@ -228,8 +282,6 @@ class FileController {
 
   async uploadToS3(req: Request, res: Response) {
     try {
-      
-
       const outputRoot = path.join(__dirname, "../../output");
       const bucket = S3_BUCKET_NAME; // Using centralized config
 
@@ -443,7 +495,7 @@ class FileController {
         console.log(
           "listFiles result (no patterns) - directories:",
           listResult.directories.length,
-          "files:",
+          "files",
           listResult.files.length
         );
         directories = listResult.directories;
@@ -497,7 +549,7 @@ class FileController {
           "Logic Branch: filenamePattern provided, transactionNumberPattern not (global file search, extract folders)."
         );
         const s3CommandPrefix = ""; // Global search
-        const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\d+_TRANSACTION_NUMBER_\\d+/${filenamePattern}`;
+        const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\\d+_TRANSACTION_NUMBER_\\d+/${filenamePattern}`;
         console.log("Constructed fileSearchRegex (global):", fileSearchRegex);
         const allMatchedFiles = await searchFiles(
           s3CommandPrefix,
@@ -511,7 +563,7 @@ class FileController {
         const uniqueTransactionFolders = new Set<string>();
         allMatchedFiles.files.forEach((file) => {
           const match = file.key.match(
-            /(CLIENT_CODE_\d+_TRANSACTION_NUMBER_\d+\/)/
+            /(CLIENT_CODE_\\d+_TRANSACTION_NUMBER_\\d+\/)/
           );
           if (match) {
             const fullTransactionFolderPath = currentBrowsingPrefix + match[1];
@@ -586,6 +638,43 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to search S3 folders",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+  async downloadGeneratedFile(req: Request, res: Response) {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(__dirname, "../../split_output", filename);
+
+      // Security check: Ensure the file is within the intended directory
+      const resolvedPath = path.resolve(filePath);
+      const expectedDir = path.resolve(
+        path.join(__dirname, "../../split_output")
+      );
+
+      if (!resolvedPath.startsWith(expectedDir)) {
+        return res
+          .status(403)
+          .json({ statusCode: 403, error: "Access denied." });
+      }
+
+      if (
+        !(await fs
+          .access(filePath)
+          .then(() => true)
+          .catch(() => false))
+      ) {
+        return res
+          .status(404)
+          .json({ statusCode: 404, error: "File not found" });
+      }
+      res.download(filePath, filename);
+    } catch (error) {
+      console.error("Download error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to download file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }

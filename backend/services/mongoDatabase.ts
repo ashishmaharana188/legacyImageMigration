@@ -5,17 +5,10 @@ import { Database } from "./database";
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.json(),
-  transports: [
+    transports: [
     new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-    new winston.transports.File({ filename: "logs/combined.log" }),
-    new winston.transports.Console({
-      level: "debug",
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.simple()
-      ),
-    }),
-  ],
+    new winston.transports.File({ filename: "logs/combined.log" })
+  ]
 });
 
 export class MongoDatabase {

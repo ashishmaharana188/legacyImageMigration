@@ -23,6 +23,7 @@ interface FileResponse {
     unsuccessfulCount: number; // Added from pdfProcessor.ts (bad rows)
     totalPageCount: number; // Added from pdfProcessor.ts
     totalSplitImages: number; // Added from pdfProcessor.ts
+    badRowsFilePath?: string | null; // Added for bad rows file download
   };
   splitSummary?: {
     totalOriginalFilesProcessed: number;
@@ -37,6 +38,10 @@ interface FileResponse {
   error?: string;
   directories?: string[];
   files?: S3File[];
+  badRowsFilePath?: string | null; // Added for bad rows file download
+  updatedFolioRows?: number;
+  updatedTransactionRows?: number;
+  badRows?: number;
 }
 
 interface S3File {
@@ -45,18 +50,10 @@ interface S3File {
 }
 
 interface SQLAndMongoTaskProps {
-  setResponse: React.Dispatch<React.SetStateAction<FileResponse | null>>;
-  setLogs: React.Dispatch<
-    React.SetStateAction<{ status: string; errors: string[] }>
-  >;
-  setUpdateFolioResult: React.Dispatch<React.SetStateAction<unknown>>;
   updateTaskLog: (task: string, log: any) => void;
 }
 
 const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
-  setResponse,
-  setLogs,
-  setUpdateFolioResult,
   updateTaskLog,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
@@ -68,20 +65,17 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-split-files-to-s3"
       );
-      setResponse(res.data);
-      updateTaskLog('sqlAndMongo', res.data.message || "Upload to S3 successful!");
+      updateTaskLog('sqlAndMongo', res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        updateTaskLog('sqlAndMongo', `Upload to S3 failed: ${error.response?.data?.error || "An unknown error occurred."}`);
-        setResponse(error.response?.data || null);
+        updateTaskLog('sqlAndMongo', error.response?.data || { message: "An unknown error occurred." });
       } else {
-        updateTaskLog('sqlAndMongo', "Upload to S3 failed: An unknown error occurred.");
-        setResponse(null);
+        updateTaskLog('sqlAndMongo', { message: "An unknown error occurred." });
       }
     } finally {
       setLoading(false);
     }
-  }, [setResponse, updateTaskLog]);
+  }, [updateTaskLog]);
 
   const handleUploadToS3 = useCallback(async () => {
     setLoading(true);
@@ -90,20 +84,17 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-to-s3"
       );
-      setResponse(res.data);
-      updateTaskLog('sqlAndMongo', res.data.message || "Upload to S3 successful!");
+      updateTaskLog('sqlAndMongo', res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        updateTaskLog('sqlAndMongo', `Upload to S3 failed: ${error.response?.data?.error || "An unknown error occurred."}`);
-        setResponse(error.response?.data || null);
+        updateTaskLog('sqlAndMongo', error.response?.data || { message: "An unknown error occurred." });
       } else {
-        updateTaskLog('sqlAndMongo', "Upload to S3 failed: An unknown error occurred.");
-        setResponse(null);
+        updateTaskLog('sqlAndMongo', { message: "An unknown error occurred." });
       }
     } finally {
       setLoading(false);
     }
-  }, [setResponse, updateTaskLog]);
+  }, [updateTaskLog]);
 
   const handleTransferToMongo = useCallback(async () => {
     setLoading(true);
@@ -112,20 +103,17 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/transfer-to-mongo"
       );
-      setResponse(res.data);
-      updateTaskLog('sqlAndMongo', res.data.message || "Transfer to MongoDB successful!");
+      updateTaskLog('sqlAndMongo', res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        updateTaskLog('sqlAndMongo', `Transfer to MongoDB failed: ${error.response?.data?.error || "An unknown error occurred."}`);
-        setResponse(error.response?.data || null);
+        updateTaskLog('sqlAndMongo', error.response?.data || { message: "An unknown error occurred." });
       } else {
-        updateTaskLog('sqlAndMongo', "Transfer to MongoDB failed: An unknown error occurred.");
-        setResponse(null);
+        updateTaskLog('sqlAndMongo', { message: "An unknown error occurred." });
       }
     } finally {
       setLoading(false);
     }
-  }, [setResponse, updateTaskLog]);
+  }, [updateTaskLog]);
 
   const handleGenerateSql = useCallback(async () => {
     setLoading(true);
@@ -134,64 +122,57 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/generate-sql"
       );
-      setResponse(res.data);
-      updateTaskLog('sqlAndMongo', res.data.message || "SQL generation successful!");
+      updateTaskLog('sqlAndMongo', res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        updateTaskLog('sqlAndMongo', `SQL generation failed: ${error.response?.data?.error || "An unknown error occurred."}`);
-        setResponse(error.response?.data || null);
+        updateTaskLog('sqlAndMongo', error.response?.data || { message: "An unknown error occurred." });
       } else {
-        updateTaskLog('sqlAndMongo', "SQL generation failed: An unknown error occurred.");
-        setResponse(null);
+        updateTaskLog('sqlAndMongo', { message: "An unknown error occurred." });
       }
     } finally {
       setLoading(false);
     }
-  }, [setResponse, updateTaskLog]);
+  }, [updateTaskLog]);
 
   const handleExecuteSql = useCallback(async () => {
     setLoading(true);
     updateTaskLog('sqlAndMongo', "Executing SQL...");
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3000/execute-sql"
+        "http://localhost:3000/process-sql-mongo",
+        { action: "executeSql" }
       );
-      setResponse(res.data);
-      updateTaskLog('sqlAndMongo', res.data.message || "SQL execution successful!");
+      updateTaskLog('sqlAndMongo', res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        updateTaskLog('sqlAndMongo', `SQL execution failed: ${error.response?.data?.error || "An unknown error occurred."}`);
-        setResponse(error.response?.data || null);
+        updateTaskLog('sqlAndMongo', error.response?.data || { message: "An unknown error occurred." });
       } else {
-        updateTaskLog('sqlAndMongo', "SQL execution failed: An unknown error occurred.");
-        setResponse(null);
+        updateTaskLog('sqlAndMongo', { message: "An unknown error occurred." });
       }
     } finally {
       setLoading(false);
     }
-  }, [setResponse, updateTaskLog]);
+  }, [updateTaskLog]);
 
   const handleupdateFolioAndTransaction = useCallback(async () => {
     setLoading(true);
     updateTaskLog('sqlAndMongo', "Updating folio and transaction...");
     try {
-      const res = await axios.post(
-        "http://localhost:3000/updateFolioAndTransaction-sql"
+      const res = await axios.post<FileResponse>(
+        "http://localhost:3000/process-sql-mongo",
+        { action: "updateFolioAndTransaction" }
       );
-      setUpdateFolioResult(res.data);
-      updateTaskLog('sqlAndMongo', res.data.message || "Folio and transaction update successful!");
+      updateTaskLog('sqlAndMongo', res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
-        updateTaskLog('sqlAndMongo', `Folio and transaction update failed: ${error.response?.data?.error || "An unknown error occurred."}`);
-        setUpdateFolioResult(error.response?.data || null);
+        updateTaskLog('sqlAndMongo', error.response?.data || { message: "An unknown error occurred." });
       } else {
-        updateTaskLog('sqlAndMongo', "Folio and transaction update failed: An unknown error occurred.");
-        setUpdateFolioResult(null);
+        updateTaskLog('sqlAndMongo', { message: "An unknown error occurred." });
       }
     } finally {
       setLoading(false);
     }
-  }, [setUpdateFolioResult, updateTaskLog]);
+  }, [updateTaskLog]);
 
   return (
     <SQLAndMongoUI

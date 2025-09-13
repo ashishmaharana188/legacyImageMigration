@@ -133,15 +133,11 @@ app.post(
 app.get("/download/:filename", fileController.downloadFile);
 
 app.get("/download-file/:filePath", fileController.downloadReferencedFile);
+app.get("/download-generated-file/:filename", fileController.downloadGeneratedFile);
 
 app.post("/split-files", fileController.splitFiles);
 app.post("/upload-split-files-to-s3", fileController.uploadSplitFilesToS3);
-app.post("/generate-sql", fileController.generateSql);
-app.post("/execute-sql", fileController.executeSql);
-app.post(
-  "/updateFolioAndTransaction-sql",
-  fileController.updateFolioAndTransaction
-);
+app.post("/process-sql-mongo", fileController.processSqlMongo);
 
 app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
 app.post("/transfer-to-mongo", fileController.transferDataToMongo);

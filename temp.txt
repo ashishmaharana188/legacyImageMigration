@@ -1,3 +1,6 @@
-New UI format.
+New additions to summary display
 
-1. The upload s3 files and upload split s3's UI components which are in sqlandmongoUi should be in the 
+1. │ > remove all sql and mongo logs from console. Make sure to add them into summaryDisplay. Just like we are checking for       │
+│   Total rows, total succesful rows and bad rows, i want same concept for all sql tasks. The count of rows inserted,         │
+│   the count of bad rows and a list of their id_ihno in .txt file.
+2. The update folio needs to show total rows of updated folioId, total rows of updated tranasctrion reference number and total of rows where either of them was not updated(the bad rows will be logged in text file for download with the user-attr1 and usert_attr2)  

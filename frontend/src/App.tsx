@@ -41,6 +41,10 @@ interface FileResponse {
   error?: string;
   directories?: string[];
   files?: S3File[];
+  badRowsFilePath?: string | null; // Added for bad rows file download
+  updatedFolioRows?: number;
+  updatedTransactionRows?: number;
+  badRows?: number;
 }
 
 interface S3File {
@@ -65,19 +69,11 @@ const App: React.FC = () => {
     setOpen(false); // Close sidebar on task selection
   };
 
-  const [response, setResponse] = useState<FileResponse | null>(null);
-  const [logs, setLogs] = useState<{ status: string; errors: string[] }>({
-    status: "",
-    errors: [],
-  });
   const [taskLogs, setTaskLogs] = useState<{[key: string]: any}>({});
 
   const updateTaskLog = useCallback((task: string, log: any) => {
     setTaskLogs(prev => ({...prev, [task]: log}));
   }, []);
-
-  const [, setUpdateFolioResult] = useState<unknown>(null);
-  const [, setSanityCheckResult] = useState<unknown>(null);
 
   return (
     <div
@@ -99,28 +95,23 @@ const App: React.FC = () => {
           {!selectedTask && (
             <p className="text-black">Please select a task from the sidebar.</p>
           )}
-          {selectedTask === "uploadAndScript" && <UploadAndScriptTask setResponse={setResponse} updateTaskLog={updateTaskLog} />}
+          {selectedTask === "uploadAndScript" && <UploadAndScriptTask updateTaskLog={updateTaskLog} />}
           {selectedTask === "sqlAndMongo" && (
             <SQLAndMongoTask
-              setResponse={setResponse}
-              setLogs={setLogs}
-              setUpdateFolioResult={setUpdateFolioResult}
               updateTaskLog={updateTaskLog}
             />
           )}
           {selectedTask === "sanityCheck" && (
             <SanityCheckTask
-              setLogs={setLogs}
-              setSanityCheckResult={setSanityCheckResult}
               updateTaskLog={updateTaskLog}
             />
           )}
-          {selectedTask === "s3Browser" && <S3BrowserTask setLogs={setLogs} updateTaskLog={updateTaskLog} />}
+          {selectedTask === "s3Browser" && <S3BrowserTask updateTaskLog={updateTaskLog} />}
           
           <div className="flex flex-col items-center justify-center mx-auto">
-            {logs.errors.length > 0 && (
+            {taskLogs.sqlAndMongo && taskLogs.sqlAndMongo.message && taskLogs.sqlAndMongo.message.includes("failed") && (
               <p className="mt-4 text-red-600">
-                {logs.errors[logs.errors.length - 1]}
+                {taskLogs.sqlAndMongo.message}
               </p>
             )}
           </div>

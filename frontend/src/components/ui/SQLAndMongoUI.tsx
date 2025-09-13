@@ -11,7 +11,6 @@ interface SQLAndMongoUIProps {
 
 const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
   handleTransferToMongo,
-  handleGenerateSql,
   handleExecuteSql,
   handleupdateFolioAndTransaction,
 }) => {
@@ -20,20 +19,17 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
       <h3 className="text-xl font-bold text-black mb-4">
         SQL and Mongo Operations
       </h3>
-      <div className="flex flex-col gap-4">
-        <button onClick={handleTransferToMongo} className="btn">
-          Transfer to Mongo
-        </button>
+      <div className="flex gap-4">
         <div className="flex gap-4">
-          <button onClick={handleGenerateSql} className="btn">
-            Generate SQL
-          </button>
           <button onClick={handleExecuteSql} className="btn">
             Execute SQL
           </button>
         </div>
         <button onClick={handleupdateFolioAndTransaction} className="btn">
           Update Folio & Transaction
+        </button>
+        <button onClick={handleTransferToMongo} className="btn">
+          Transfer to Mongo
         </button>
       </div>
     </div>

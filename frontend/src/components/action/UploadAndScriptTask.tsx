@@ -37,15 +37,17 @@ interface FileResponse {
   error?: string;
   directories?: string[];
   files?: any[]; // Replace 'any' with a specific type if you have one for S3 files
+  badRowsFilePath?: string | null; // Added for bad rows file download
+  updatedFolioRows?: number;
+  updatedTransactionRows?: number;
+  badRows?: number;
 }
 
 interface UploadAndScriptTaskProps {
-  setResponse: React.Dispatch<React.SetStateAction<FileResponse | null>>;
   updateTaskLog: (task: string, log: any) => void;
 }
 
 const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
-  setResponse,
   updateTaskLog,
 }) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -84,23 +86,22 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         formData,
         {
           headers: {
-            "Content-Type": "multipart/form-data",
+            "Content-Type": "multipart/form-type",
           },
         }
       );
       setUploadMessage(res.data.message || "Upload successful");
-      setResponse(res.data);
-      updateTaskLog("uploadAndScript", res.data.message || "Upload successful");
+      updateTaskLog("uploadAndScript", res.data);
     } catch (error: any) {
       const errorMessage = `Upload failed: ${
         error.response?.data?.message || error.message
       }`;
       setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", errorMessage);
+      updateTaskLog("uploadAndScript", { message: errorMessage });
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, setResponse, updateTaskLog]);
+  }, [selectedFile, updateTaskLog]);
 
   const handleSplitFiles = useCallback(async () => {
     if (!selectedFile) {
@@ -120,21 +121,17 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       );
       setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || "Splitting successful");
-      setResponse(res.data);
-      updateTaskLog(
-        "uploadAndScript",
-        res.data.message || "Splitting successful"
-      );
+      updateTaskLog("uploadAndScript", res.data);
     } catch (error: any) {
       const errorMessage = `Splitting failed: ${
         error.response?.data?.message || error.message
       }`;
       setSplitMessage(errorMessage);
-      updateTaskLog("uploadAndScript", errorMessage);
+      updateTaskLog("uploadAndScript", { message: errorMessage });
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, setResponse, updateTaskLog]);
+  }, [selectedFile, updateTaskLog]);
 
   const handleUploadToS3 = useCallback(async () => {
     if (!selectedFile) {
@@ -159,21 +156,17 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         }
       );
       setUploadMessage(res.data.message || "Upload to S3 successful");
-      setResponse(res.data);
-      updateTaskLog(
-        "uploadAndScript",
-        res.data.message || "Upload to S3 successful"
-      );
+      updateTaskLog("uploadAndScript", res.data);
     } catch (error: any) {
       const errorMessage = `Upload to S3 failed: ${
         error.response?.data?.message || error.message
       }`;
       setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", errorMessage);
+      updateTaskLog("uploadAndScript", { message: errorMessage });
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, setResponse, updateTaskLog]);
+  }, [selectedFile, updateTaskLog]);
 
   const handleUploadSplitFilesToS3 = useCallback(async () => {
     setLoading(true);
@@ -187,21 +180,17 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       setSplitMessage(
         res.data.message || "Upload of split files to S3 successful"
       );
-      setResponse(res.data);
-      updateTaskLog(
-        "uploadAndScript",
-        res.data.message || "Upload of split files to S3 successful"
-      );
+      updateTaskLog("uploadAndScript", res.data);
     } catch (error: any) {
       const errorMessage = `Upload of split files to S3 failed: ${
         error.response?.data?.message || error.message
       }`;
       setSplitMessage(errorMessage);
-      updateTaskLog("uploadAndScript", errorMessage);
+      updateTaskLog("uploadAndScript", { message: errorMessage });
     } finally {
       setLoading(false);
     }
-  }, [setResponse, updateTaskLog]);
+  }, [updateTaskLog]);
 
   return (
     <UploadAndScriptUI

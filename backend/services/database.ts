@@ -149,15 +149,7 @@ export class Database {
         filename: "logs/error.log",
         level: "error",
       }),
-      new winston.transports.File({ filename: "logs/combined.log" }),
-      // Added Console transport for immediate terminal visibility
-      new winston.transports.Console({
-        level: "debug",
-        format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.simple()
-        ),
-      }),
+      new winston.transports.File({ filename: "logs/combined.log" })
     ],
   });
 
@@ -410,7 +402,7 @@ page_count, client_id
     }
   }
 
-  async executeSql(): Promise<{ result: string; logs: SqlLog[] }> {
+  async executeSql(): Promise<{ result: string; logs: SqlLog[], summary: { insertedRows: number, errorRows: number, badRows: any[], badRowsFilePath: string | null } }> {
     const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
 
@@ -426,7 +418,7 @@ page_count, client_id
           status: "error",
           message: "No transactions to execute",
         });
-        return { result: "failed", logs };
+        return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [] } };
       }
 
       this.logger.info("executeSql: attempting pool.connect()");
@@ -493,6 +485,7 @@ page_count, client_id
       };
 
       let insertedRows = 0;
+      const badRows: any[] = [];
       for (const [index, data] of transactions.entries()) {
         const ext = this.getFileExtension(data.id_path);
         if (!ext) {
@@ -504,6 +497,7 @@ page_count, client_id
             status: "error",
             message: "Invalid file extension",
           });
+          badRows.push({ id_ihno: data.id_ihno, reason: 'Invalid file extension' });
           continue;
         }
 
@@ -522,6 +516,7 @@ page_count, client_id
             status: "error",
             message: `Client ID not found for id_fund: ${data.id_fund}`,
           });
+          badRows.push({ id_ihno: data.id_ihno, reason: `Client ID not found for id_fund: ${data.id_fund}` });
           continue; // Skip this row if client_id is not found
         }
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
@@ -573,7 +568,8 @@ page_count, client_id
       await client.query("COMMIT");
       this.logger.info("executeSql: COMMIT successful");
       this.logger.info("SQL executed successfully");
-      return { result: "success", logs };
+      const badRowsFilePath = await this.writeBadRowsToFile(badRows, "sql_bad_rows.txt");
+      return { result: "success", logs, summary: { insertedRows, errorRows: badRows.length, badRows, badRowsFilePath } };
     } catch (err) {
       if (client) {
         this.logger.warn("executeSql: error occurred, attempting ROLLBACK");
@@ -592,7 +588,7 @@ page_count, client_id
         status: "error",
         message: `SQL execution failed: ${err}`,
       });
-      return { result: "failed", logs };
+      return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
     } finally {
       if (client) {
         client.release();
@@ -601,10 +597,7 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(): Promise<{
-    result: string;
-    logs: SqlLog[];
-  }> {
+  async updateFolioAndTransaction(): Promise<{ result: string; logs: SqlLog[], summary: { updatedFolioRows: number, updatedTransactionRows: number, badRows: { user_attr1: string, user_attr2: string, reason: string }[], badRowsFilePath: string | null } }> {
     this.logger.info("Starting updateFolioAndTransaction");
     const { transactions } = await this.generateSql();
 
@@ -617,8 +610,14 @@ page_count, client_id
       `updateFolioAndTransaction: unique client codes = ${uniqueClientCodes.length}`
     );
 
+    const initialTransactionIdentifiers = new Set<string>();
+    transactions.forEach(tx => {
+      initialTransactionIdentifiers.add(`${tx.id_ihno}-${tx.id_acno}`);
+    });
+
     const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
+    const updatedTransactionIdentifiers = new Set<string>();
 
     try {
       if (processedFolioNumbers.length === 0) {
@@ -696,11 +695,15 @@ SELECT DISTINCT
     WHERE (d.user_attr2 = f.folio_number
         OR d.transaction_reference_id = t.ihno)
       AND d.user_attr2 = ANY($1::text[])
+    RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
       const updateFolioResult = await client.query(updateFolioQuery, [
         processedFolioNumbers,
       ]);
+      updateFolioResult.rows.forEach(row => {
+        updatedTransactionIdentifiers.add(`${row.user_attr1}-${row.user_attr2}`);
+      });
       logs.push({
         row: 0,
         status: "updated",
@@ -723,7 +726,8 @@ WHERE ts.client_id = d.client_id
   AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))
   AND d.user_attr2 = ANY($2::text[])
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-  AND ts.created_by = 'aifappendersvc';
+  AND ts.created_by = 'aifappendersvc'
+RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info(
         "updateFolioAndTransaction: updating transaction_reference_id"
@@ -732,6 +736,9 @@ WHERE ts.client_id = d.client_id
         updateTransactionQuery,
         [uniqueClientCodes, processedFolioNumbers]
       );
+      updateTransactionResult.rows.forEach(row => {
+        updatedTransactionIdentifiers.add(`${row.user_attr1}-${row.user_attr2}`);
+      });
       logs.push({
         row: 0,
         status: "updated",
@@ -745,7 +752,28 @@ WHERE ts.client_id = d.client_id
       await client.query("COMMIT");
       this.logger.info("updateFolioAndTransaction: COMMIT successful");
       this.logger.info("Folio and transaction updates completed");
-      return { result: "success", logs };
+
+      const badRows: { user_attr1: string, user_attr2: string, reason: string }[] = [];
+      transactions.forEach(tx => {
+        const identifier = `${tx.id_ihno}-${tx.id_acno}`;
+        if (!updatedTransactionIdentifiers.has(identifier)) {
+          badRows.push({
+            user_attr1: tx.id_ihno.toString(),
+            user_attr2: tx.id_acno,
+            reason: "Folio or Transaction not updated"
+          });
+        }
+      });
+
+      const badRowsFilePath = await this.writeBadRowsToFile(badRows, "folio_update_bad_rows.txt");
+
+      const summary = {
+        updatedFolioRows: updateFolioResult.rowCount || 0,
+        updatedTransactionRows: updateTransactionResult.rowCount || 0,
+        badRows: badRows,
+        badRowsFilePath: badRowsFilePath
+      }
+      return { result: "success", logs, summary };
     } catch (err) {
       if (client) {
         this.logger.warn(
@@ -769,7 +797,7 @@ WHERE ts.client_id = d.client_id
         status: "error",
         message: `Folio update failed: ${msg}`,
       });
-      return { result: "failed", logs };
+      return { result: "failed", logs, summary: { updatedFolioRows: 0, updatedTransactionRows: 0, badRows: [], badRowsFilePath: null } };
     } finally {
       if (client) {
         client.release();
@@ -958,6 +986,45 @@ WHERE r2.rn > 1;
       return { result: "failed", dryRun, cutoffTms, logs };
     } finally {
       if (client) client.release();
+    }
+  }
+
+  private async writeBadRowsToFile(
+    badRows: { id_ihno?: string | number; user_attr1?: string; user_attr2?: string; reason: string }[],
+    filename: string
+  ): Promise<string | null> {
+    if (badRows.length === 0) {
+      return null;
+    }
+
+    const filePath = path.join(__dirname, "../../split_output", filename);
+    let content = "";
+
+    if (badRows[0].id_ihno !== undefined) {
+      content = "id_ihno,reason\n";
+      badRows.forEach(row => {
+        content += `${row.id_ihno},"${row.reason}"\n`;
+      });
+    } else if (badRows[0].user_attr1 !== undefined || badRows[0].user_attr2 !== undefined) {
+      content = "user_attr1,user_attr2,reason\n";
+      badRows.forEach(row => {
+        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},"${row.reason}"\n`;
+      });
+    } else {
+      // Fallback if structure is unexpected
+      content = "reason\n";
+      badRows.forEach(row => {
+        content += `"${row.reason}"\n`;
+      });
+    }
+
+    try {
+      await fs.writeFile(filePath, content);
+      this.logger.info(`Bad rows written to ${filePath}`);
+      return filePath;
+    } catch (error) {
+      this.logger.error(`Error writing bad rows to file ${filePath}: ${error}`);
+      return null;
     }
   }
 

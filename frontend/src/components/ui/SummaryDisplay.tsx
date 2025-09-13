@@ -5,6 +5,37 @@ interface SummaryDisplayProps {
 }
 
 const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
+
+  const renderSummary = (log: any) => {
+    if (log.insertedRows !== undefined) {
+      return (
+        <div>
+          <p>Inserted Rows: {log.insertedRows}</p>
+          <p>Error Rows: {log.badRows}</p>
+          {log.badRowsFilePath && (log.badRows > 0) && (
+            <a href={`http://localhost:3000/download-generated-file/${log.badRowsFilePath.split('/').pop()}`} download>
+              Download Bad Rows
+            </a>
+          )}
+        </div>
+      );
+    }
+    if (log.updatedFolioRows !== undefined) {
+      return (
+        <div>
+          <p>Updated Folio Rows: {log.updatedFolioRows}</p>
+          <p>Updated Transaction Rows: {log.updatedTransactionRows}</p>
+          {log.badRowsFilePath && (log.badRows > 0) && (
+            <a href={`http://localhost:3000/download-generated-file/${log.badRowsFilePath.split('/').pop()}`} download>
+              Download Bad Rows
+            </a>
+          )}
+        </div>
+      );
+    }
+    return <pre>{JSON.stringify(log, null, 2)}</pre>;
+  }
+
   return (
     <div className="mt-4 text-black" id="s3uploadprogress">
       <h3 className="text-lg font-semibold">Task Logs</h3>
@@ -16,7 +47,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({ taskLogs }) => {
               {typeof log === 'string' ? (
                 <p>{log}</p>
               ) : (
-                <pre>{JSON.stringify(log, null, 2)}</pre>
+                renderSummary(log)
               )}
             </div>
           </div>
