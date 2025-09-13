@@ -56,13 +56,25 @@ const Drawer = styled(MuiDrawer, {
   flexShrink: 0,
   whiteSpace: "nowrap",
   boxSizing: "border-box",
+  "& .MuiDrawer-paper": {
+    backgroundColor: "#212427",
+    color: "#EDECEB", // Adding white text for better contrast
+  },
   ...(open && {
     ...openedMixin(theme),
-    "& .MuiDrawer-paper": openedMixin(theme),
+    "& .MuiDrawer-paper": {
+      ...openedMixin(theme),
+      backgroundColor: "#212427",
+      color: "#EDECEB",
+    },
   }),
   ...(!open && {
     ...closedMixin(theme),
-    "& .MuiDrawer-paper": closedMixin(theme),
+    "& .MuiDrawer-paper": {
+      ...closedMixin(theme),
+      backgroundColor: "#212427",
+      color: "#EDECEB",
+    },
   }),
 }));
 
@@ -79,7 +91,10 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
       PaperProps={{ sx: { backgroundColor: "whitesmoke" } }}
     >
       <DrawerHeader>
-        <IconButton onClick={open ? handleDrawerClose : handleDrawerOpen}>
+        <IconButton
+          onClick={open ? handleDrawerClose : handleDrawerOpen}
+          sx={{ color: "#EDECEB" }}
+        >
           {open ? <ChevronLeftIcon /> : <ChevronRightIcon />}
         </IconButton>
       </DrawerHeader>

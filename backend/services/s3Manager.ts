@@ -36,7 +36,12 @@ export async function listFiles(
   prefix: string,
   continuationToken?: string
 ): Promise<S3ListResponse> {
-  console.log("Entering listFiles function. Prefix:", prefix, "ContinuationToken:", continuationToken);
+  console.log(
+    "Entering listFiles function. Prefix:",
+    prefix,
+    "ContinuationToken:",
+    continuationToken
+  );
   const command = new ListObjectsV2Command({
     Bucket: S3_BUCKET_NAME,
     Prefix: prefix,
@@ -127,7 +132,10 @@ export async function searchFiles(
 
     if (Contents) {
       // Log the keys before filtering
-      console.log("Keys from S3:", Contents.map(c => c.Key));
+      console.log(
+        "Keys from S3:",
+        Contents.map((c) => c.Key)
+      );
 
       const matchingObjects = Contents.filter(
         (c) => c.Key && regex.test(c.Key)

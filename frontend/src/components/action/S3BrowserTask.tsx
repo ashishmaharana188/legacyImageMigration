@@ -177,6 +177,9 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       setS3Files([]);
       setS3Directories([]);
       setClientPage(1);
+      setIsFilterMode(false);
+      setSearchTerm("");
+      setSearchResults([]);
       fetchS3Objects(directoryKey);
     },
     [fetchS3Objects]
@@ -275,6 +278,10 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
     }
   }, [searchContinuationToken, handleSearch, searchTerm]);
 
+  const handleReload = useCallback(() => {
+    fetchS3Objects(currentPrefix);
+  }, [fetchS3Objects, currentPrefix]);
+
   return (
     <S3BrowserUI
       s3Files={s3Files}
@@ -302,7 +309,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ setLogs }) => {
       handleBreadcrumbClick={handleBreadcrumbClick}
       handleSearch={() => handleSearch(searchTerm)}
       handleLoadMoreSearch={handleLoadMoreSearch}
-      fetchS3Objects={fetchS3Objects}
+      handleReload={handleReload}
     />
   );
 };
