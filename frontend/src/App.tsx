@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import UploadAndScriptTask from "./components/action/UploadAndScriptTask";
 import SQLAndMongoTask from "./components/action/SQLAndMongoTask";
 import S3BrowserTask from "./components/action/S3BrowserTask";
@@ -72,9 +72,9 @@ const App: React.FC = () => {
   });
   const [taskLogs, setTaskLogs] = useState<{[key: string]: any}>({});
 
-  const updateTaskLog = (task: string, log: any) => {
+  const updateTaskLog = useCallback((task: string, log: any) => {
     setTaskLogs(prev => ({...prev, [task]: log}));
-  }
+  }, []);
 
   const [, setUpdateFolioResult] = useState<unknown>(null);
   const [, setSanityCheckResult] = useState<unknown>(null);
