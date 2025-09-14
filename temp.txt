@@ -1,3 +1,3 @@
-S3 Upload progress implementation in UI.
-
-1. We need to check file upload percentage of each file and keep on checking for each new file upload by overwriting the previously completed file status, this will keep the progress dynamic. Include this feature in summaryDisplau UI area
+check both backend and frontend folders for all files. check if we are looging any details to console. Instead of loggin into console we can use log files for │
+│     system specific errors like connection issues in pg and mongo and aws connections. Then display these in sumamryDispaly Ui as system erroes with the recent   │
+│    log files data, this way issues can be tracked properly    

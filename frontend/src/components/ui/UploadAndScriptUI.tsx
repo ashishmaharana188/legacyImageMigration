@@ -55,11 +55,11 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
         {splitMessage && <p>{splitMessage}</p>}
       </div>
       <div className="mt-4">
-        <button onClick={handleUploadSplitFilesToS3} className="btn">
-          Upload Split Files to S3
-        </button>
-        <button onClick={handleUploadToS3} className="btn ml-10">
+        <button onClick={handleUploadToS3} className="btn">
           Upload Original to S3
+        </button>
+        <button onClick={handleUploadSplitFilesToS3} className="btn ml-10">
+          Upload Split Files to S3
         </button>
       </div>
     </div>
