@@ -115,13 +115,6 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
                   Next
                 </button>
               </div>
-              {searchContinuationToken && (
-                <div className="flex justify-center mt-4">
-                  <button onClick={handleLoadMoreSearch} className="btn">
-                    Load More
-                  </button>
-                </div>
-              )}
             </div>
           )}
         </div>

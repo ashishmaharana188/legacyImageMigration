@@ -1,3 +1,5 @@
-check both backend and frontend folders for all files. check if we are looging any details to console. Instead of loggin into console we can use log files for │
-│     system specific errors like connection issues in pg and mongo and aws connections. Then display these in sumamryDispaly Ui as system erroes with the recent   │
-│    log files data, this way issues can be tracked properly    
+the s3 browser's manual search is configure dto read a set of fetched data, which is causing less search and hence the requried directories are not able to be checked.
+
+1. we need to make sure if within 500 fetched query the search matches, if it doesnt then we keep on looping the next tokens until all files are loaded, in between this the checks for the search file also happens and result is shown if found.
+
+check if this can be implemented with proper edge case checking

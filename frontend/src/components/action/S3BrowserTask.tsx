@@ -27,9 +27,6 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [searchResults, setSearchResults] = useState<S3Item[]>([]);
   const [clientPage, setClientPage] = useState<number>(1);
-  const [searchContinuationToken, setSearchContinuationToken] = useState<
-    string | undefined
-  >(undefined);
   const [searchPage, setSearchPage] = useState<number>(1);
   const DISPLAY_ITEMS_PER_PAGE = 10;
 
@@ -160,51 +157,58 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
   );
 
   const handleSearch = useCallback(
-    async (searchTerm: string, continuationToken?: string) => {
+    async (searchTerm: string) => {
       if (!searchTerm) {
         setSearchResults([]);
         return;
       }
       setIsSearching(true);
-      updateTaskLog('s3Browser', { message: "Searching S3..." });
+      setSearchResults([]);
+      updateTaskLog("s3Browser", { message: "Searching S3..." });
+      setSearchPage(1);
+
+      let continuationToken: string | undefined;
       try {
-        // For now, we only search for folders as requested
-        const res = await axios.get(
-          "http://localhost:3000/s3-search-folders",
-          {
-            params: {
-              prefix: currentPrefix,
-              pattern: searchTerm,
-              continuationToken,
-            },
-          }
-        );
+        do {
+          const res = await axios.get(
+            "http://localhost:3000/s3-search-folders",
+            {
+              params: {
+                prefix: currentPrefix,
+                pattern: searchTerm,
+                continuationToken,
+              },
+            }
+          );
 
-        const {
-          directories,
-          nextContinuationToken: newSearchContinuationToken,
-        } = res.data;
+          const {
+            directories,
+            nextContinuationToken: newSearchContinuationToken,
+          } = res.data;
 
-        const combinedResults: S3Item[] = [
-          ...directories.map((dir: string) => ({
-            key: dir,
-            type: "dir" as const,
-          })),
-        ];
+          const newResults: S3Item[] = [
+            ...directories.map((dir: string) => ({
+              key: dir,
+              type: "dir" as const,
+            })),
+          ];
 
-        setSearchResults((prev) =>
-          continuationToken ? [...prev, ...combinedResults] : combinedResults
-        );
-        setSearchContinuationToken(newSearchContinuationToken);
-        if (!continuationToken) {
-          setSearchPage(1);
-        }
-        updateTaskLog('s3Browser', { message: "S3 search complete." });
+          setSearchResults((prev) => [...prev, ...newResults]);
+          continuationToken = newSearchContinuationToken;
+        } while (continuationToken);
+
+        updateTaskLog("s3Browser", { message: "S3 search complete." });
       } catch (error: unknown) {
         if (axios.isAxiosError(error)) {
-          updateTaskLog('s3Browser', { message: `S3 search failed: ${error.response?.data?.error || "An unknown error occurred."}` });
+          updateTaskLog("s3Browser", {
+            message: `S3 search failed: ${
+              error.response?.data?.error || "An unknown error occurred."
+            }`,
+          });
         } else {
-          updateTaskLog('s3Browser', { message: "S3 search failed: An unknown error occurred." });
+          updateTaskLog("s3Browser", {
+            message: "S3 search failed: An unknown error occurred.",
+          });
         }
       } finally {
         setIsSearching(false);
@@ -222,12 +226,6 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
       clearTimeout(debounceTimer);
     };
   }, [searchTerm, handleSearch]);
-
-  const handleLoadMoreSearch = useCallback(() => {
-    if (searchContinuationToken) {
-      handleSearch(searchTerm, searchContinuationToken);
-    }
-  }, [searchContinuationToken, handleSearch, searchTerm]);
 
   const handleReload = useCallback(() => {
     fetchS3Objects(currentPrefix);
@@ -249,7 +247,6 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
       totalSearchPages={totalSearchPages}
       paginatedItems={paginatedItems}
       paginatedSearchResults={paginatedSearchResults}
-      searchContinuationToken={searchContinuationToken}
       setIsFilterMode={setIsFilterMode}
       setSearchTerm={setSearchTerm}
       setClientPage={setClientPage}
@@ -259,7 +256,6 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
       handleDirectoryClick={handleDirectoryClick}
       handleBreadcrumbClick={handleBreadcrumbClick}
       handleSearch={() => handleSearch(searchTerm)}
-      handleLoadMoreSearch={handleLoadMoreSearch}
       handleReload={handleReload}
     />
   );
