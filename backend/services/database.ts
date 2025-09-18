@@ -32,17 +32,19 @@ export class Database {
   }
 
   private createPool(): Pool {
+    const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
     const newPool = new Pool({
-      user: process.env.DB_USER,
-      host: process.env.DB_HOST,
-      database: process.env.DB_NAME,
-      password: process.env.DB_PASSWORD || "",
-      port: parseInt(process.env.DB_PORT || "5433", 10),
+      user: useSshTunnel ? process.env.DB_USER : "postgres",
+      host: useSshTunnel ? process.env.DB_HOST : "localhost",
+      database: useSshTunnel ? process.env.DB_NAME : "test",
+      password: useSshTunnel ? process.env.DB_PASSWORD : "123456",
+      port: useSshTunnel
+        ? parseInt(process.env.DB_PORT || "5433", 10)
+        : parseInt(process.env.DB_PORT || "5432", 10),
       max: 20,
-      idleTimeoutMillis: 30000,
+      idleTimeoutMillis: 30000, // 10 seconds
       connectionTimeoutMillis: 10000,
-      // Consider allowExitOnIdle in serverless/background contexts
-      // allowExitOnIdle: true,
+      keepAlive: true,
     });
 
     // Lifecycle diagnostics
@@ -75,29 +77,22 @@ export class Database {
         this.logger.info("pool warm-up: connect/release successful");
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`);
+        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`, e);
       }
     })();
 
-    // Background health check every 5 min (never recreates or nulls the pool)
-    setInterval(async () => {
-      let client: PoolClient | null = null;
-      try {
-        client = await newPool.connect();
-        const onClientError = (e: Error) =>
-          this.logger.error(`health-check client error: ${e.message}`);
-        client.on("error", onClientError);
-        await client.query("SELECT 1");
-        client.off("error", onClientError);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn(`pool health check failed (tolerated): ${msg}`);
-      } finally {
-        if (client) client.release();
-      }
-    }, 300000);
-
     this.logger.info("Postgres pool created");
+    const poolConfig = {
+      user: useSshTunnel ? process.env.DB_USER : "postgres",
+      host: useSshTunnel ? process.env.DB_HOST : "localhost",
+      database: useSshTunnel ? process.env.DB_NAME : "test",
+      port: useSshTunnel
+        ? parseInt(process.env.DB_PORT || "5433", 10)
+        : parseInt(process.env.DB_PORT || "5432", 10),
+    };
+    this.logger.info(
+      `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`
+    );
     return newPool;
   }
 
@@ -107,21 +102,43 @@ export class Database {
   }
 
   public async warmup() {
+    const MAX_RETRIES = 5;
+    const RETRY_DELAY_MS = 2000; // 2 seconds
     let client: PoolClient | null = null;
-    try {
-      client = await this.getPool().connect();
-      const onClientError = (e: Error) =>
-        this.logger.error(`warmup client error: ${e.message}`);
-      client.on("error", onClientError);
-      // A simple ping ensures the backend is reachable
-      await client.query("SELECT 1");
-      client.off("error", onClientError);
-      this.logger.info("🔥 Database connection warm-up successful");
-    } catch (err) {
-      this.logger.warn("Database warm-up failed (tolerated):", err);
-    } finally {
-      if (client) client.release();
+
+    for (let i = 0; i < MAX_RETRIES; i++) {
+      try {
+        this.logger.info(
+          `Attempting database warm-up (attempt ${i + 1}/${MAX_RETRIES})...`
+        );
+        client = await this.getPool().connect();
+        const onClientError = (e: Error) =>
+          this.logger.error(`warmup client error: ${e.message}`);
+        client.on("error", onClientError);
+        // A simple ping ensures the backend is reachable
+        await client.query("SELECT 1");
+        client.off("error", onClientError);
+        this.logger.info("Database connection warm-up successful");
+        return; // Success, exit the loop
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Unknown error";
+        this.logger.warn(
+          `Database warm-up failed (attempt ${i + 1}/${MAX_RETRIES}): ${msg}`,
+          err
+        );
+        if (client) {
+          client.release();
+          client = null;
+        }
+        if (i < MAX_RETRIES - 1) {
+          this.logger.info(`Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
+        }
+      } finally {
+        if (client) client.release();
+      }
     }
+    this.logger.error(`Database warm-up failed after ${MAX_RETRIES} attempts.`);
   }
 
   private readonly logger = winston.createLogger({
@@ -132,20 +149,72 @@ export class Database {
         filename: "logs/error.log",
         level: "error",
       }),
-      new winston.transports.File({ filename: "logs/combined.log" }),
-      // Added Console transport for immediate terminal visibility
-      new winston.transports.Console({
-        level: "debug",
-        format: winston.format.combine(
-          winston.format.colorize(),
-          winston.format.simple()
-        ),
-      }),
+      new winston.transports.File({ filename: "logs/combined.log" })
     ],
   });
 
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";
+  }
+
+  private async getProcessedFolioNumbers(): Promise<string[]> {
+    const csvPath = path.join(__dirname, "../../processed");
+    this.logger.info("getProcessedFolioNumbers: Reading processed directory");
+    try {
+      const files = await fs.readdir(csvPath);
+      this.logger.info(
+        `getProcessedFolioNumbers: found ${files.length} files in processed`
+      );
+
+      const latestCsv = files
+        .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
+        .sort()
+        .pop();
+
+      if (!latestCsv) {
+        this.logger.warn("getProcessedFolioNumbers: no processed_*.csv found");
+        return [];
+      }
+
+      const csvFullPath = path.join(csvPath, latestCsv);
+      this.logger.info(
+        `getProcessedFolioNumbers: Reading CSV file: ${csvFullPath}`
+      );
+
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = await workbook.csv.readFile(csvFullPath);
+      this.logger.info("getProcessedFolioNumbers: CSV loaded into workbook");
+
+      const idAcnos: string[] = [];
+      worksheet.eachRow((row, rowNumber) => {
+        if (rowNumber === 1) return; // Skip header
+        try {
+          const idAcnoCell = row.getCell(5);
+          if (idAcnoCell && idAcnoCell.text) {
+            const idAcno = idAcnoCell.text.trim();
+            if (idAcno) {
+              idAcnos.push(idAcno);
+            }
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Unknown error";
+          this.logger.warn(
+            `getProcessedFolioNumbers: parse error at row ${rowNumber}: ${msg}`
+          );
+        }
+      });
+
+      const uniqueIdAcnos = [...new Set(idAcnos)];
+      this.logger.info(
+        `getProcessedFolioNumbers: found ${uniqueIdAcnos.length} unique id_acno values`
+      );
+      return uniqueIdAcnos;
+    } catch (error) {
+      this.logger.error(
+        `getProcessedFolioNumbers: Error reading processed folder or CSV file: ${error}`
+      );
+      return []; // Return empty array on error to avoid breaking the main query
+    }
   }
 
   async generateSql(): Promise<{
@@ -154,7 +223,6 @@ export class Database {
       id_fund: number;
       id_trtype: string;
       id_ihno: number;
-      image: string;
       id_path: string;
       id_acno: string;
       page_count: number | string;
@@ -197,7 +265,6 @@ export class Database {
         id_fund: number;
         id_trtype: string;
         id_ihno: number;
-        image: string;
         id_path: string;
         id_acno: string;
         page_count: number | string;
@@ -210,12 +277,11 @@ export class Database {
             id_fund: parseInt(row.getCell(1).text, 10),
             id_trtype: row.getCell(2).text.trim(),
             id_ihno: parseInt(row.getCell(3).text, 10),
-            image: row.getCell(4).text.trim(),
-            id_path: row.getCell(5).text.trim(),
-            id_acno: row.getCell(6).text.trim(),
-            page_count: isNaN(parseInt(row.getCell(7).text, 10))
-              ? row.getCell(7).text.trim()
-              : parseInt(row.getCell(7).text, 10),
+            id_path: row.getCell(4).text.trim(),
+            id_acno: row.getCell(5).text.trim(),
+            page_count: isNaN(parseInt(row.getCell(6).text, 10))
+              ? row.getCell(6).text.trim()
+              : parseInt(row.getCell(6).text, 10),
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
@@ -261,7 +327,7 @@ export class Database {
             const format = ext.replace(".", "").toUpperCase();
             const clientId = String(data.id_fund)
               .split("")
-              .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
+              .map((char) => (/\\d/.test(char) ? char.charCodeAt(0) : ""))
               .join("");
 
             const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
@@ -278,8 +344,6 @@ null, null, null, null, null,
 false, now(), 'system', now(), 'system',
 ${data.page_count}, ${clientId}
 )`;
-
-            this.logger.debug(`generateSql: built values for row ${index + 2}`);
 
             logs.push({
               row: index + 2,
@@ -321,7 +385,8 @@ user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
 approval_status, approved_by, approved_on, comments, audit_code,
 del_flag, last_update_tms, last_updated_by, creation_date, created_by,
 page_count, client_id
-) VALUES ${values.join(", ")};`;
+) VALUES ${values.join(", ")};
+`;
 
       this.logger.info("Generated multi-row SQL");
       return { sql, transactions, logs };
@@ -337,7 +402,7 @@ page_count, client_id
     }
   }
 
-  async executeSql(): Promise<{ result: string; logs: SqlLog[] }> {
+  async executeSql(): Promise<{ result: string; logs: SqlLog[], summary: { insertedRows: number, errorRows: number, badRows: any[], badRowsFilePath: string | null } }> {
     const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
 
@@ -353,7 +418,7 @@ page_count, client_id
           status: "error",
           message: "No transactions to execute",
         });
-        return { result: "failed", logs };
+        return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
       }
 
       this.logger.info("executeSql: attempting pool.connect()");
@@ -366,6 +431,29 @@ page_count, client_id
 
       await client.query("BEGIN");
       this.logger.info("executeSql: BEGIN started");
+
+      // --- Start of new logic for client_id lookup ---
+      const uniqueIdFunds = [
+        ...new Set(transactions.map((t) => String(t.id_fund))),
+      ];
+      this.logger.info(
+        `executeSql: found ${uniqueIdFunds.length} unique id_fund values`
+      );
+
+      const clientIdMap: Map<string, number> = new Map();
+      if (uniqueIdFunds.length > 0) {
+        const clientMasterQuery = `SELECT id, client_code FROM fund.client_master WHERE client_code = ANY($1::text[])`;
+        const clientMasterRes = await client.query(clientMasterQuery, [
+          uniqueIdFunds,
+        ]);
+        clientMasterRes.rows.forEach((row) => {
+          clientIdMap.set(row.client_code, row.id);
+        });
+        this.logger.info(
+          `executeSql: fetched ${clientIdMap.size} client_id mappings`
+        );
+      }
+      // --- End of new logic for client_id lookup ---
 
       const queryText = `
 INSERT INTO investor.aif_document_details(
@@ -393,10 +481,12 @@ page_count, client_id
       const mimeType: Record<string, string> = {
         tif: "image/tiff",
         pdf: "application/pdf",
+        tiff: "image/tiff",
       };
 
+      let insertedRows = 0;
+      const badRows: any[] = [];
       for (const [index, data] of transactions.entries()) {
-        this.logger.debug(`executeSql: preparing row ${index + 2}`);
         const ext = this.getFileExtension(data.id_path);
         if (!ext) {
           this.logger.warn(
@@ -407,16 +497,33 @@ page_count, client_id
             status: "error",
             message: "Invalid file extension",
           });
+          badRows.push({ id_ihno: data.id_ihno, reason: 'Invalid file extension' });
           continue;
         }
 
         const format = ext.replace(".", "").toUpperCase();
-        const clientId = String(data.id_fund)
-          .split("")
-          .map((char) => (/\d/.test(char) ? char.charCodeAt(0) : ""))
-          .join("");
+        const actualClientId = clientIdMap.get(String(data.id_fund));
+        const finalClientId =
+          actualClientId !== undefined ? actualClientId : null; // Use null if not found
+        if (finalClientId === null) {
+          this.logger.warn(
+            `executeSql: client_id not found for id_fund: ${
+              data.id_fund
+            } at row ${index + 2}`
+          );
+          logs.push({
+            row: index + 2,
+            status: "error",
+            message: `Client ID not found for id_fund: ${data.id_fund}`,
+          });
+          badRows.push({ id_ihno: data.id_ihno, reason: `Client ID not found for id_fund: ${data.id_fund}` });
+          continue; // Skip this row if client_id is not found
+        }
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
         const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+
+        const mime = mimeType[ext.replace(".", "")] || "Unknown";
+        this.logger.info(`ext: ${ext}, mime: ${mime}`);
 
         const values = [
           this.trxnMap[data.id_trtype] || "Unknown",
@@ -449,22 +556,20 @@ page_count, client_id
           new Date(),
           "system",
           data.page_count,
-          clientId,
+          finalClientId,
         ];
 
         await client.query(queryText, values);
-        this.logger.info(`executeSql: inserted row ${index + 2}`);
-        logs.push({
-          row: index + 2,
-          status: "executed",
-          message: `Row ${index + 2} inserted successfully`,
-        });
+        insertedRows++;
       }
+      this.logger.debug(`executeSql: preparing row ${insertedRows}`);
+      this.logger.info(`executeSql: inserted ${insertedRows} rows`);
 
       await client.query("COMMIT");
       this.logger.info("executeSql: COMMIT successful");
       this.logger.info("SQL executed successfully");
-      return { result: "success", logs };
+      const badRowsFilePath = await this.writeBadRowsToFile(badRows, "sql_bad_rows.txt");
+      return { result: "success", logs, summary: { insertedRows, errorRows: badRows.length, badRows, badRowsFilePath } };
     } catch (err) {
       if (client) {
         this.logger.warn("executeSql: error occurred, attempting ROLLBACK");
@@ -483,7 +588,7 @@ page_count, client_id
         status: "error",
         message: `SQL execution failed: ${err}`,
       });
-      return { result: "failed", logs };
+      return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
     } finally {
       if (client) {
         client.release();
@@ -492,13 +597,11 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(): Promise<{
-    result: string;
-    logs: SqlLog[];
-  }> {
+  async updateFolioAndTransaction(): Promise<{ result: string; logs: SqlLog[], summary: { updatedFolioRows: number, updatedTransactionRows: number, badRows: { user_attr1: string, user_attr2: string, reason: string }[], badRowsFilePath: string | null } }> {
     this.logger.info("Starting updateFolioAndTransaction");
     const { transactions } = await this.generateSql();
 
+    const processedFolioNumbers = await this.getProcessedFolioNumbers();
     // Get unique id_fund values
     const uniqueClientCodes = [
       ...new Set(transactions.map((tx) => tx.id_fund)),
@@ -507,10 +610,21 @@ page_count, client_id
       `updateFolioAndTransaction: unique client codes = ${uniqueClientCodes.length}`
     );
 
+    const initialTransactionIdentifiers = new Set<string>();
+    transactions.forEach(tx => {
+      initialTransactionIdentifiers.add(`${tx.id_ihno}-${tx.id_acno}`);
+    });
+
     const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
+    const updatedTransactionIdentifiers = new Set<string>();
 
     try {
+      if (processedFolioNumbers.length === 0) {
+        this.logger.warn(
+          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
+        );
+      }
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
       client = await this.getPool().connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
@@ -538,54 +652,58 @@ DELETE FROM public.temp_images_1;
       this.logger.info("updateFolioAndTransaction: deleted temp_images_1");
 
       // Query 2: Insert into temp_images_1
-      for (const clientCode of uniqueClientCodes) {
-        const insertTempQuery = `
+      const insertTempQuery = `
 INSERT INTO public.temp_images_1 (client_code, folio_number, IHNO)
-SELECT client_code, folio_number, IHNO
-FROM (
-  SELECT DISTINCT
+SELECT DISTINCT
     cm.client_code,
     fo.folio_number,
     ts.user_attr5 AS ihno
   FROM trxn.aif_transaction_summary ts
   JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
   JOIN fund.client_master cm ON cm.id = fo.client_id
-  WHERE cm.client_code = $1
+  WHERE fo.folio_number = ANY($1::text[])
     AND ts.created_by = 'aifappendersvc'
-    AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-) AS cte;
+    AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
-        this.logger.info(
-          `updateFolioAndTransaction: inserting temp for client_code=${clientCode}`
-        );
-        const insertResult = await client.query(insertTempQuery, [clientCode]);
-        logs.push({
-          row: 0,
-          status: "executed",
-          message: `Inserted ${insertResult.rowCount} rows into temp_images_1`,
-          sql: insertTempQuery,
-        });
-        this.logger.info(
-          `updateFolioAndTransaction: inserted ${insertResult.rowCount} temp rows for client_code=${clientCode}`
-        );
-      }
+      this.logger.info(
+        `updateFolioAndTransaction: inserting temp for ${processedFolioNumbers.length} folios`
+      );
+      const insertResult = await client.query(insertTempQuery, [
+        processedFolioNumbers,
+      ]);
+      logs.push({
+        row: 0,
+        status: "executed",
+        message: `Inserted ${insertResult.rowCount} rows into temp_images_1`,
+        sql: insertTempQuery,
+      });
+      this.logger.info(
+        `updateFolioAndTransaction: inserted ${insertResult.rowCount} temp rows`
+      );
 
       // Query 3: Update folio_id using id_acno
       const updateFolioQuery = `
-WITH client_folio AS (
-  SELECT folio_number,id,client_id,
-    (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
-)
-UPDATE investor.aif_document_details AS d
-SET folio_id = f.id
-FROM client_folio AS f
-JOIN fund.client_master cm on f.client_id=cm.id
-LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
-WHERE d.user_attr2 = f.folio_number
-   OR d.transaction_reference_id = t.ihno
+      WITH client_folio AS (
+        SELECT folio_number,id,client_id,
+        (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
+    )
+    UPDATE investor.aif_document_details AS d
+      SET folio_id = f.id
+    FROM client_folio AS f
+    JOIN fund.client_master cm on f.client_id=cm.id
+      LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
+    WHERE (d.user_attr2 = f.folio_number
+        OR d.transaction_reference_id = t.ihno)
+      AND d.user_attr2 = ANY($1::text[])
+    RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
-      const updateFolioResult = await client.query(updateFolioQuery);
+      const updateFolioResult = await client.query(updateFolioQuery, [
+        processedFolioNumbers,
+      ]);
+      updateFolioResult.rows.forEach(row => {
+        updatedTransactionIdentifiers.add(`${row.user_attr1}-${row.user_attr2}`);
+      });
       logs.push({
         row: 0,
         status: "updated",
@@ -606,16 +724,21 @@ WHERE ts.client_id = d.client_id
   AND ts.user_attr5 = d.user_attr1
   AND d.created_by = 'system'
   AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))
+  AND d.user_attr2 = ANY($2::text[])
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-  AND ts.created_by = 'aifappendersvc';
+  AND ts.created_by = 'aifappendersvc'
+RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info(
         "updateFolioAndTransaction: updating transaction_reference_id"
       );
       const updateTransactionResult = await client.query(
         updateTransactionQuery,
-        [uniqueClientCodes]
+        [uniqueClientCodes, processedFolioNumbers]
       );
+      updateTransactionResult.rows.forEach(row => {
+        updatedTransactionIdentifiers.add(`${row.user_attr1}-${row.user_attr2}`);
+      });
       logs.push({
         row: 0,
         status: "updated",
@@ -629,7 +752,28 @@ WHERE ts.client_id = d.client_id
       await client.query("COMMIT");
       this.logger.info("updateFolioAndTransaction: COMMIT successful");
       this.logger.info("Folio and transaction updates completed");
-      return { result: "success", logs };
+
+      const badRows: { user_attr1: string, user_attr2: string, reason: string }[] = [];
+      transactions.forEach(tx => {
+        const identifier = `${tx.id_ihno}-${tx.id_acno}`;
+        if (!updatedTransactionIdentifiers.has(identifier)) {
+          badRows.push({
+            user_attr1: tx.id_ihno.toString(),
+            user_attr2: tx.id_acno,
+            reason: "Folio or Transaction not updated"
+          });
+        }
+      });
+
+      const badRowsFilePath = await this.writeBadRowsToFile(badRows, "folio_update_bad_rows.txt");
+
+      const summary = {
+        updatedFolioRows: updateFolioResult.rowCount || 0,
+        updatedTransactionRows: updateTransactionResult.rowCount || 0,
+        badRows: badRows,
+        badRowsFilePath: badRowsFilePath
+      }
+      return { result: "success", logs, summary };
     } catch (err) {
       if (client) {
         this.logger.warn(
@@ -653,7 +797,7 @@ WHERE ts.client_id = d.client_id
         status: "error",
         message: `Folio update failed: ${msg}`,
       });
-      return { result: "failed", logs };
+      return { result: "failed", logs, summary: { updatedFolioRows: 0, updatedTransactionRows: 0, badRows: [], badRowsFilePath: null } };
     } finally {
       if (client) {
         client.release();
@@ -661,6 +805,289 @@ WHERE ts.client_id = d.client_id
           "updateFolioAndTransaction: client released back to pool"
         );
       }
+    }
+  }
+
+  public async sanityCheckDuplicates(params: {
+    dryRun?: boolean;
+    normalize?: boolean;
+    cutoffTms?: string;
+  }): Promise<{
+    result: "success" | "failed";
+    dryRun: boolean;
+    cutoffTms: string;
+    deletedCount?: number;
+    rows?: any[]; // In dry-run, this will be an array of rows to be deleted
+    logs: SqlLog[];
+  }> {
+    const logs: SqlLog[] = [];
+    const {
+      dryRun = true,
+      normalize = false,
+      cutoffTms = "2025-09-09T00:00:00.0000",
+    } = params;
+    this.logger.info(
+      `sanityCheckDuplicates: Received cutoffTms: ${cutoffTms}, dryRun: ${dryRun}, normalize: ${normalize}`
+    );
+    let client: PoolClient | null = null;
+
+    const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
+
+    // Query for Rule 1: Deletes post-cutoff entries for keys that existed pre-cutoff.
+    const deleteRule1Sql = `
+WITH pre_cutoff_keys AS (
+  SELECT DISTINCT ${keyExpr} AS k
+  FROM investor.aif_document_details
+  WHERE user_attr1 IS NOT NULL
+    AND creation_date <= $1::timestamptz
+)
+DELETE FROM investor.aif_document_details d
+WHERE ${keyExpr} IN (SELECT k FROM pre_cutoff_keys)
+  AND d.creation_date > $1::timestamptz
+RETURNING d.id
+`;
+
+    // Query for Rule 2: Deletes newer duplicates from post-cutoff-only keys.
+    const deleteRule2Sql = `
+WITH post_cutoff_only_keys AS (
+    SELECT ${keyExpr} AS k
+    FROM investor.aif_document_details
+    WHERE user_attr1 IS NOT NULL
+    GROUP BY ${keyExpr}
+    HAVING MIN(creation_date) > $1::timestamptz
+),
+dups_to_delete AS (
+    SELECT
+        d.id,
+        ROW_NUMBER() OVER (
+            PARTITION BY ${keyExpr}
+            ORDER BY d.creation_date ASC, d.id ASC
+        ) as rn
+    FROM investor.aif_document_details d
+    JOIN post_cutoff_only_keys p ON ${keyExpr} = p.k
+)
+DELETE FROM investor.aif_document_details t
+USING dups_to_delete d
+WHERE t.id = d.id
+  AND d.rn > 1
+RETURNING t.id
+`;
+
+    const previewSql = `
+WITH
+-- CTEs for Rule 2 Preview
+post_cutoff_only_keys AS (
+  SELECT ${keyExpr} AS k
+  FROM investor.aif_document_details
+  WHERE user_attr1 IS NOT NULL
+  GROUP BY ${keyExpr}
+  HAVING MIN(creation_date) > $2::timestamptz
+),
+post_cutoff_dups_ranked AS (
+  SELECT d.*,
+         ROW_NUMBER() OVER (PARTITION BY ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
+  FROM investor.aif_document_details d
+  WHERE ${keyExpr} IN (SELECT k FROM post_cutoff_only_keys)
+)
+-- Rule 1 Preview
+SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
+FROM investor.aif_document_details d
+WHERE ${keyExpr} IN (
+    SELECT DISTINCT ${keyExpr}
+    FROM investor.aif_document_details
+    WHERE user_attr1 IS NOT NULL AND creation_date <= $1::timestamptz
+)
+AND d.creation_date > $1::timestamptz
+
+UNION ALL
+
+-- Rule 2 Preview
+SELECT r2.*, 'Rule 2' as reason
+FROM post_cutoff_dups_ranked r2
+WHERE r2.rn > 1;
+`;
+
+    try {
+      this.logger.info(
+        `sanityCheckDuplicates: start (cutoff=${cutoffTms}, dryRun=${dryRun}, normalize=${normalize})`
+      );
+
+      client = await this.getPool().connect();
+      await client.query("BEGIN");
+
+      if (dryRun) {
+        const previewRes = await client.query(previewSql, [
+          cutoffTms,
+          cutoffTms,
+        ]);
+        await client.query("ROLLBACK");
+        this.logger.info(
+          `sanityCheckDuplicates_v2: dry-run complete, ${previewRes.rows.length} rows would be deleted`
+        );
+        return {
+          result: "success",
+          dryRun: true,
+          cutoffTms,
+          rows: previewRes.rows,
+          logs,
+        };
+      }
+
+      // Execute Rule 1 Delete
+      const delRes1 = await client.query(deleteRule1Sql, [cutoffTms]);
+      logs.push({
+        row: 0,
+        status: "updated",
+        message: `Rule 1 (pre-existing keys) deleted ${delRes1.rowCount} rows.`,
+      });
+
+      // Execute Rule 2 Delete
+      const delRes2 = await client.query(deleteRule2Sql, [cutoffTms]);
+      logs.push({
+        row: 0,
+        status: "updated",
+        message: `Rule 2 (post-only keys) deleted ${delRes2.rowCount} rows.`,
+      });
+
+      await client.query("COMMIT");
+
+      const totalDeleted = (delRes1.rowCount ?? 0) + (delRes2.rowCount ?? 0);
+      this.logger.info(
+        `sanityCheckDuplicates_v2: committed. Total deleted: ${totalDeleted} rows.`
+      );
+
+      return {
+        result: "success",
+        dryRun: false,
+        cutoffTms,
+        deletedCount: totalDeleted,
+        logs,
+      };
+    } catch (err) {
+      if (client) {
+        try {
+          await client.query("ROLLBACK");
+        } catch (e) {
+          this.logger.error(`sanityCheckDuplicates_v2: ROLLBACK failed: ${e}`);
+        }
+      }
+      this.logger.error(
+        `sanityCheckDuplicates_v2: failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+      logs.push({
+        row: 0,
+        status: "error",
+        message: `sanityCheckDuplicates_v2 failed: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      });
+      return { result: "failed", dryRun, cutoffTms, logs };
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  private async writeBadRowsToFile(
+    badRows: { id_ihno?: string | number; user_attr1?: string; user_attr2?: string; reason: string }[],
+    baseFilename: string // Changed from filename to baseFilename
+  ): Promise<string | null> {
+    if (badRows.length === 0) {
+      return null;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.-]/g, "_"); // YYYY-MM-DDTHH_mm_ss_sssZ
+    const filenameWithTimestamp = `${timestamp}_${baseFilename}`;
+    const filePath = path.join(__dirname, "../../split_output", filenameWithTimestamp);
+    let content = "";
+
+    if (badRows[0].id_ihno !== undefined) {
+      content = "id_ihno,reason\n";
+      badRows.forEach(row => {
+        content += `${row.id_ihno},\"${row.reason}\"\n`;
+      });
+    } else if (badRows[0].user_attr1 !== undefined || badRows[0].user_attr2 !== undefined) {
+      content = "user_attr1,user_attr2,reason\n";
+      badRows.forEach(row => {
+        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},\"${row.reason}\"\n`;
+      });
+    } else {
+      // Fallback if structure is unexpected
+      content = "reason\n";
+      badRows.forEach(row => {
+        content += `\"${row.reason}\"\n`;
+      });
+    }
+
+    try {
+      await fs.writeFile(filePath, content);
+      this.logger.info(`Bad rows written to ${filePath}`);
+      return filenameWithTimestamp; // Return only the filename with timestamp, not the full path
+    } catch (error) {
+      this.logger.error(`Error writing bad rows to file ${filePath}: ${error}`);
+      return null;
+    }
+  }
+
+  public async getAifDocumentDetails(): Promise<any[]> {
+    let client: PoolClient | null = null;
+    try {
+      const processedFolioNumbers = await this.getProcessedFolioNumbers();
+      if (processedFolioNumbers.length === 0) {
+        this.logger.warn(
+          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
+        );
+        return [];
+      }
+
+      client = await this.getPool().connect();
+      const query = `
+        SELECT
+          document_process,
+          document_activity,
+          document_type,
+          document_format,
+          document_path,
+          folio_id,
+          transaction_reference_id,
+          document_status,
+          mime_type,
+          user_attr0,
+          user_attr1,
+          user_attr2,
+          user_attr3,
+          user_attr4,
+          user_attr5,
+          user_attr6,
+          user_attr7,
+          user_attr8,
+          user_attr9,
+          approval_status,
+          approved_by,
+          approved_on,
+          comments,
+          audit_code,
+          del_flag,
+          last_update_tms,
+          last_updated_by,
+          creation_date,
+          created_by,
+          page_count,
+          client_id
+        FROM investor.aif_document_details
+        WHERE user_attr2 = ANY($1::text[]);
+      `;
+      const res = await client.query(query, [processedFolioNumbers]);
+      this.logger.info(
+        `Fetched ${res.rows.length} rows from aif_document_details based on ${processedFolioNumbers.length} processed folios.`
+      );
+      return res.rows;
+    } catch (error) {
+      this.logger.error(`Error fetching aif_document_details: ${error}`);
+      throw error;
+    } finally {
+      if (client) client.release();
     }
   }
 }

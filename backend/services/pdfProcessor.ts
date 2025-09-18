@@ -5,10 +5,6 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
-import { uploadDirectoryRecursive } from "./s3Uploader";
-import { S3_BUCKET_NAME, getS3Prefix } from "../utils/s3Config";
-/*import { exec } from "child_process";
-import { promisify } from "util";*/
 
 interface ProcessingResult {
   outputFileName: string;
@@ -59,7 +55,7 @@ export class PdfProcessing {
     trxn: string,
     fund: string,
     ihNo: string,
-    fileExt: string,
+    pathVal: string,
     rowNumber: number
   ): Promise<string> {
     if (!fund || !ihNo || /[<>:"|?*]/.test(fund) || /[<>:"|?*]/.test(ihNo)) {
@@ -84,12 +80,11 @@ export class PdfProcessing {
     );
     await fs.mkdir(fileFolderPath, { recursive: true });
 
-    return path.join(
-      fileFolderPath,
-      `CLIENT_CODE_${fund}_${
-        trxn === "DD" ? "BATCH" : "TRANSACTION"
-      }_NUMBER_${ihNo}${fileExt}`
-    );
+    const parsedPath = path.parse(pathVal);
+    const baseFileName = path.basename(fileFolderPath);
+    const fileExt = parsedPath.ext.toLowerCase();
+
+    return path.join(fileFolderPath, `${baseFileName}${fileExt}`);
   }
 
   async processExcelFile(inputFilePath: string): Promise<ProcessingResult> {
@@ -146,7 +141,6 @@ export class PdfProcessing {
       id_fund: string;
       id_trtype: string;
       id_ihno: string;
-      image: string;
       id_path: string;
       id_acno: string;
       page_count: string | number;
@@ -178,11 +172,7 @@ export class PdfProcessing {
         const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
         const trxnType =
           row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-        const image = pathVal.includes("image")
-          ? "image"
-          : pathVal.includes("common")
-          ? "common"
-          : "";
+
         this.logger.info(`Row ${rowNumber} data`, {
           serverId,
           drivePath,
@@ -191,7 +181,6 @@ export class PdfProcessing {
           fund,
           ihNo,
           trxnType,
-          image,
         });
 
         if (!serverId) {
@@ -199,7 +188,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxnType,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Missing serverId",
@@ -213,7 +201,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxnType,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Missing drivePath",
@@ -227,7 +214,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxnType,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Missing pathVal",
@@ -268,7 +254,7 @@ export class PdfProcessing {
               trxn,
               fund,
               ihNo,
-              fileExt,
+              pathVal,
               rowNumber
             );
           } catch (err) {
@@ -277,7 +263,6 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              image: image,
               id_path: pathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: "Path Error",
@@ -310,7 +295,7 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              image: image,
+
               id_path: pathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: pageCount,
@@ -336,7 +321,6 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              image: image,
               id_path: pathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
@@ -350,7 +334,6 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxn,
             id_ihno: ihNo,
-            image: image,
             id_path: pathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Not Found",
@@ -363,7 +346,6 @@ export class PdfProcessing {
           id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
           id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
           id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
-          image: "",
           id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
           id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
           page_count: "Error",
@@ -378,7 +360,6 @@ export class PdfProcessing {
       { header: "id_fund", key: "id_fund" },
       { header: "id_trtype", key: "id_trtype" },
       { header: "id_ihno", key: "id_ihno" },
-      { header: "image", key: "image" },
       { header: "id_path", key: "id_path" },
       { header: "id_acno", key: "id_acno" },
       { header: "page_count", key: "page_count" },
@@ -395,68 +376,6 @@ export class PdfProcessing {
     this.logger.info(`Saving processed file to: ${outputPath}`);
     await csvWorkbook.csv.writeFile(outputPath);
     this.logger.info("Processed file saved");
-
-    try {
-      const outputRoot = path.resolve(__dirname, "../../output");
-      const bucket = S3_BUCKET_NAME;
-
-      const clients = await fs.readdir(outputRoot, { withFileTypes: true });
-      for (const clientDir of clients) {
-        if (
-          clientDir.isDirectory() &&
-          clientDir.name.startsWith("CLIENT_CODE_")
-        ) {
-          const clientPath = path.join(outputRoot, clientDir.name);
-          const s3Prefix = getS3Prefix(clientDir.name);
-          this.logger.info(
-            `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
-          );
-          await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
-        }
-      }
-
-      this.logger.info("All uploads complete.");
-    } catch (err) {
-      this.logger.error("Upload failed:", err);
-    }
-
-    // Trigger upload script
-
-    // Path to the batch file
-    /*    const batPath = path.resolve(
-      __dirname,
-      "..",
-      "..",
-      "..",
-      "backend",
-      "upload-s3.bat"
-    );
-
-    this.logger.info(`Triggering upload script...`);
-
-    exec(
-      `"${batPath}"`,
-      {
-        shell: "cmd.exe",
-        env: {
-          ...process.env, // keep all existing env vars
-          AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID,
-          AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY,
-          AWS_SESSION_TOKEN: process.env.AWS_SESSION_TOKEN,
-          AWS_DEFAULT_REGION: process.env.AWS_DEFAULT_REGION,
-        },
-      },
-      (error, stdout, stderr) => {
-        if (error) {
-          this.logger.error(`Upload error: ${error.message}`);
-          return;
-        }
-        if (stderr) {
-          this.logger.error(`Upload stderr: ${stderr}`);
-        }
-        this.logger.info(`Upload stdout: ${stdout}`);
-      }
-    );*/
 
     this.logger.info("Deleting input file:", { inputFilePath });
     await fs.unlink(inputFilePath);

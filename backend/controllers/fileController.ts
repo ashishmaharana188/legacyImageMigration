@@ -2,23 +2,38 @@ import { Request, Response } from "express";
 import { PdfProcessing } from "../services/pdfProcessor";
 import { Splitting } from "../services/splitProcessor";
 import { Database } from "../services/database";
+import { MongoDatabase } from "../services/mongoDatabase";
 import { uploadDirectoryRecursive } from "../services/s3Uploader";
+import { uploadSplitFilesToS3 } from "../services/s3Uploader";
 import path from "path";
 import fs from "fs/promises";
-import { S3_BUCKET_NAME, getS3Prefix } from "../utils/s3Config";
+import {
+  S3_BUCKET_NAME,
+  getS3FilePrefix,
+  getS3SplitPrefix,
+} from "../utils/s3Config";
 import { wss } from "../app";
 import { WebSocket } from "ws"; // Added this line
+import {
+  listFiles,
+  deleteFiles,
+  searchFiles,
+  searchFolders,
+} from "../services/s3Manager";
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {
     try {
       if (!req.file) {
-        return res.status(400).json({ error: "No file uploaded" });
+        return res
+          .status(400)
+          .json({ statusCode: 400, error: "No file uploaded" });
       }
       console.log(`Processing file: ${req.file.originalname}`);
       const processor = new PdfProcessing();
       const result = await processor.processExcelFile(req.file.path);
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: "File processed successfully",
         originalFile: req.file.originalname,
         processedFile: result.outputFileName,
@@ -33,6 +48,7 @@ class FileController {
     } catch (error) {
       console.error("Processing error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to process file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -49,13 +65,16 @@ class FileController {
           .then(() => true)
           .catch(() => false))
       ) {
-        return res.status(404).json({ error: "File not found" });
+        return res
+          .status(404)
+          .json({ statusCode: 404, error: "File not found" });
       }
       res.setHeader("Content-Type", "text/csv"); // Set for CSV
       res.download(filePath, filename);
     } catch (error) {
       console.error("Download error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to download file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -71,12 +90,15 @@ class FileController {
           .then(() => true)
           .catch(() => false))
       ) {
-        return res.status(404).json({ error: "File not found" });
+        return res
+          .status(404)
+          .json({ statusCode: 404, error: "File not found" });
       }
       res.download(filePath, path.basename(filePath));
     } catch (error) {
       console.error("Download error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to download file",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -87,8 +109,10 @@ class FileController {
     try {
       const processor = new Splitting();
       const result = await processor.splitFiles();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: "Files split successfully",
+        splitSummary: result.summary, // Changed from splitFiles to splitSummary
         splitFiles: result.splitFiles.map((file: any) => ({
           originalPath: file.originalPath,
           url: `/download-file/${encodeURIComponent(file.splitPath)}`,
@@ -98,6 +122,7 @@ class FileController {
     } catch (error) {
       console.error("Split error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to split files",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -108,16 +133,65 @@ class FileController {
     try {
       const processor = new Database();
       const result = await processor.generateSql(); // Call new method in pdfProcessor.ts
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message: "SQL generated successfully",
         sql: result.sql,
       });
     } catch (error) {
       console.error("SQL generation error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to generate SQL",
         details: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  }
+
+  async processSqlMongo(req: Request, res: Response) {
+    const { action } = req.body;
+    const database = new Database();
+
+    if (action === "executeSql") {
+      const { result, summary } = await database.executeSql();
+      if (result === "success") {
+        return res.json({
+          message: "SQL executed successfully",
+          totalRows: summary.insertedRows + summary.errorRows,
+          successfulRows: summary.insertedRows,
+          badRows: summary.errorRows,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      } else {
+        return res.status(500).json({
+          message: "Failed to execute SQL",
+          totalRows: summary.insertedRows + summary.errorRows,
+          successfulRows: summary.insertedRows,
+          badRows: summary.errorRows,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      }
+    } else if (action === "updateFolioAndTransaction") {
+      const { result, summary } = await database.updateFolioAndTransaction();
+      if (result === "success") {
+        return res.json({
+          message: "Folio and Transaction updated successfully",
+          updatedFolioRows: summary.updatedFolioRows,
+          updatedTransactionRows: summary.updatedTransactionRows,
+          badRows: summary.badRows.length,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      } else {
+        return res.status(500).json({
+          message: "Failed to update Folio and Transaction",
+          updatedFolioRows: summary.updatedFolioRows,
+          updatedTransactionRows: summary.updatedTransactionRows,
+          badRows: summary.badRows.length,
+          badRowsFilePath: summary.badRowsFilePath,
+        });
+      }
+    } else {
+      return res.status(400).json({ message: "Invalid action" });
     }
   }
 
@@ -125,17 +199,20 @@ class FileController {
     try {
       const processor = new Database();
       const result = await processor.executeSql();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message:
           result.result === "success"
             ? "SQL executed successfully"
             : "SQL execution failed",
         result: result.result,
         logs: result.logs,
+        summary: result.summary,
       });
     } catch (error) {
       console.error("SQL execution error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to execute SQL",
         details: error instanceof Error ? error.message : "Unknown error",
       });
@@ -146,17 +223,58 @@ class FileController {
     try {
       const processor = new Database();
       const result = await processor.updateFolioAndTransaction();
-      res.json({
+      res.status(200).json({
+        statusCode: 200,
         message:
           result.result === "success"
             ? "Folio_id updated successfully"
             : "Folio_id update failed",
         result: result.result,
         logs: result.logs,
+        summary: result.summary,
       });
     } catch (error) {
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to run updateFolioAndTransaction()",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async sanityCheckDuplicates(req: Request, res: Response) {
+    try {
+      const { cutoffTms, dryRun, normalize } = req.body;
+      const processor = new Database();
+      const result = await processor.sanityCheckDuplicates({
+        dryRun,
+        normalize,
+        cutoffTms,
+      });
+      res.status(200).json({ statusCode: 200, ...result });
+    } catch (error) {
+      console.error("Sanity check error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to run sanity check",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async transferDataToMongo(req: Request, res: Response) {
+    try {
+      const mongoDatabase = new MongoDatabase();
+      const result = await mongoDatabase.transferDataFromPostgres();
+      res.status(200).json({
+        statusCode: 200,
+        message: `Transferred ${result.transferredCount} documents to MongoDB successfully.`,
+      });
+    } catch (error) {
+      console.error("Data transfer error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to transfer data to MongoDB",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -164,29 +282,6 @@ class FileController {
 
   async uploadToS3(req: Request, res: Response) {
     try {
-      console.log("--- AWS Credential Check (from fileController) ---");
-      console.log(
-        "AWS_ACCESS_KEY_ID:",
-        process.env.AWS_ACCESS_KEY_ID ? "Set" : "Not Set"
-      );
-      console.log(
-        "AWS_SECRET_ACCESS_KEY:",
-        process.env.AWS_SECRET_ACCESS_KEY ? "Set (Masked)" : "Not Set"
-      );
-      console.log(
-        "AWS_SESSION_TOKEN:",
-        process.env.AWS_SESSION_TOKEN ? "Set" : "Not Set"
-      );
-      console.log(
-        "AWS_DEFAULT_REGION:",
-        process.env.AWS_DEFAULT_REGION || "ap-south-1"
-      );
-      console.log(
-        "S3_BUCKET_NAME:",
-        S3_BUCKET_NAME // Using centralized config
-      );
-      console.log("--------------------------------------------------");
-
       const outputRoot = path.join(__dirname, "../../output");
       const bucket = S3_BUCKET_NAME; // Using centralized config
 
@@ -197,31 +292,390 @@ class FileController {
           clientDir.name.startsWith("CLIENT_CODE_")
         ) {
           const clientPath = path.join(outputRoot, clientDir.name);
-          const s3Prefix = getS3Prefix(clientDir.name); // Using centralized config
+          const s3Prefix = getS3FilePrefix(clientDir.name); // Using centralized config
           console.log(
             `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
           );
           await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
         }
       }
-      res.json({ message: "Files uploaded to S3 successfully" });
+      res.status(200).json({
+        statusCode: 200,
+        message: "Files uploaded to S3 successfully",
+      });
       // Send WebSocket message on success
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 's3UploadStatus', status: 'success', message: 'S3 upload completed successfully!' }));
+          client.send(
+            JSON.stringify({
+              type: "s3UploadStatus",
+              status: "success",
+              message: "S3 upload completed successfully!",
+            })
+          );
         }
       });
     } catch (error) {
       console.error("S3 upload error:", error);
       res.status(500).json({
+        statusCode: 500,
         error: "Failed to upload files to S3",
         details: error instanceof Error ? error.message : "Unknown error",
       });
       // Send WebSocket message on error
       wss.clients.forEach((client: WebSocket) => {
         if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ type: 's3UploadStatus', status: 'error', message: `S3 upload failed: ${error instanceof Error ? error.message : 'Unknown error'}` }));
+          client.send(
+            JSON.stringify({
+              type: "s3UploadStatus",
+              status: "error",
+              message: `S3 upload failed: ${
+                error instanceof Error ? error.message : "Unknown error"
+              }`,
+            })
+          );
         }
+      });
+    }
+  }
+
+  async uploadSplitFilesToS3(req: Request, res: Response) {
+    const splitOutputRoot = path.join(__dirname, "../../split_output");
+    const bucket = S3_BUCKET_NAME;
+    const results = {
+      successful: [] as string[],
+      failed: [] as { name: string; error: string }[],
+    };
+
+    try {
+      const clients = await fs.readdir(splitOutputRoot, {
+        withFileTypes: true,
+      });
+      const clientDirs = clients.filter(
+        (d) => d.isDirectory() && d.name.startsWith("CLIENT_CODE_")
+      );
+
+      if (clientDirs.length === 0) {
+        return res.status(200).json({
+          statusCode: 200,
+          message: "No client directories found to upload.",
+        });
+      }
+
+      for (const clientDir of clients) {
+        if (
+          clientDir.isDirectory() &&
+          clientDir.name.startsWith("CLIENT_CODE_")
+        ) {
+          const clientPath = path.join(splitOutputRoot, clientDir.name);
+          const s3Prefix = getS3SplitPrefix(clientDir.name);
+          console.log(
+            `Uploading SpitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+          );
+          try {
+            await uploadSplitFilesToS3(clientPath, bucket, s3Prefix);
+            results.successful.push(clientDir.name);
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
+            console.error(`S3 upload error for ${clientDir.name}:`, error);
+            results.failed.push({ name: clientDir.name, error: errorMessage });
+          }
+        }
+      }
+      if (results.failed.length > 0) {
+        return res.status(500).json({
+          statusCode: 500,
+          message: "S3 upload process completed with one or more failures.",
+          ...results,
+        });
+      }
+
+      res.status(200).json({
+        statusCode: 200,
+        message: "All split files uploaded to S3 successfully.",
+        ...results,
+      });
+    } catch (error) {
+      // This outer catch handles errors like `fs.readdir` failing
+      console.error("General S3 upload process error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "A critical error occurred during the S3 upload process.",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async listS3Files(req: Request, res: Response) {
+    try {
+      const prefix = (req.query.prefix as string) || "";
+      const continuationToken = req.query.continuationToken as
+        | string
+        | undefined;
+      const data = await listFiles(prefix, continuationToken);
+      res.status(200).json({ statusCode: 200, ...data });
+    } catch (error) {
+      console.error("S3 list error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to list S3 files",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async deleteS3Files(req: Request, res: Response) {
+    try {
+      const { keys } = req.body;
+      if (!keys || !Array.isArray(keys) || keys.length === 0) {
+        return res
+          .status(400)
+          .json({ statusCode: 400, error: "File keys are required" });
+      }
+      const deletedKeys = await deleteFiles(keys);
+      res.status(200).json({
+        statusCode: 200,
+        message: "Files deleted successfully",
+        deletedKeys,
+      });
+    } catch (error) {
+      console.error("S3 delete error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to delete S3 files",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async searchS3Files(req: Request, res: Response) {
+    try {
+      const currentBrowsingPrefix = (req.query.prefix as string) || "";
+      const transactionNumberPattern =
+        (req.query.transactionNumberPattern as string) || "d+";
+      const filenamePattern = (req.query.filenamePattern as string) || ".*"; // Default to '.*' for global file search
+
+      const continuationToken = req.query.continuationToken as
+        | string
+        | undefined;
+
+      let files: { key: string; lastModified: Date | undefined }[] = [];
+      let directories: string[] = [];
+      let nextContinuationToken: string | undefined;
+
+      const isTransactionPatternProvided = transactionNumberPattern !== "d+";
+      const isFilenamePatternProvided = filenamePattern !== ".*";
+
+      console.log("--- searchS3Files Debug Start ---");
+      console.log("Input - currentBrowsingPrefix:", currentBrowsingPrefix);
+      console.log(
+        "Input - transactionNumberPattern:",
+        transactionNumberPattern
+      );
+      console.log("Input - filenamePattern:", filenamePattern);
+      console.log("Input - continuationToken:", continuationToken);
+      console.log(
+        "Derived - isTransactionPatternProvided:",
+        isTransactionPatternProvided
+      );
+      console.log(
+        "Derived - isFilenamePatternProvided:",
+        isFilenamePatternProvided
+      );
+
+      if (!isTransactionPatternProvided && !isFilenamePatternProvided) {
+        console.log(
+          "Logic Branch: No search patterns provided (normal list operation)."
+        );
+        const listResult = await listFiles(
+          currentBrowsingPrefix,
+          continuationToken
+        );
+        console.log(
+          "listFiles result (no patterns) - directories:",
+          listResult.directories.length,
+          "files",
+          listResult.files.length
+        );
+        directories = listResult.directories;
+        files = listResult.files;
+        nextContinuationToken = listResult.nextContinuationToken;
+      } else if (isTransactionPatternProvided && !isFilenamePatternProvided) {
+        console.log(
+          "Logic Branch: transactionNumberPattern provided, filenamePattern not (filtered folder display)."
+        );
+        let allDirectories: string[] = [];
+        let currentContinuationToken: string | undefined = continuationToken;
+
+        do {
+          const listResult = await listFiles(
+            currentBrowsingPrefix,
+            currentContinuationToken
+          );
+          console.log(
+            "listFiles result (transaction pattern) - raw directories (page):",
+            listResult.directories
+          );
+          allDirectories = allDirectories.concat(listResult.directories);
+          console.log(
+            "Accumulated allDirectories (current count):",
+            allDirectories.length,
+            "Content:",
+            allDirectories
+          );
+          currentContinuationToken = listResult.nextContinuationToken;
+          console.log(
+            "Next ContinuationToken for transaction pattern search:",
+            currentContinuationToken
+          );
+        } while (currentContinuationToken);
+
+        const transactionRegex = new RegExp(
+          `^${currentBrowsingPrefix}CLIENT_CODE_\\d+_TRANSACTION_NUMBER_${transactionNumberPattern}`
+        );
+        console.log("Constructed transactionRegex:", transactionRegex.source);
+        directories = allDirectories.filter((dir) =>
+          transactionRegex.test(dir)
+        );
+        console.log(
+          "Filtered directories (by transactionRegex):",
+          directories.length
+        );
+        files = []; // No individual files displayed at this level, only folders
+        nextContinuationToken = undefined; // All results fetched by looping
+      } else if (!isTransactionPatternProvided && isFilenamePatternProvided) {
+        console.log(
+          "Logic Branch: filenamePattern provided, transactionNumberPattern not (global file search, extract folders)."
+        );
+        const s3CommandPrefix = ""; // Global search
+        const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\\d+_TRANSACTION_NUMBER_\\d+/${filenamePattern}`;
+        console.log("Constructed fileSearchRegex (global):", fileSearchRegex);
+        const allMatchedFiles = await searchFiles(
+          s3CommandPrefix,
+          fileSearchRegex
+        );
+        console.log(
+          "searchFiles result (global) - matched files:",
+          allMatchedFiles.files.length
+        );
+
+        const uniqueTransactionFolders = new Set<string>();
+        allMatchedFiles.files.forEach((file) => {
+          const match = file.key.match(
+            /(CLIENT_CODE_\\d+_TRANSACTION_NUMBER_\\d+\/)/
+          );
+          if (match) {
+            const fullTransactionFolderPath = currentBrowsingPrefix + match[1];
+            uniqueTransactionFolders.add(fullTransactionFolderPath);
+          }
+        });
+        directories = Array.from(uniqueTransactionFolders).sort();
+        console.log(
+          "Extracted unique transaction folders:",
+          directories.length
+        );
+        files = []; // No individual files displayed at this level, only folders
+        nextContinuationToken = undefined; // All results fetched by searchFiles
+      } else {
+        console.log(
+          "Logic Branch: Both transactionNumberPattern and filenamePattern provided (specific file search)."
+        );
+        const s3CommandPrefix = ""; // Global search
+        const clientCodeMatch =
+          currentBrowsingPrefix.match(/CLIENT_CODE_(\d+)/);
+        const clientCode = clientCodeMatch ? clientCodeMatch[1] : "d+";
+        console.log("Derived clientCode for specific search:", clientCode);
+
+        const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionNumberPattern}`;
+        const fileSearchRegex = `^${currentBrowsingPrefix}${transactionPart}/${filenamePattern}`;
+        console.log("Constructed fileSearchRegex (specific):", fileSearchRegex);
+
+        const allMatchedFiles = await searchFiles(
+          s3CommandPrefix,
+          fileSearchRegex
+        );
+        console.log(
+          "searchFiles result (specific) - matched files:",
+          allMatchedFiles.files.length
+        );
+        files = allMatchedFiles.files;
+        directories = [];
+        nextContinuationToken = undefined;
+      }
+
+      console.log(
+        "Final Response - directories count:",
+        directories.length,
+        "files count:",
+        files.length
+      );
+      console.log("--- searchS3Files Debug End ---");
+      res
+        .status(200)
+        .json({ statusCode: 200, files, directories, nextContinuationToken });
+    } catch (error) {
+      console.error("S3 search error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to search S3 files",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async searchS3Folders(req: Request, res: Response) {
+    try {
+      const prefix = (req.query.prefix as string) || "";
+      const pattern = (req.query.pattern as string) || "";
+      const continuationToken = req.query.continuationToken as
+        | string
+        | undefined;
+      const data = await searchFolders(prefix, pattern, continuationToken);
+      res.status(200).json({ statusCode: 200, ...data });
+    } catch (error) {
+      console.error("S3 folder search error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to search S3 folders",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+  async downloadGeneratedFile(req: Request, res: Response) {
+    try {
+      const filename = req.params.filename;
+      const filePath = path.join(__dirname, "../../split_output", filename);
+
+      // Security check: Ensure the file is within the intended directory
+      const resolvedPath = path.resolve(filePath);
+      const expectedDir = path.resolve(
+        path.join(__dirname, "../../split_output")
+      );
+
+      if (!resolvedPath.startsWith(expectedDir)) {
+        return res
+          .status(403)
+          .json({ statusCode: 403, error: "Access denied." });
+      }
+
+      if (
+        !(await fs
+          .access(filePath)
+          .then(() => true)
+          .catch(() => false))
+      ) {
+        return res
+          .status(404)
+          .json({ statusCode: 404, error: "File not found" });
+      }
+      res.download(filePath, filename);
+    } catch (error) {
+      console.error("Download error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to download file",
+        details: error instanceof Error ? error.message : "Unknown error",
       });
     }
   }

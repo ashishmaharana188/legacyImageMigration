@@ -1,17 +1,50 @@
 import dotenv from "dotenv";
 import os from "os";
-import path from "path"; // path is needed for dotenv config
+import path from "path";
+import * as fs from "fs";
+import { Database } from "./services/database";
 
-// Ensure dotenv is configured as early as possible
+// Graceful shutdown and error handling
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+  // Optionally, you can add more robust logging or graceful shutdown logic here
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+  // It's often recommended to restart the process after an uncaught exception
+  process.exit(1);
+});
+
+const isProduction = process.env.NODE_ENV === "production";
+const envFile = isProduction ? ".env.production" : ".env.development";
 const userConfigDir = path.join(os.homedir(), ".appConfig");
-dotenv.config({ path: path.join(userConfigDir, ".env") });
+const envPath = path.join(userConfigDir, envFile);
+
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
+  console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
+  console.log(`MONGO_URI: ${process.env.MONGO_URI}`);
+  console.log(`LOCAL_URI: ${process.env.LOCAL_URI}`);
+
+  if (isProduction) {
+    console.log("Connected to Prod database");
+  } else {
+    console.log("Connected to Dev database");
+  }
+} else {
+  console.warn(`Warning: Environment file not found at: ${envPath}`);
+}
 
 import express from "express";
 import cors from "cors";
 import multer from "multer";
-import fs from "fs/promises";
+import * as fsp from "fs/promises";
 import { fileController } from "./controllers/fileController";
-import { startSshTunnel } from "./services/tunnel";
+import { startSshTunnel, startMongoSshTunnel } from "./services/tunnel";
+import { MongoDatabase } from "./services/mongoDatabase"; // Added this line
+import { verifyS3Connection } from "./services/s3Manager";
 import { WebSocketServer } from "ws"; // Added this line
 
 const app = express();
@@ -26,21 +59,21 @@ const processedDir = "processed";
 async function ensureDirectories() {
   try {
     if (
-      !(await fs
+      !(await fsp
         .access(uploadDir)
         .then(() => true)
         .catch(() => false))
     ) {
-      await fs.mkdir(uploadDir, { recursive: true });
+      await fsp.mkdir(uploadDir, { recursive: true });
       console.log(`Created directory: ${uploadDir}`);
     }
     if (
-      !(await fs
+      !(await fsp
         .access(processedDir)
         .then(() => true)
         .catch(() => false))
     ) {
-      await fs.mkdir(processedDir, { recursive: true });
+      await fsp.mkdir(processedDir, { recursive: true });
       console.log(`Created directory: ${processedDir}`);
     }
   } catch (err) {
@@ -100,38 +133,92 @@ app.post(
 app.get("/download/:filename", fileController.downloadFile);
 
 app.get("/download-file/:filePath", fileController.downloadReferencedFile);
-
-app.post("/split-files", fileController.splitFiles);
-app.post("/generate-sql", fileController.generateSql);
-app.post("/execute-sql", fileController.executeSql);
-app.post(
-  "/updateFolioAndTransaction-sql",
-  fileController.updateFolioAndTransaction
+app.get(
+  "/download-generated-file/:filename",
+  fileController.downloadGeneratedFile
 );
 
+app.post("/split-files", fileController.splitFiles);
+app.post("/upload-split-to-s3", fileController.uploadSplitFilesToS3);
+app.post("/process-sql-mongo", fileController.processSqlMongo);
+
+app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
+app.post("/transfer-to-mongo", fileController.transferDataToMongo);
 app.post("/upload-to-s3", fileController.uploadToS3);
+app.get("/s3-list-objects", fileController.listS3Files);
+app.post("/s3-delete-object", fileController.deleteS3Files);
+app.get("/s3-search-files", fileController.searchS3Files);
+app.get("/s3-search-folders", fileController.searchS3Folders);
 
 // WebSocket server setup
 const wss = new WebSocketServer({ noServer: true });
 
 wss.on("connection", (ws: WebSocket) => {
   console.log("WebSocket client connected");
-  ws.send(JSON.stringify({ type: "message", payload: "Welcome to the WebSocket server!" }));
+  ws.send(
+    JSON.stringify({
+      type: "message",
+      payload: "Welcome to the WebSocket server!",
+    })
+  );
 });
 
-export { wss }; // Export wss for use in other modules
+export { wss };
 
 const startServer = async () => {
-  let server: any;
+  let pgServer: any;
+  let mongoServer: any;
+  let mongoLocalPort: number | undefined;
+
   if (process.env.USE_SSH_TUNNEL === "true") {
-    server = await startSshTunnel();
+    pgServer = await startSshTunnel();
   }
+
+  if (process.env.USE_MONGO_SSH_TUNNEL === "true") {
+    const tunnelResult = await startMongoSshTunnel();
+    if (tunnelResult) {
+      mongoServer = tunnelResult.server;
+      mongoLocalPort = tunnelResult.localPort;
+
+      if (process.env.MONGO_URI) {
+        try {
+          const mongoUriObj = new URL(process.env.MONGO_URI);
+          mongoUriObj.hostname = "localhost";
+          mongoUriObj.port = mongoLocalPort.toString();
+          process.env.MONGO_URI = mongoUriObj.toString();
+          console.log(
+            `MongoDB URI updated for tunnel: ${process.env.MONGO_URI}`
+          );
+        } catch (e) {
+          console.error("Error parsing MONGO_URI for tunnel update:", e);
+        }
+      } else {
+        console.warn("USE_MONGO_SSH_TUNNEL is true but MONGO_URI is not set.");
+      }
+    }
+  }
+
+  const mongoDatabase = new MongoDatabase();
+  try {
+    await mongoDatabase.connect();
+    console.log("MongoDB connection established during startup.");
+  } catch (error) {
+    console.error(
+      "Failed to establish MongoDB connection during startup:",
+      error
+    );
+  }
+
+  // Initialize and warm up PostgreSQL database
+  const database = new Database();
+  await database.warmup();
+
+  await verifyS3Connection();
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
   });
 
-  // Upgrade HTTP server to WebSocket
   expressServer.on("upgrade", (request, socket, head) => {
     wss.handleUpgrade(request, socket, head, (ws) => {
       wss.emit("connection", ws, request);
@@ -142,11 +229,14 @@ const startServer = async () => {
     console.log("Shutting down gracefully...");
     expressServer.close(() => {
       console.log("Closed out remaining connections.");
-      if (server) {
-        server.close();
-        console.log("SSH tunnel closed.");
+      if (pgServer) {
+        pgServer.close();
+        console.log("PostgreSQL SSH tunnel closed.");
       }
-      // Close WebSocket server
+      if (mongoServer) {
+        mongoServer.close();
+        console.log("MongoDB SSH tunnel closed.");
+      }
       wss.close(() => {
         console.log("WebSocket server closed.");
       });
