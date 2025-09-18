@@ -92,7 +92,7 @@ export const startMongoSshTunnel = async () => {
       sshOptions,
       forwardOptions
     );
-    console.log(`MongoDB SSH tunnel created: localhost:${localPort} -> ${process.env.MONGO_SSH_REMOTE_HOST}:${process.env.MONGO_SSH_REMOTE_PORT}`);
+    console.log(`MongoDB SSH tunnel created: localhost:${localPort} -> ${process.env.MONGO_SSH_REMOTE_HOST ? "SET" : "NOT SET"}:${process.env.MONGO_SSH_REMOTE_PORT ? "SET" : "NOT SET"}`);
     return { server, localPort }; // Return the local port
   } catch (error) {
     console.error("MongoDB SSH tunnel error:", error);
