@@ -25,7 +25,7 @@ if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
   console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
   console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
-  console.log(`MONGO_URI: ${process.env.MONGO_URI}`);
+  console.log(`MONGO_URI: ${process.env.MONGO_URI ? "SET" : "NOT SET"}`);
   console.log(`LOCAL_URI: ${process.env.LOCAL_URI}`);
 
   if (isProduction) {
@@ -187,7 +187,9 @@ const startServer = async () => {
           mongoUriObj.port = mongoLocalPort.toString();
           process.env.MONGO_URI = mongoUriObj.toString();
           console.log(
-            `MongoDB URI updated for tunnel: ${process.env.MONGO_URI}`
+            `MongoDB URI updated for tunnel: ${
+              process.env.MONGO_URI ? "SET" : "NOT SET"
+            }`
           );
         } catch (e) {
           console.error("Error parsing MONGO_URI for tunnel update:", e);
