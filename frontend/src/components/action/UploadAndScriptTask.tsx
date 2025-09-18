@@ -8,9 +8,7 @@ interface SummaryItem {
 }
 
 interface SplitFile {
-  originalPath: string;
-  url: string;
-  page: number;
+  [key: string]: any;
 }
 
 interface FileResponse {
@@ -62,7 +60,6 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string>("");
   const [splitMessage, setSplitMessage] = useState<string>("");
-  const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
 
   const handleFileChange = useCallback(
@@ -71,7 +68,6 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         setSelectedFile(event.target.files[0]);
         setUploadMessage("");
         setSplitMessage("");
-        setSplitFiles([]);
       }
     },
     []
@@ -128,7 +124,6 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
           filename: selectedFile.name,
         }
       );
-      setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || "Splitting successful");
       updateTaskLog("uploadAndScript", res.data);
     } catch (error: any) {
@@ -185,7 +180,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, updateTaskLog]);
+  }, [selectedFile, updateTaskLog, setSummaryData, setUploadProgress]);
 
   const handleUploadSplitFilesToS3 = useCallback(async () => {
     setLoading(true);
@@ -216,7 +211,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       selectedFile={selectedFile}
       uploadMessage={uploadMessage}
       splitMessage={splitMessage}
-      splitFiles={splitFiles}
+      splitFiles={[]}
       loading={loading}
       handleFileChange={handleFileChange}
       handleUpload={handleUpload}

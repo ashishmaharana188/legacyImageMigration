@@ -13,9 +13,7 @@ interface SummaryItem {
 }
 
 interface SplitFile {
-  originalPath: string;
-  url: string;
-  page: number;
+  [key: string]: any;
 }
 
 interface FileResponse {

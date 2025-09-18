@@ -21,6 +21,11 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     null
   );
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
+  const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
+
+  const toggleSplitLog = (logId: string) => {
+    setExpandedSplitLog(prev => (prev === logId ? null : logId));
+  };
 
   const toggleBadRowsDisplay = useCallback(
     async (filePath: string, logId: string) => {
@@ -94,6 +99,45 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 </pre>
               )}
             </>
+          )}
+        </div>
+      );
+    } else if (log.splitSummary) {
+      const isExpanded = expandedSplitLog === logKey;
+      return (
+        <div>
+          <p>Total Original Files Processed: {log.splitSummary.totalOriginalFilesProcessed}</p>
+          <p>Total Split Files Generated: {log.splitSummary.totalSplitFilesGenerated}</p>
+          <p>Errors: {log.splitSummary.splitErrors}</p>
+          <button onClick={() => toggleSplitLog(logKey)}>
+            {isExpanded ? "Hide Details" : "Show Details"}
+          </button>
+          {isExpanded && (
+            <div className="bg-gray-100 p-2 rounded mt-2">
+              <h5 className="font-semibold">Split Verification Log:</h5>
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-2 py-1">Fund</th>
+                    <th scope="col" className="px-2 py-1">IH No</th>
+                    <th scope="col" className="px-2 py-1">AC No</th>
+                    <th scope="col" className="px-2 py-1">Status</th>
+                    <th scope="col" className="px-2 py-1">CSV Page Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {log.splitFiles.map((item: any, index: number) => (
+                    <tr key={index} className="bg-white border-b">
+                      <td className="px-2 py-1">{item.id_fund}</td>
+                      <td className="px-2 py-1">{item.id_ihno}</td>
+                      <td className="px-2 py-1">{item.id_acno}</td>
+                      <td className="px-2 py-1">{item.status}</td>
+                      <td className="px-2 py-1">{item.page_count ?? 'N/A'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       );
