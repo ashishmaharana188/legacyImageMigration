@@ -21,8 +21,12 @@ export async function verifyS3Connection(): Promise<void> {
     console.log("Verifying S3 connection...");
     await s3.send(new ListBucketsCommand({}));
     console.log("S3 connection successful.");
-  } catch (error) {
-    console.error("S3 connection failed:", error);
+  } catch (error: any) {
+    if (error.name === "ExpiredToken" || (error.message && error.message.includes("token expired"))) {
+      console.error("S3 connection failed: Authentication token expired. Please refresh your credentials.");
+    } else {
+      console.error("S3 connection failed:", error.message || error);
+    }
   }
 }
 
