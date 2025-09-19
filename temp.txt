@@ -1,1 +1,0 @@
-remove the split file path output logs, replace it with a simialr setup like the sql logs where we can store logs in id_ihno field, id_acno and the page_count, if user clicks the show results it expands and shows this information 
