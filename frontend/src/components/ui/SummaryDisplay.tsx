@@ -6,10 +6,16 @@ interface SummaryItem {
   status: string;
 }
 
+interface UploadProgress {
+  fileName: string;
+  progress?: number;
+  status?: string;
+}
+
 interface SummaryDisplayProps {
   taskLogs: { [key: string]: any };
   summaryData: SummaryItem[];
-  uploadProgress: Record<string, number>;
+  uploadProgress: UploadProgress | null;
 }
 
 const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
@@ -160,7 +166,10 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         </div>
       );
     } else if (log.dryRun !== undefined && log.rows !== undefined) {
-      const duplicatesMap = new Map<string, { count: number; entries: any[] }>();
+      const duplicatesMap = new Map<
+        string,
+        { count: number; entries: any[] }
+      >();
 
       log.rows.forEach((row: any) => {
         const key = row.user_attr1;
@@ -172,7 +181,9 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         entry.entries.push(row);
       });
 
-      const duplicateEntries = Array.from(duplicatesMap.values()).filter(entry => entry.count > 1);
+      const duplicateEntries = Array.from(duplicatesMap.values()).filter(
+        (entry) => entry.count > 1
+      );
 
       return (
         <div>
@@ -187,18 +198,34 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <table className="w-full text-sm text-left">
                 <thead className="text-xs uppercase bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-2 py-1">Client ID</th>
-                    <th scope="col" className="px-2 py-1">User Attr1</th>
-                    <th scope="col" className="px-2 py-1">Creation Date</th>
-                    <th scope="col" className="px-2 py-1">Duplicate Count</th>
+                    <th scope="col" className="px-2 py-1">
+                      Client ID
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      User Attr1
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Creation Date
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Duplicate Count
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {duplicateEntries.map((entry: any, index: number) => (
                     <tr key={index} className="bg-white border-b">
-                      <td className="px-2 py-1">{entry.entries[0].client_id}</td>
-                      <td className="px-2 py-1">{entry.entries[0].user_attr1}</td>
-                      <td className="px-2 py-1">{new Date(entry.entries[0].creation_date).toLocaleString()}</td>
+                      <td className="px-2 py-1">
+                        {entry.entries[0].client_id}
+                      </td>
+                      <td className="px-2 py-1">
+                        {entry.entries[0].user_attr1}
+                      </td>
+                      <td className="px-2 py-1">
+                        {new Date(
+                          entry.entries[0].creation_date
+                        ).toLocaleString()}
+                      </td>
                       <td className="px-2 py-1 font-bold">{entry.count}</td>
                     </tr>
                   ))}
@@ -210,8 +237,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           )}
         </div>
       );
-    } else if (log.insertedRows !== undefined && log.badRows !== undefined && log.message && log.message.includes("SQL executed successfully")) {
-
+    } else if (
+      log.insertedRows !== undefined &&
+      log.badRows !== undefined &&
+      log.message &&
+      log.message.includes("SQL executed successfully")
+    ) {
       return (
         <div>
           <h5 className="font-semibold">SQL Execution Summary:</h5>
@@ -280,7 +311,13 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           )}
         </div>
       );
-    } else if (log.transferredCount !== undefined && log.documents !== undefined && log.message && log.message.includes("Transferred") && log.message.includes("documents to MongoDB successfully")) {
+    } else if (
+      log.transferredCount !== undefined &&
+      log.documents !== undefined &&
+      log.message &&
+      log.message.includes("Transferred") &&
+      log.message.includes("documents to MongoDB successfully")
+    ) {
       return (
         <div>
           <h5 className="font-semibold">MongoDB Transfer Summary:</h5>
@@ -291,9 +328,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <table className="w-full text-sm text-left">
                 <thead className="text-xs uppercase bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-2 py-1">Client ID</th>
-                    <th scope="col" className="px-2 py-1">Transaction No</th>
-                    <th scope="col" className="px-2 py-1">Work Date</th>
+                    <th scope="col" className="px-2 py-1">
+                      Client ID
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Transaction No
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Work Date
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -421,41 +464,34 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <div key={index} className="mb-2">
                 <p>File: {item.fileName}</p>
                 <p>Status: {item.status}</p>
-                {uploadProgress[item.fileName] !== undefined && (
-                  <div className="w-full bg-gray-300 rounded-full h-2.5 dark:bg-gray-700">
-                    <div
-                      className="bg-[#212427] h-2.5 rounded-full"
-                      style={{ width: `${uploadProgress[item.fileName]}%` }}
-                    ></div>
-                    <span className="text-sm font-medium text-blue-700 dark:text-blue-500">
-                      {uploadProgress[item.fileName]}%
-                    </span>
-                  </div>
-                )}
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {Object.keys(uploadProgress).length > 0 && summaryData.length === 0 && (
+      {uploadProgress && (
         <div className="mt-4">
           <h3 className="text-lg font-semibold mb-1">Upload Progress</h3>
           <div className="bg-gray-200 p-3 rounded">
-            {Object.entries(uploadProgress).map(([fileName, progress]) => (
-              <div key={fileName} className="mb-5">
-                <p>File: {fileName}</p>
-                <div className="w-full bg-gray-300 rounded-full h-2.5 dark:bg-gray-700">
-                  <div
-                    className="bg-[#212427] brightness-150 h-2.5 rounded-full"
-                    style={{ width: `${progress}%` }}
-                  ></div>
+            <div key={uploadProgress.fileName} className="mb-5">
+              <p>File: {uploadProgress.fileName}</p>
+              {uploadProgress.status ? (
+                <p>Status: {uploadProgress.status}</p>
+              ) : (
+                <>
+                  <div className="w-full bg-gray-300 rounded-full h-2.5 dark:bg-gray-700">
+                    <div
+                      className="bg-[#212427] brightness-150 h-2.5 rounded-full"
+                      style={{ width: `${uploadProgress.progress}%` }}
+                    ></div>
+                  </div>
                   <span className="text-sm font-medium text-[#212427] dark:text-[#212427]">
-                    {progress}%
+                    {uploadProgress.progress}%
                   </span>
-                </div>
-              </div>
-            ))}
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}

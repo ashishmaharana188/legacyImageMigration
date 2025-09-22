@@ -48,10 +48,18 @@ interface FileResponse {
   badRows?: number;
 }
 
+interface UploadProgress {
+  fileName: string;
+  progress?: number;
+  status?: string;
+}
+
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
   setSummaryData: React.Dispatch<React.SetStateAction<SummaryItem[]>>;
-  setUploadProgress: React.Dispatch<React.SetStateAction<Record<string, number>>>;
+  setUploadProgress: React.Dispatch<
+    React.SetStateAction<UploadProgress | null>
+  >;
 }
 
 const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
@@ -143,39 +151,18 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   }, [selectedFile, updateTaskLog]);
 
   const handleUploadToS3 = useCallback(async () => {
-    if (!selectedFile) {
-      setUploadMessage("Please select a file first.");
-      return;
-    }
-
     setLoading(true);
     setUploadMessage("Uploading to S3...");
     updateTaskLog("uploadAndScript", "Uploading to S3...");
     setSummaryData([]); // Clear previous summary data
-    setUploadProgress({}); // Clear previous upload progress
-    const formData = new FormData();
-    formData.append("file", selectedFile);
+    setUploadProgress(null); // Clear previous upload progress
 
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-to-s3",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-              setUploadProgress({ [selectedFile.name]: percentCompleted });
-              setUploadMessage(`Uploading to S3: ${percentCompleted}%`);
-            }
-          },
-        }
+        "http://localhost:3000/upload-to-s3"
       );
       setUploadMessage(res.data.message || "Upload to S3 successful");
       updateTaskLog("uploadAndScript", res.data);
-      setSummaryData([{ fileName: selectedFile.name, status: res.data.message || "Upload successful" }]);
     } catch (error: any) {
       const errorMessage = `Upload to S3 failed: ${
         error.response?.data?.message || error.message
@@ -185,12 +172,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, updateTaskLog]);
+  }, [updateTaskLog, setSummaryData, setUploadProgress]);
 
   const handleUploadSplitFilesToS3 = useCallback(async () => {
     setLoading(true);
     setSplitMessage("Uploading split files to S3...");
     updateTaskLog("uploadAndScript", "Uploading split files to S3...");
+    setUploadProgress(null); // Clear previous upload progress
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-split-to-s3",
@@ -209,7 +197,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [updateTaskLog]);
+  }, [updateTaskLog, setUploadProgress]);
 
   return (
     <UploadAndScriptUI

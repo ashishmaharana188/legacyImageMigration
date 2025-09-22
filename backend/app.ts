@@ -43,9 +43,9 @@ import multer from "multer";
 import * as fsp from "fs/promises";
 import { fileController } from "./controllers/fileController";
 import { startSshTunnel, startMongoSshTunnel } from "./services/tunnel";
-import { MongoDatabase } from "./services/mongoDatabase"; // Added this line
+import { initWebSocket } from "./services/webSocketService";
 import { verifyS3Connection } from "./services/s3Manager";
-import { WebSocketServer } from "ws"; // Added this line
+import { MongoDatabase } from "./services/mongoDatabase";
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -150,21 +150,6 @@ app.post("/s3-delete-object", fileController.deleteS3Files);
 app.get("/s3-search-files", fileController.searchS3Files);
 app.get("/s3-search-folders", fileController.searchS3Folders);
 
-// WebSocket server setup
-const wss = new WebSocketServer({ noServer: true });
-
-wss.on("connection", (ws: WebSocket) => {
-  console.log("WebSocket client connected");
-  ws.send(
-    JSON.stringify({
-      type: "message",
-      payload: "Welcome to the WebSocket server!",
-    })
-  );
-});
-
-export { wss };
-
 const startServer = async () => {
   let pgServer: any;
   let mongoServer: any;
@@ -221,11 +206,7 @@ const startServer = async () => {
     console.log(`Server running on http://localhost:${port}`);
   });
 
-  expressServer.on("upgrade", (request, socket, head) => {
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      wss.emit("connection", ws, request);
-    });
-  });
+  initWebSocket(expressServer);
 
   const gracefulShutdown = () => {
     console.log("Shutting down gracefully...");
@@ -239,9 +220,6 @@ const startServer = async () => {
         mongoServer.close();
         console.log("MongoDB SSH tunnel closed.");
       }
-      wss.close(() => {
-        console.log("WebSocket server closed.");
-      });
       process.exit(0);
     });
   };

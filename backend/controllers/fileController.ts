@@ -12,8 +12,6 @@ import {
   getS3FilePrefix,
   getS3SplitPrefix,
 } from "../utils/s3Config";
-import { wss } from "../app";
-import { WebSocket } from "ws"; // Added this line
 import {
   listFiles,
   deleteFiles,
@@ -282,58 +280,63 @@ class FileController {
     try {
       const outputRoot = path.join(__dirname, "../../output");
       const bucket = S3_BUCKET_NAME; // Using centralized config
+      const allResults = {
+        successful: [] as string[],
+        failed: [] as { name: string; error: string }[],
+      };
 
       const clients = await fs.readdir(outputRoot, { withFileTypes: true });
-      for (const clientDir of clients) {
-        if (
-          clientDir.isDirectory() &&
-          clientDir.name.startsWith("CLIENT_CODE_")
-        ) {
-          const clientPath = path.join(outputRoot, clientDir.name);
-          const s3Prefix = getS3FilePrefix(clientDir.name); // Using centralized config
-          console.log(
-            `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
-          );
-          await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
-        }
+      const clientDirs = clients.filter(
+        (d) => d.isDirectory() && d.name.startsWith("CLIENT_CODE_")
+      );
+
+      if (clientDirs.length === 0) {
+        return res.status(200).json({
+          statusCode: 200,
+          message: "No client directories found in output folder to upload.",
+        });
       }
+
+      for (const clientDir of clientDirs) {
+        const clientPath = path.join(outputRoot, clientDir.name);
+        const s3Prefix = getS3FilePrefix(clientDir.name);
+        console.log(
+          `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+        );
+        const results = await uploadDirectoryRecursive(
+          clientPath,
+          bucket,
+          s3Prefix
+        );
+        allResults.successful.push(...results.successful);
+        allResults.failed.push(...results.failed);
+      }
+
+      if (allResults.failed.length > 0) {
+        return res.status(500).json({
+          statusCode: 500,
+          message: "S3 upload process completed with one or more failures.",
+          ...allResults,
+        });
+      }
+
       res.status(200).json({
         statusCode: 200,
-        message: "Files uploaded to S3 successfully",
-      });
-      // Send WebSocket message on success
-      wss.clients.forEach((client: WebSocket) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(
-            JSON.stringify({
-              type: "s3UploadStatus",
-              status: "success",
-              message: "S3 upload completed successfully!",
-            })
-          );
-        }
+        message: "All files from output folder uploaded to S3 successfully.",
+        ...allResults,
       });
     } catch (error: any) {
-      const errorMessage = error.message && error.message.includes("expired credentials")
-        ? "S3 upload failed: Authentication token expired. Please refresh your credentials."
-        : error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 upload failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
       console.error("S3 upload error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "Failed to upload files to S3",
         details: errorMessage,
-      });
-      // Send WebSocket message on error
-      wss.clients.forEach((client: WebSocket) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(
-            JSON.stringify({
-              type: "s3UploadStatus",
-              status: "error",
-              message: `S3 upload failed: ${errorMessage}`,
-            })
-          );
-        }
       });
     }
   }
@@ -361,25 +364,25 @@ class FileController {
         });
       }
 
-      for (const clientDir of clients) {
-        if (
-          clientDir.isDirectory() &&
-          clientDir.name.startsWith("CLIENT_CODE_")
-        ) {
-          const clientPath = path.join(splitOutputRoot, clientDir.name);
-          const s3Prefix = getS3SplitPrefix(clientDir.name);
-          console.log(
-            `Uploading SpitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+      for (const clientDir of clientDirs) {
+        const clientPath = path.join(splitOutputRoot, clientDir.name);
+        const s3Prefix = getS3SplitPrefix(clientDir.name);
+        console.log(
+          `Uploading SplitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`
+        );
+        try {
+          const subResults = await uploadSplitFilesToS3(
+            clientPath,
+            bucket,
+            s3Prefix
           );
-          try {
-            await uploadSplitFilesToS3(clientPath, bucket, s3Prefix);
-            results.successful.push(clientDir.name);
-          } catch (error) {
-            const errorMessage =
-              error instanceof Error ? error.message : "Unknown error";
-            console.error(`S3 upload error for ${clientDir.name}:`, error);
-            results.failed.push({ name: clientDir.name, error: errorMessage });
-          }
+          results.successful.push(...subResults.successful);
+          results.failed.push(...subResults.failed);
+        } catch (error) {
+          const errorMessage =
+            error instanceof Error ? error.message : "Unknown error";
+          console.error(`S3 upload error for ${clientDir.name}:`, error);
+          results.failed.push({ name: clientDir.name, error: errorMessage });
         }
       }
       if (results.failed.length > 0) {
@@ -397,9 +400,12 @@ class FileController {
       });
     } catch (error: any) {
       // This outer catch handles errors like `fs.readdir` failing
-      const errorMessage = error.message && error.message.includes("expired credentials")
-        ? "S3 upload process failed: Authentication token expired. Please refresh your credentials."
-        : error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 upload process failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
       console.error("General S3 upload process error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
@@ -408,7 +414,6 @@ class FileController {
       });
     }
   }
-
   async listS3Files(req: Request, res: Response) {
     try {
       const prefix = (req.query.prefix as string) || "";
@@ -418,9 +423,12 @@ class FileController {
       const data = await listFiles(prefix, continuationToken);
       res.status(200).json({ statusCode: 200, ...data });
     } catch (error: any) {
-      const errorMessage = error.message && error.message.includes("expired credentials")
-        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
-        : error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
       console.error("S3 list error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
@@ -445,9 +453,12 @@ class FileController {
         deletedKeys,
       });
     } catch (error: any) {
-      const errorMessage = error.message && error.message.includes("expired credentials")
-        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
-        : error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
       console.error("S3 delete error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
@@ -623,9 +634,12 @@ class FileController {
         .status(200)
         .json({ statusCode: 200, files, directories, nextContinuationToken });
     } catch (error: any) {
-      const errorMessage = error.message && error.message.includes("expired credentials")
-        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
-        : error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
       console.error("S3 search error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
@@ -645,9 +659,12 @@ class FileController {
       const data = await searchFolders(prefix, pattern, continuationToken);
       res.status(200).json({ statusCode: 200, ...data });
     } catch (error: any) {
-      const errorMessage = error.message && error.message.includes("expired credentials")
-        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
-        : error instanceof Error ? error.message : "Unknown error";
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
       console.error("S3 folder search error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
@@ -663,9 +680,7 @@ class FileController {
 
       // Security check: Ensure the file is within the intended directory
       const resolvedPath = path.resolve(filePath);
-      const expectedDir = path.resolve(
-        path.join(__dirname, "../../logs")
-      );
+      const expectedDir = path.resolve(path.join(__dirname, "../../logs"));
 
       if (!resolvedPath.startsWith(expectedDir)) {
         return res

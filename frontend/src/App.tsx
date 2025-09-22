@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import UploadAndScriptTask from "./components/action/UploadAndScriptTask";
 import SQLAndMongoTask from "./components/action/SQLAndMongoTask";
 import S3BrowserTask from "./components/action/S3BrowserTask";
@@ -12,59 +12,55 @@ interface SummaryItem {
   status: string;
 }
 
-interface SplitFile {
-  originalPath: string;
-  url: string;
-  page: number;
-}
-
-interface FileResponse {
-  statusCode?: number;
-  message?: string;
-  originalFile?: string;
-  processedFile?: string;
-  nextContinuationToken?: string;
-  summary?: {
-    totalRows: number;
-    successfulRows: number;
-    errors: number;
-    notFound: number;
-    successfulInserts: number; // Added from pdfProcessor.ts
-    unsuccessfulCount: number; // Added from pdfProcessor.ts (bad rows)
-    totalPageCount: number; // Added from pdfProcessor.ts
-    totalSplitImages: number; // Added from pdfProcessor.ts
-  };
-  splitSummary?: {
-    totalOriginalFilesProcessed: number;
-    totalExpectedSplits: number; // Re-added: Internal count of expected splits
-    totalSplitFilesGenerated: number;
-    splitErrors: number;
-    totalExpectedPagesFromCsv: number; // Added from splitProcessor.ts
-  };
-  downloadUrl?: string;
-  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitFiles?: SplitFile[];
-  error?: string;
-  directories?: string[];
-  files?: S3File[];
-  badRowsFilePath?: string | null; // Added for bad rows file download
-  updatedFolioRows?: number;
-  updatedTransactionRows?: number;
-  badRows?: number;
-}
-
-interface S3File {
-  key: string;
-  lastModified?: string;
+interface UploadProgress {
+  fileName: string;
+  progress?: number;
+  status?: string;
 }
 
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>(
-    {}
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
+    null
   );
+  const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:3000");
+
+    ws.onopen = () => {
+      console.log("WebSocket connected");
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        if (message.type === "progress" || message.type === "complete") {
+          setUploadProgress({
+            fileName: message.fileName,
+            progress: message.progress,
+            status: message.status,
+          });
+        }
+      } catch (error) {
+        console.error("Error parsing WebSocket message:", error);
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket disconnected");
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -78,8 +74,6 @@ const App: React.FC = () => {
     setSelectedTask(task);
     setOpen(false); // Close sidebar on task selection
   };
-
-  const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
 
   const updateTaskLog = useCallback((task: string, log: any) => {
     setTaskLogs((prev) => ({ ...prev, [task]: log }));
