@@ -265,6 +265,8 @@ class FileController {
       res.status(200).json({
         statusCode: 200,
         message: `Transferred ${result.transferredCount} documents to MongoDB successfully.`,
+        transferredCount: result.transferredCount,
+        documents: result.documents, // Include the documents array
       });
     } catch (error) {
       console.error("Data transfer error:", error);

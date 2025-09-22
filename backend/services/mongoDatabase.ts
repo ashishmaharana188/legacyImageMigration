@@ -192,6 +192,7 @@ export class MongoDatabase {
 
   public async transferDataFromPostgres(): Promise<{
     transferredCount: number;
+    documents?: any[]; // Added to return the documents
   }> {
     try {
       const database = new Database();
@@ -266,7 +267,7 @@ export class MongoDatabase {
       }
 
       await this.disconnect();
-      return { transferredCount: pgData.length };
+      return { transferredCount: pgData.length, documents: documentsToInsert };
     } catch (error) {
       logger.error(`Data transfer error: ${error}`);
       throw error;

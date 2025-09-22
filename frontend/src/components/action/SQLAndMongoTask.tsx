@@ -42,6 +42,8 @@ interface FileResponse {
   updatedFolioRows?: number;
   updatedTransactionRows?: number;
   badRows?: number;
+  transferredCount?: number; // Added for transfer to mongo
+  documents?: any[]; // Added for transfer to mongo to hold document details
 }
 
 interface S3File {

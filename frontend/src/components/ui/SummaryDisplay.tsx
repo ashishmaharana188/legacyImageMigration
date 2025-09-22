@@ -234,6 +234,36 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           )}
         </div>
       );
+    } else if (log.transferredCount !== undefined && log.documents !== undefined && log.message && log.message.includes("Transferred") && log.message.includes("documents to MongoDB successfully")) {
+      return (
+        <div>
+          <h5 className="font-semibold">MongoDB Transfer Summary:</h5>
+          <p>Total Documents Transferred: {log.transferredCount}</p>
+          {log.documents.length > 0 && (
+            <div className="bg-gray-100 p-2 rounded mt-2">
+              <h5 className="font-semibold">Transferred Documents Details:</h5>
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-2 py-1">Client ID</th>
+                    <th scope="col" className="px-2 py-1">Transaction No</th>
+                    <th scope="col" className="px-2 py-1">Work Date</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {log.documents.map((doc: any, index: number) => (
+                    <tr key={index} className="bg-white border-b">
+                      <td className="px-2 py-1">{doc.clientId}</td>
+                      <td className="px-2 py-1">{doc.transactionNo}</td>
+                      <td className="px-2 py-1">{doc.workDate}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      );
     } else if (
       log.updatedFolioRows !== undefined &&
       log.updatedTransactionRows !== undefined &&
