@@ -238,7 +238,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         </div>
       );
     } else if (
-      log.insertedRows !== undefined &&
+      log.successfulRows !== undefined &&
       log.badRows !== undefined &&
       log.message &&
       log.message.includes("SQL executed successfully")
