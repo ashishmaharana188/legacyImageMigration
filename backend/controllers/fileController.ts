@@ -112,12 +112,8 @@ class FileController {
       res.status(200).json({
         statusCode: 200,
         message: "Files split successfully",
-        splitSummary: result.summary, // Changed from splitFiles to splitSummary
-        splitFiles: result.splitFiles.map((file: any) => ({
-          originalPath: file.originalPath,
-          url: `/download-file/${encodeURIComponent(file.splitPath)}`,
-          page: file.page,
-        })),
+        splitSummary: result.summary,
+        splitFiles: result.splitFiles,
       });
     } catch (error) {
       console.error("Split error:", error);
@@ -645,12 +641,12 @@ class FileController {
   async downloadGeneratedFile(req: Request, res: Response) {
     try {
       const filename = req.params.filename;
-      const filePath = path.join(__dirname, "../../split_output", filename);
+      const filePath = path.join(__dirname, "../../logs", filename);
 
       // Security check: Ensure the file is within the intended directory
       const resolvedPath = path.resolve(filePath);
       const expectedDir = path.resolve(
-        path.join(__dirname, "../../split_output")
+        path.join(__dirname, "../../logs")
       );
 
       if (!resolvedPath.startsWith(expectedDir)) {

@@ -11,7 +11,7 @@ import { S3_BUCKET_NAME } from "../utils/s3Config";
 import { parse } from "csv-parse/sync"; // Import csv-parse
 
 interface SplitResult {
-  splitFiles: { originalPath: string; splitPath: string; page: number }[];
+  splitFiles: any[];
   summary: {
     totalOriginalFilesProcessed: number;
     totalExpectedSplits: number; // Re-added: Internal count of expected splits
@@ -28,17 +28,15 @@ async function runPythonFallback(
   outputFolderPath: string,
   fileName: string,
   logger: winston.Logger
-): Promise<number> {
-  // Modified to return a number
-  // Construct the path to the Python script relative to the project root
-  const projectRoot = path.resolve(__dirname, "../../.."); // Go up from backend/services to project root
+): Promise<string[]> {
+  const projectRoot = path.resolve(__dirname, "../../..");
   const pythonScript = path.join(
     projectRoot,
     "backend",
     "services",
     "fallBackSplit.py"
   );
-  const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python"; // Configurable Python path
+  const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
   try {
     logger.info(
       `Attempting Python fallback for ${fileName} using script: ${pythonScript} and executable: ${pythonExecutable}`
@@ -50,18 +48,24 @@ async function runPythonFallback(
     if (stderr)
       logger.warn(`Python fallback stderr for ${fileName}`, { stderr });
 
-    // Extract split count from stdout
     const match = stdout.match(/Split (\d+) pages successfully/);
     if (match && match[1]) {
       const splitCount = parseInt(match[1], 10);
       logger.info(`Extracted split count from Python fallback: ${splitCount}`);
-      return splitCount;
+      const splitFilePaths: string[] = [];
+      const fileExt = path.extname(fileName);
+      const baseName = path.basename(fileName, fileExt);
+      for (let i = 0; i < splitCount; i++) {
+        const splitFileName = `${baseName}_${i + 1}${fileExt}`;
+        splitFilePaths.push(path.join(outputFolderPath, splitFileName));
+      }
+      return splitFilePaths;
     } else {
       logger.warn(
         "Could not extract split count from Python fallback stdout.",
         { stdout }
       );
-      return 1;
+      return [];
     }
   } catch (error) {
     logger.error(`Python fallback failed for ${fileName}`, {
@@ -159,13 +163,9 @@ export class Splitting {
   }
 
   async splitFiles(): Promise<SplitResult> {
-    const splitFiles: {
-      originalPath: string;
-      splitPath: string;
-      page: number;
-    }[] = [];
+    const createdSplitFiles: { originalPath: string; splitPath: string; page: number }[] = [];
     let totalOriginalFilesProcessed = 0;
-    let totalExpectedSplits = 0; // Re-initialized
+    let totalExpectedSplits = 0;
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
 
@@ -286,21 +286,16 @@ export class Splitting {
                   this.logger.error(`Error processing ${fileName}`, {
                     error: err,
                   });
-                  splitErrors++; // Increment error count
-
+                  splitErrors++;
                   try {
-                    const fallbackSplitCount = await runPythonFallback(
-                      filePath,
-                      outputFolderPath,
-                      fileName,
-                      this.logger
-                    );
-                    totalSplitFilesGenerated += fallbackSplitCount; // Use actual count from fallback
-                  } catch (fallbackErr) {
-                    this.logger.error(`Fallback also failed for ${fileName}`, {
-                      error: fallbackErr,
+                    const fallbackSplitFilePaths = await runPythonFallback(filePath, outputFolderPath, fileName, this.logger);
+                    fallbackSplitFilePaths.forEach(splitPath => {
+                      createdSplitFiles.push({ originalPath: filePath, splitPath: splitPath, page: 0 }); // Page number is unknown from fallback
+                      totalSplitFilesGenerated++;
                     });
-                    splitErrors++; // Increment error count if fallback fails
+                  } catch (fallbackErr) {
+                    this.logger.error(`Fallback also failed for ${fileName}`, { error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr), stack: fallbackErr instanceof Error ? fallbackErr.stack : undefined });
+                    splitErrors++;
                   }
                 }
               }
@@ -316,34 +311,61 @@ export class Splitting {
     await scanAndProcessDirectory(this.baseFolder, this.splitFolder);
     this.logger.info("File splitting complete");
 
+    const latestCsvPath = await this.getLatestProcessedCsvPath();
+    let csvRecords: any[] = [];
+    if (latestCsvPath) {
+      try {
+        const csvContent = await fs.readFile(latestCsvPath, { encoding: "utf8" });
+        csvRecords = parse(csvContent, {
+          columns: true,
+          skip_empty_lines: true,
+        });
+      } catch (error) {
+        this.logger.error(`Error reading or parsing CSV file: ${latestCsvPath}`, { error });
+      }
+    }
+
+    const verificationLog: any[] = [];
+    for (const record of csvRecords) {
+      const fund = record.id_fund;
+      const ihNo = record.id_ihno;
+
+      this.logger.debug(`Processing CSV record: fund=${fund}, ihNo=${ihNo}`);
+
+      const matchingSplits = createdSplitFiles.filter(f => {
+          this.logger.debug(`  Checking split file originalPath: ${f.originalPath}`);
+          const match = f.originalPath.match(/(?:CLIENT_CODE_(\d+)).*?(?:TRANSACTION_NUMBER_(\d+))/);
+          this.logger.debug(`    Regex match result: ${JSON.stringify(match)}`);
+          const isMatch = match && match[1] === fund && match[2] === ihNo;
+          this.logger.debug(`    Comparison result: ${isMatch} (fund: ${match ? match[1] : 'N/A'} vs ${fund}, ihNo: ${match ? match[2] : 'N/A'} vs ${ihNo})`);
+          return isMatch;
+      });
+
+      if (matchingSplits.length > 0) {
+        verificationLog.push({
+            id_ihno: ihNo,
+            id_acno: record.id_acno,
+            id_fund: fund,
+            status: `Split into ${matchingSplits.length} pages`,
+            page_count: record.page_count,
+            split_count: matchingSplits.length,
+        });
+      } else {
+        verificationLog.push({
+            id_ihno: ihNo,
+            id_acno: record.id_acno,
+            id_fund: fund,
+            status: 'Not split',
+            page_count: null,
+            split_count: 0,
+        });
+      }
+    }
+
     const totalExpectedPagesFromCsv = await this.getTotalExpectedPagesFromCsv();
 
-    // Log internal split count vs. generated files
-    if (totalExpectedSplits !== totalSplitFilesGenerated) {
-      this.logger.warn(
-        `Internal split count mismatch! Expected ${totalExpectedSplits} splits based on file content, but generated ${totalSplitFilesGenerated} split files.`,
-        { totalExpectedSplits, totalSplitFilesGenerated, splitErrors }
-      );
-    } else {
-      this.logger.info(
-        `Internal split count matched. Total expected splits: ${totalExpectedSplits}, Total generated split files: ${totalSplitFilesGenerated}.`
-      );
-    }
-
-    // Log CSV expected pages vs. generated files
-    if (totalExpectedPagesFromCsv !== totalSplitFilesGenerated) {
-      this.logger.warn(
-        `CSV vs. Generated split count mismatch! Expected ${totalExpectedPagesFromCsv} pages from CSV, but generated ${totalSplitFilesGenerated} split files.`,
-        { totalExpectedPagesFromCsv, totalSplitFilesGenerated, splitErrors }
-      );
-    } else {
-      this.logger.info(
-        `CSV vs. Generated split count matched. Total expected pages from CSV: ${totalExpectedPagesFromCsv}, Total generated split files: ${totalSplitFilesGenerated}.`
-      );
-    }
-
     return {
-      splitFiles,
+      splitFiles: verificationLog,
       summary: {
         totalOriginalFilesProcessed,
         totalExpectedSplits,

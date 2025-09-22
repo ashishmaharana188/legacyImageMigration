@@ -999,7 +999,7 @@ WHERE r2.rn > 1;
 
     const timestamp = new Date().toISOString().replace(/[:.-]/g, "_"); // YYYY-MM-DDTHH_mm_ss_sssZ
     const filenameWithTimestamp = `${timestamp}_${baseFilename}`;
-    const filePath = path.join(__dirname, "../../split_output", filenameWithTimestamp);
+    const filePath = path.join(__dirname, "../../logs", filenameWithTimestamp);
     let content = "";
 
     if (badRows[0].id_ihno !== undefined) {
