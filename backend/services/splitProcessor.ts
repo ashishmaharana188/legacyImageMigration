@@ -11,7 +11,7 @@ import { S3_BUCKET_NAME } from "../utils/s3Config";
 import { parse } from "csv-parse/sync"; // Import csv-parse
 
 interface SplitResult {
-  splitFiles: any[];
+  splitFiles: { originalPath: string; splitPath: string; page: number }[];
   summary: {
     totalOriginalFilesProcessed: number;
     totalExpectedSplits: number; // Re-added: Internal count of expected splits
@@ -159,9 +159,13 @@ export class Splitting {
   }
 
   async splitFiles(): Promise<SplitResult> {
-    const createdSplitFiles: { originalPath: string; splitPath: string; page: number }[] = [];
+    const splitFiles: {
+      originalPath: string;
+      splitPath: string;
+      page: number;
+    }[] = [];
     let totalOriginalFilesProcessed = 0;
-    let totalExpectedSplits = 0;
+    let totalExpectedSplits = 0; // Re-initialized
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
 
@@ -193,15 +197,20 @@ export class Splitting {
               const filePath = path.join(inputFolderPath, file);
               const fileStats = await fs.stat(filePath);
               if (fileStats.isFile()) {
-                totalOriginalFilesProcessed++;
+                totalOriginalFilesProcessed++; // Increment for each original file processed
                 const fileName = path.basename(filePath);
+                console.log(
+                  `[DEBUG] Processing file: ${fileName}, Full path: ${filePath}`
+                );
                 const fileExt = this.getFileExtension(fileName);
                 let fileBuffer: Buffer;
                 try {
                   fileBuffer = await fs.readFile(filePath);
                 } catch (err) {
-                  this.logger.error(`Failed to read file ${filePath}`, { error: err });
-                  splitErrors++;
+                  this.logger.error(`Failed to read file ${filePath}`, {
+                    error: err,
+                  });
+                  splitErrors++; // Increment error count
                   return;
                 }
 
@@ -209,49 +218,96 @@ export class Splitting {
                   if (fileExt === ".pdf") {
                     const pdfDoc = await PDFDocument.load(fileBuffer);
                     const numPages = pdfDoc.getPages().length;
-                    totalExpectedSplits += numPages;
+                    totalExpectedSplits += numPages; // Add to total expected splits (internal count)
                     for (let i = 0; i < numPages; i++) {
+                      const originalFileExt = path.extname(fileName);
+                      const baseName = path.basename(fileName, originalFileExt);
+                      console.log(
+                        `[DEBUG-PDF] fileName: ${fileName}, baseName: ${baseName}, originalFileExt: ${originalFileExt}`
+                      );
                       const subDoc = await PDFDocument.create();
                       const [copiedPage] = await subDoc.copyPages(pdfDoc, [i]);
                       subDoc.addPage(copiedPage);
                       const pdfBytes = await subDoc.save();
-                      const splitFileName = `${path.basename(fileName, fileExt)}_${i + 1}${fileExt}`;
-                      const outputFilePath = path.join(outputFolderPath, splitFileName);
+                      const splitFileName = `${baseName}_${
+                        i + 1
+                      }${originalFileExt.toLowerCase()}`;
+                      console.log(
+                        `[DEBUG-PDF] Final splitFileName: ${splitFileName}`
+                      );
+                      const outputFilePath = path.join(
+                        outputFolderPath,
+                        splitFileName
+                      );
                       await fs.writeFile(outputFilePath, pdfBytes);
-                      createdSplitFiles.push({ originalPath: filePath, splitPath: outputFilePath, page: i + 1 });
-                      totalSplitFilesGenerated++;
+                      this.logger.info(`Saved: ${outputFilePath}`);
+                      splitFiles.push({
+                        originalPath: filePath,
+                        splitPath: outputFilePath,
+                        page: i + 1,
+                      });
+                      totalSplitFilesGenerated++; // Increment for each split file generated
                     }
                   } else if (fileExt === ".tif" || fileExt === ".tiff") {
                     const metadata = await sharp(fileBuffer).metadata();
+                    this.logger.info(`Splitting TIFF ${fileName}`, {
+                      metadata,
+                    });
                     const totalPages = metadata.pages || 1;
-                    totalExpectedSplits += totalPages;
+                    totalExpectedSplits += totalPages; // Add to total expected splits (internal count)
                     for (let i = 0; i < totalPages; i++) {
-                      const splitImage = await sharp(fileBuffer, { page: i }).toBuffer();
-                      const splitFileName = `${path.basename(fileName, fileExt)}_${i + 1}${fileExt}`;
-                      const outputFilePath = path.join(outputFolderPath, splitFileName);
+                      const splitImage = await sharp(fileBuffer, {
+                        page: i,
+                      }).toBuffer();
+                      const splitFileName = `${path.basename(
+                        fileName,
+                        fileExt
+                      )}_${i + 1}${fileExt}`;
+                      const outputFilePath = path.join(
+                        outputFolderPath,
+                        splitFileName
+                      );
                       await fs.writeFile(outputFilePath, splitImage);
-                      createdSplitFiles.push({ originalPath: filePath, splitPath: outputFilePath, page: i + 1 });
-                      totalSplitFilesGenerated++;
+                      this.logger.info(`Saved: ${outputFilePath}`);
+                      splitFiles.push({
+                        originalPath: filePath,
+                        splitPath: outputFilePath,
+                        page: i + 1,
+                      });
+                      totalSplitFilesGenerated++; // Increment for each split file generated
                     }
                   } else {
-                    this.logger.warn(`Skipping unsupported file format: ${fileName}`);
-                    splitErrors++;
+                    this.logger.warn(
+                      `Skipping unsupported file format: ${fileName}`
+                    );
+                    splitErrors++; // Increment error count for unsupported files
                   }
                 } catch (err) {
-                  this.logger.error(`Error processing ${fileName}`, { error: err });
-                  splitErrors++;
+                  this.logger.error(`Error processing ${fileName}`, {
+                    error: err,
+                  });
+                  splitErrors++; // Increment error count
+
                   try {
-                    const fallbackSplitCount = await runPythonFallback(filePath, outputFolderPath, fileName, this.logger);
-                    totalSplitFilesGenerated += fallbackSplitCount;
+                    const fallbackSplitCount = await runPythonFallback(
+                      filePath,
+                      outputFolderPath,
+                      fileName,
+                      this.logger
+                    );
+                    totalSplitFilesGenerated += fallbackSplitCount; // Use actual count from fallback
                   } catch (fallbackErr) {
-                    this.logger.error(`Fallback also failed for ${fileName}`, { error: fallbackErr });
-                    splitErrors++;
+                    this.logger.error(`Fallback also failed for ${fileName}`, {
+                      error: fallbackErr,
+                    });
+                    splitErrors++; // Increment error count if fallback fails
                   }
                 }
               }
             })
           );
           await Promise.all(fileTasks);
+          await scanAndProcessDirectory(inputFolderPath, outputFolderPath);
         }
       }
     };
@@ -260,53 +316,34 @@ export class Splitting {
     await scanAndProcessDirectory(this.baseFolder, this.splitFolder);
     this.logger.info("File splitting complete");
 
-    const latestCsvPath = await this.getLatestProcessedCsvPath();
-    let csvRecords: any[] = [];
-    if (latestCsvPath) {
-      try {
-        const csvContent = await fs.readFile(latestCsvPath, { encoding: "utf8" });
-        csvRecords = parse(csvContent, {
-          columns: true,
-          skip_empty_lines: true,
-        });
-      } catch (error) {
-        this.logger.error(`Error reading or parsing CSV file: ${latestCsvPath}`, { error });
-      }
-    }
-
-    const verificationLog: any[] = [];
-    for (const record of csvRecords) {
-      const fund = record.id_fund;
-      const ihNo = record.id_ihno;
-
-      const matchingSplits = createdSplitFiles.filter(f => {
-          const match = f.originalPath.match(/CLIENT_CODE_(\d+)[\\\/]CLIENT_CODE_\1_TRANSACTION_NUMBER_(\d+)/);
-          return match && match[1] === fund && match[2] === ihNo;
-      });
-
-      if (matchingSplits.length > 0) {
-        verificationLog.push({
-            id_ihno: ihNo,
-            id_acno: record.id_acno,
-            id_fund: fund,
-            status: `Split into ${matchingSplits.length} pages`,
-            page_count: record.page_count,
-        });
-      } else {
-        verificationLog.push({
-            id_ihno: ihNo,
-            id_acno: record.id_acno,
-            id_fund: fund,
-            status: 'Not split',
-            page_count: null,
-        });
-      }
-    }
-
     const totalExpectedPagesFromCsv = await this.getTotalExpectedPagesFromCsv();
 
+    // Log internal split count vs. generated files
+    if (totalExpectedSplits !== totalSplitFilesGenerated) {
+      this.logger.warn(
+        `Internal split count mismatch! Expected ${totalExpectedSplits} splits based on file content, but generated ${totalSplitFilesGenerated} split files.`,
+        { totalExpectedSplits, totalSplitFilesGenerated, splitErrors }
+      );
+    } else {
+      this.logger.info(
+        `Internal split count matched. Total expected splits: ${totalExpectedSplits}, Total generated split files: ${totalSplitFilesGenerated}.`
+      );
+    }
+
+    // Log CSV expected pages vs. generated files
+    if (totalExpectedPagesFromCsv !== totalSplitFilesGenerated) {
+      this.logger.warn(
+        `CSV vs. Generated split count mismatch! Expected ${totalExpectedPagesFromCsv} pages from CSV, but generated ${totalSplitFilesGenerated} split files.`,
+        { totalExpectedPagesFromCsv, totalSplitFilesGenerated, splitErrors }
+      );
+    } else {
+      this.logger.info(
+        `CSV vs. Generated split count matched. Total expected pages from CSV: ${totalExpectedPagesFromCsv}, Total generated split files: ${totalSplitFilesGenerated}.`
+      );
+    }
+
     return {
-      splitFiles: verificationLog,
+      splitFiles,
       summary: {
         totalOriginalFilesProcessed,
         totalExpectedSplits,
