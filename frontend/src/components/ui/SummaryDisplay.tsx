@@ -20,6 +20,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const [expandedLogContent, setExpandedLogContent] = useState<string | null>(
     null
   );
+  const [parsedBadRows, setParsedBadRows] = useState<any[] | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
 
@@ -27,10 +28,27 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     setExpandedSplitLog(prev => (prev === logId ? null : logId));
   };
 
+  const parseCsvContent = (csvString: string) => {
+    const lines = csvString.trim().split('\n');
+    if (lines.length === 0) return [];
+
+    const headers = lines[0].split(',').map(h => h.trim());
+    const data = lines.slice(1).map(line => {
+      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, '')); // Remove quotes
+      const row: any = {};
+      headers.forEach((header, index) => {
+        row[header] = values[index];
+      });
+      return row;
+    });
+    return data;
+  };
+
   const toggleBadRowsDisplay = useCallback(
     async (filePath: string, logId: string) => {
       if (expandedLogId === logId) {
         setExpandedLogContent(null);
+        setParsedBadRows(null);
         setExpandedLogId(null);
       } else {
         try {
@@ -38,10 +56,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             `http://localhost:3000/download-generated-file/${filePath}`
           );
           setExpandedLogContent(res.data);
+          setParsedBadRows(parseCsvContent(res.data));
           setExpandedLogId(logId);
         } catch (error) {
           console.error("Failed to fetch bad rows content:", error);
           setExpandedLogContent("Failed to load content.");
+          setParsedBadRows(null);
           setExpandedLogId(logId);
         }
       }
@@ -94,24 +114,53 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     } else if (log.insertedRows !== undefined) {
       return (
         <div>
-          <p>Inserted Rows: {log.insertedRows}</p>
-          <p>Error Rows: {log.badRows}</p>
+          <h5 className="font-semibold">SQL Execution Summary:</h5>
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-1">Inserted Rows</th>
+                <th scope="col" className="px-2 py-1">Error Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-white border-b">
+                <td className="px-2 py-1">{log.insertedRows}</td>
+                <td className="px-2 py-1">{log.badRows}</td>
+              </tr>
+            </tbody>
+          </table>
           {log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
                 onClick={() =>
                   toggleBadRowsDisplay(log.badRowsFilePath, logKey)
                 }
+                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
-              {expandedLogId === logKey && (
-                <pre
-                  className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm"
-                  style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                >
-                  {expandedLogContent}
-                </pre>
+              {expandedLogId === logKey && parsedBadRows && (
+                <div className="bg-gray-100 p-2 rounded mt-2">
+                  <h5 className="font-semibold">Bad Rows Details:</h5>
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-50">
+                      <tr>
+                        {Object.keys(parsedBadRows[0] || {}).map(header => (
+                          <th scope="col" className="px-2 py-1" key={header}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedBadRows.map((item: any, index: number) => (
+                        <tr key={index} className="bg-white border-b">
+                          {Object.values(item).map((value: any, valIndex: number) => (
+                            <td className="px-2 py-1" key={valIndex}>{value}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}
@@ -120,24 +169,55 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     } else if (log.updatedFolioRows !== undefined) {
       return (
         <div>
-          <p>Updated Folio Rows: {log.updatedFolioRows}</p>
-          <p>Updated Transaction Rows: {log.updatedTransactionRows}</p>
+          <h5 className="font-semibold">Folio and Transaction Update Summary:</h5>
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-1">Updated Folio Rows</th>
+                <th scope="col" className="px-2 py-1">Updated Transaction Rows</th>
+                <th scope="col" className="px-2 py-1">Bad Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-white border-b">
+                <td className="px-2 py-1">{log.updatedFolioRows}</td>
+                <td className="px-2 py-1">{log.updatedTransactionRows}</td>
+                <td className="px-2 py-1">{log.badRows}</td>
+              </tr>
+            </tbody>
+          </table>
           {log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
                 onClick={() =>
                   toggleBadRowsDisplay(log.badRowsFilePath, logKey)
                 }
+                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
-              {expandedLogId === logKey && (
-                <pre
-                  className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm"
-                  style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                >
-                  {expandedLogContent}
-                </pre>
+              {expandedLogId === logKey && parsedBadRows && (
+                <div className="bg-gray-100 p-2 rounded mt-2">
+                  <h5 className="font-semibold">Bad Rows Details:</h5>
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-50">
+                      <tr>
+                        {Object.keys(parsedBadRows[0] || {}).map(header => (
+                          <th scope="col" className="px-2 py-1" key={header}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedBadRows.map((item: any, index: number) => (
+                        <tr key={index} className="bg-white border-b">
+                          {Object.values(item).map((value: any, valIndex: number) => (
+                            <td className="px-2 py-1" key={valIndex}>{value}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}
@@ -146,25 +226,55 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     } else if (log.totalRows !== undefined) {
       return (
         <div>
-          <p>Total Rows: {log.totalRows}</p>
-          <p>Successful Rows: {log.successfulRows}</p>
-          <p>Bad Rows: {log.badRows}</p>
+          <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-1">Total Rows</th>
+                <th scope="col" className="px-2 py-1">Successful Rows</th>
+                <th scope="col" className="px-2 py-1">Bad Rows</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-white border-b">
+                <td className="px-2 py-1">{log.totalRows}</td>
+                <td className="px-2 py-1">{log.successfulRows}</td>
+                <td className="px-2 py-1">{log.badRows}</td>
+              </tr>
+            </tbody>
+          </table>
           {log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
                 onClick={() =>
                   toggleBadRowsDisplay(log.badRowsFilePath, logKey)
                 }
+                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
-              {expandedLogId === logKey && (
-                <pre
-                  className="bg-gray-100 p-2 rounded mt-2 whitespace-pre-wrap text-sm"
-                  style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
-                >
-                  {expandedLogContent}
-                </pre>
+              {expandedLogId === logKey && parsedBadRows && (
+                <div className="bg-gray-100 p-2 rounded mt-2">
+                  <h5 className="font-semibold">Bad Rows Details:</h5>
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-50">
+                      <tr>
+                        {Object.keys(parsedBadRows[0] || {}).map(header => (
+                          <th scope="col" className="px-2 py-1" key={header}>{header}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedBadRows.map((item: any, index: number) => (
+                        <tr key={index} className="bg-white border-b">
+                          {Object.values(item).map((value: any, valIndex: number) => (
+                            <td className="px-2 py-1" key={valIndex}>{value}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </>
           )}

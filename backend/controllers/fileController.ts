@@ -641,12 +641,12 @@ class FileController {
   async downloadGeneratedFile(req: Request, res: Response) {
     try {
       const filename = req.params.filename;
-      const filePath = path.join(__dirname, "../../split_output", filename);
+      const filePath = path.join(__dirname, "../../logs", filename);
 
       // Security check: Ensure the file is within the intended directory
       const resolvedPath = path.resolve(filePath);
       const expectedDir = path.resolve(
-        path.join(__dirname, "../../split_output")
+        path.join(__dirname, "../../logs")
       );
 
       if (!resolvedPath.startsWith(expectedDir)) {
