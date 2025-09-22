@@ -25,16 +25,16 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
 
   const toggleSplitLog = (logId: string) => {
-    setExpandedSplitLog(prev => (prev === logId ? null : logId));
+    setExpandedSplitLog((prev) => (prev === logId ? null : logId));
   };
 
   const parseCsvContent = (csvString: string) => {
-    const lines = csvString.trim().split('\n');
+    const lines = csvString.trim().split("\n");
     if (lines.length === 0) return [];
 
-    const headers = lines[0].split(',').map(h => h.trim());
-    const data = lines.slice(1).map(line => {
-      const values = line.split(',').map(v => v.trim().replace(/^"|"$/g, '')); // Remove quotes
+    const headers = lines[0].split(",").map((h) => h.trim());
+    const data = lines.slice(1).map((line) => {
+      const values = line.split(",").map((v) => v.trim().replace(/^"|"$/g, "")); // Remove quotes
       const row: any = {};
       headers.forEach((header, index) => {
         row[header] = values[index];
@@ -74,11 +74,20 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       const isExpanded = expandedSplitLog === logKey;
       return (
         <div>
-          <p>Total Original Files Processed: {log.splitSummary.totalOriginalFilesProcessed}</p>
+          <p>
+            Total Original Files Processed:{" "}
+            {log.splitSummary.totalOriginalFilesProcessed}
+          </p>
           <p>Total Expected Splits: {log.splitSummary.totalExpectedSplits}</p>
-          <p>Total Split Files Generated: {log.splitSummary.totalSplitFilesGenerated}</p>
+          <p>
+            Total Split Files Generated:{" "}
+            {log.splitSummary.totalSplitFilesGenerated}
+          </p>
           <p>Errors: {log.splitSummary.splitErrors}</p>
-          <p>Total Expected Pages from CSV: {log.splitSummary.totalExpectedPagesFromCsv}</p>
+          <p>
+            Total Expected Pages from CSV:{" "}
+            {log.splitSummary.totalExpectedPagesFromCsv}
+          </p>
           <button onClick={() => toggleSplitLog(logKey)}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
@@ -88,11 +97,21 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <table className="w-full text-sm text-left">
                 <thead className="text-xs uppercase bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-2 py-1">Fund</th>
-                    <th scope="col" className="px-2 py-1">IH No</th>
-                    <th scope="col" className="px-2 py-1">AC No</th>
-                    <th scope="col" className="px-2 py-1">CSV Page Count</th>
-                    <th scope="col" className="px-2 py-1">Split Count</th>
+                    <th scope="col" className="px-2 py-1">
+                      Fund
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      IH No
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      AC No
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      CSV Page Count
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Split Count
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -101,8 +120,8 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                       <td className="px-2 py-1">{item.id_fund}</td>
                       <td className="px-2 py-1">{item.id_ihno}</td>
                       <td className="px-2 py-1">{item.id_acno}</td>
-                      <td className="px-2 py-1">{item.page_count ?? 'N/A'}</td>
-                      <td className="px-2 py-1">{item.split_count ?? 'N/A'}</td>
+                      <td className="px-2 py-1">{item.page_count ?? "N/A"}</td>
+                      <td className="px-2 py-1">{item.split_count ?? "N/A"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -121,8 +140,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           <table className="w-full text-sm text-left">
             <thead className="text-xs uppercase bg-gray-50">
               <tr>
-                <th scope="col" className="px-2 py-1">Row</th>
-                <th scope="col" className="px-2 py-1">Page Count</th>
+                <th scope="col" className="px-2 py-1">
+                  Row
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  Page Count
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -136,128 +159,28 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           </table>
         </div>
       );
-    } else if (log.insertedRows !== undefined) {
+    } else if (
+      log.totalRows !== undefined &&
+      log.successfulRows !== undefined &&
+      log.badRows !== undefined &&
+      log.message &&
+      log.message.includes("SQL executed successfully")
+    ) {
       return (
         <div>
           <h5 className="font-semibold">SQL Execution Summary:</h5>
           <table className="w-full text-sm text-left">
             <thead className="text-xs uppercase bg-gray-50">
               <tr>
-                <th scope="col" className="px-2 py-1">Inserted Rows</th>
-                <th scope="col" className="px-2 py-1">Error Rows</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="bg-white border-b">
-                <td className="px-2 py-1">{log.insertedRows}</td>
-                <td className="px-2 py-1">{log.badRows}</td>
-              </tr>
-            </tbody>
-          </table>
-          {log.badRowsFilePath && log.badRows > 0 && (
-            <>
-              <button
-                onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
-                }
-                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
-              </button>
-              {expandedLogId === logKey && parsedBadRows && (
-                <div className="bg-gray-100 p-2 rounded mt-2">
-                  <h5 className="font-semibold">Bad Rows Details:</h5>
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs uppercase bg-gray-50">
-                      <tr>
-                        {Object.keys(parsedBadRows[0] || {}).map(header => (
-                          <th scope="col" className="px-2 py-1" key={header}>{header}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedBadRows.map((item: any, index: number) => (
-                        <tr key={index} className="bg-white border-b">
-                          {Object.values(item).map((value: any, valIndex: number) => (
-                            <td className="px-2 py-1" key={valIndex}>{value}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      );
-    } else if (log.updatedFolioRows !== undefined) {
-      return (
-        <div>
-          <h5 className="font-semibold">Folio and Transaction Update Summary:</h5>
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs uppercase bg-gray-50">
-              <tr>
-                <th scope="col" className="px-2 py-1">Updated Folio Rows</th>
-                <th scope="col" className="px-2 py-1">Updated Transaction Rows</th>
-                <th scope="col" className="px-2 py-1">Bad Rows</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="bg-white border-b">
-                <td className="px-2 py-1">{log.updatedFolioRows}</td>
-                <td className="px-2 py-1">{log.updatedTransactionRows}</td>
-                <td className="px-2 py-1">{log.badRows}</td>
-              </tr>
-            </tbody>
-          </table>
-          {log.badRowsFilePath && log.badRows > 0 && (
-            <>
-              <button
-                onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
-                }
-                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-              >
-                {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
-              </button>
-              {expandedLogId === logKey && parsedBadRows && (
-                <div className="bg-gray-100 p-2 rounded mt-2">
-                  <h5 className="font-semibold">Bad Rows Details:</h5>
-                  <table className="w-full text-sm text-left">
-                    <thead className="text-xs uppercase bg-gray-50">
-                      <tr>
-                        {Object.keys(parsedBadRows[0] || {}).map(header => (
-                          <th scope="col" className="px-2 py-1" key={header}>{header}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {parsedBadRows.map((item: any, index: number) => (
-                        <tr key={index} className="bg-white border-b">
-                          {Object.values(item).map((value: any, valIndex: number) => (
-                            <td className="px-2 py-1" key={valIndex}>{value}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      );
-    } else if (log.totalRows !== undefined) {
-      return (
-        <div>
-          <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs uppercase bg-gray-50">
-              <tr>
-                <th scope="col" className="px-2 py-1">Total Rows</th>
-                <th scope="col" className="px-2 py-1">Successful Rows</th>
-                <th scope="col" className="px-2 py-1">Bad Rows</th>
+                <th scope="col" className="px-2 py-1">
+                  Total Rows
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  Successful Rows
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  Bad Rows
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -274,7 +197,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 onClick={() =>
                   toggleBadRowsDisplay(log.badRowsFilePath, logKey)
                 }
-                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
@@ -284,17 +207,99 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                   <table className="w-full text-sm text-left">
                     <thead className="text-xs uppercase bg-gray-50">
                       <tr>
-                        {Object.keys(parsedBadRows[0] || {}).map(header => (
-                          <th scope="col" className="px-2 py-1" key={header}>{header}</th>
+                        {Object.keys(parsedBadRows[0] || {}).map((header) => (
+                          <th scope="col" className="px-2 py-1" key={header}>
+                            {header}
+                          </th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {parsedBadRows.map((item: any, index: number) => (
                         <tr key={index} className="bg-white border-b">
-                          {Object.values(item).map((value: any, valIndex: number) => (
-                            <td className="px-2 py-1" key={valIndex}>{value}</td>
-                          ))}
+                          {Object.values(item).map(
+                            (value: any, valIndex: number) => (
+                              <td className="px-2 py-1" key={valIndex}>
+                                {value}
+                              </td>
+                            )
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
+    } else if (
+      log.updatedFolioRows !== undefined &&
+      log.updatedTransactionRows !== undefined &&
+      log.message &&
+      log.message.includes("Folio and Transaction updated successfully")
+    ) {
+      return (
+        <div>
+          <h5 className="font-semibold">
+            Folio and Transaction Update Summary:
+          </h5>
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-1">
+                  Updated Folio Rows
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  Updated Transaction Rows
+                </th>
+                <th scope="col" className="px-2 py-1">
+                  Bad Rows
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-white border-b">
+                <td className="px-2 py-1">{log.updatedFolioRows}</td>
+                <td className="px-2 py-1">{log.updatedTransactionRows}</td>
+                <td className="px-2 py-1">{log.badRows}</td>
+              </tr>
+            </tbody>
+          </table>
+          {log.badRowsFilePath && log.badRows > 0 && (
+            <>
+              <button
+                onClick={() =>
+                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
+                }
+                className="mt-2 text-black hover:underline focus:outline-none"
+              >
+                {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
+              </button>
+              {expandedLogId === logKey && parsedBadRows && (
+                <div className="bg-gray-100 p-2 rounded mt-2">
+                  <h5 className="font-semibold">Bad Rows Details:</h5>
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-50">
+                      <tr>
+                        {Object.keys(parsedBadRows[0] || {}).map((header) => (
+                          <th scope="col" className="px-2 py-1" key={header}>
+                            {header}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {parsedBadRows.map((item: any, index: number) => (
+                        <tr key={index} className="bg-white border-b">
+                          {Object.values(item).map(
+                            (value: any, valIndex: number) => (
+                              <td className="px-2 py-1" key={valIndex}>
+                                {value}
+                              </td>
+                            )
+                          )}
                         </tr>
                       ))}
                     </tbody>
@@ -306,6 +311,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         </div>
       );
     }
+
     return (
       <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
         {JSON.stringify(log, null, 2)}
