@@ -163,7 +163,11 @@ export class Splitting {
   }
 
   async splitFiles(): Promise<SplitResult> {
-    const createdSplitFiles: { originalPath: string; splitPath: string; page: number }[] = [];
+    const createdSplitFiles: {
+      originalPath: string;
+      splitPath: string;
+      page: number;
+    }[] = [];
     let totalOriginalFilesProcessed = 0;
     let totalExpectedSplits = 0;
     let totalSplitFilesGenerated = 0;
@@ -241,7 +245,7 @@ export class Splitting {
                       );
                       await fs.writeFile(outputFilePath, pdfBytes);
                       this.logger.info(`Saved: ${outputFilePath}`);
-                      splitFiles.push({
+                      createdSplitFiles.push({
                         originalPath: filePath,
                         splitPath: outputFilePath,
                         page: i + 1,
@@ -269,7 +273,7 @@ export class Splitting {
                       );
                       await fs.writeFile(outputFilePath, splitImage);
                       this.logger.info(`Saved: ${outputFilePath}`);
-                      splitFiles.push({
+                      createdSplitFiles.push({
                         originalPath: filePath,
                         splitPath: outputFilePath,
                         page: i + 1,
@@ -288,13 +292,31 @@ export class Splitting {
                   });
                   splitErrors++;
                   try {
-                    const fallbackSplitFilePaths = await runPythonFallback(filePath, outputFolderPath, fileName, this.logger);
-                    fallbackSplitFilePaths.forEach(splitPath => {
-                      createdSplitFiles.push({ originalPath: filePath, splitPath: splitPath, page: 0 }); // Page number is unknown from fallback
+                    const fallbackSplitFilePaths = await runPythonFallback(
+                      filePath,
+                      outputFolderPath,
+                      fileName,
+                      this.logger
+                    );
+                    fallbackSplitFilePaths.forEach((splitPath) => {
+                      createdSplitFiles.push({
+                        originalPath: filePath,
+                        splitPath: splitPath,
+                        page: 0,
+                      }); // Page number is unknown from fallback
                       totalSplitFilesGenerated++;
                     });
                   } catch (fallbackErr) {
-                    this.logger.error(`Fallback also failed for ${fileName}`, { error: fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr), stack: fallbackErr instanceof Error ? fallbackErr.stack : undefined });
+                    this.logger.error(`Fallback also failed for ${fileName}`, {
+                      error:
+                        fallbackErr instanceof Error
+                          ? fallbackErr.message
+                          : String(fallbackErr),
+                      stack:
+                        fallbackErr instanceof Error
+                          ? fallbackErr.stack
+                          : undefined,
+                    });
                     splitErrors++;
                   }
                 }
@@ -315,13 +337,18 @@ export class Splitting {
     let csvRecords: any[] = [];
     if (latestCsvPath) {
       try {
-        const csvContent = await fs.readFile(latestCsvPath, { encoding: "utf8" });
+        const csvContent = await fs.readFile(latestCsvPath, {
+          encoding: "utf8",
+        });
         csvRecords = parse(csvContent, {
           columns: true,
           skip_empty_lines: true,
         });
       } catch (error) {
-        this.logger.error(`Error reading or parsing CSV file: ${latestCsvPath}`, { error });
+        this.logger.error(
+          `Error reading or parsing CSV file: ${latestCsvPath}`,
+          { error }
+        );
       }
     }
 
@@ -332,32 +359,40 @@ export class Splitting {
 
       this.logger.debug(`Processing CSV record: fund=${fund}, ihNo=${ihNo}`);
 
-      const matchingSplits = createdSplitFiles.filter(f => {
-          this.logger.debug(`  Checking split file originalPath: ${f.originalPath}`);
-          const match = f.originalPath.match(/(?:CLIENT_CODE_(\d+)).*?(?:TRANSACTION_NUMBER_(\d+))/);
-          this.logger.debug(`    Regex match result: ${JSON.stringify(match)}`);
-          const isMatch = match && match[1] === fund && match[2] === ihNo;
-          this.logger.debug(`    Comparison result: ${isMatch} (fund: ${match ? match[1] : 'N/A'} vs ${fund}, ihNo: ${match ? match[2] : 'N/A'} vs ${ihNo})`);
-          return isMatch;
+      const matchingSplits = createdSplitFiles.filter((f) => {
+        this.logger.debug(
+          `  Checking split file originalPath: ${f.originalPath}`
+        );
+        const match = f.originalPath.match(
+          /(?:CLIENT_CODE_(\d+)).*?(?:TRANSACTION_NUMBER_(\d+))/
+        );
+        this.logger.debug(`    Regex match result: ${JSON.stringify(match)}`);
+        const isMatch = match && match[1] === fund && match[2] === ihNo;
+        this.logger.debug(
+          `    Comparison result: ${isMatch} (fund: ${
+            match ? match[1] : "N/A"
+          } vs ${fund}, ihNo: ${match ? match[2] : "N/A"} vs ${ihNo})`
+        );
+        return isMatch;
       });
 
       if (matchingSplits.length > 0) {
         verificationLog.push({
-            id_ihno: ihNo,
-            id_acno: record.id_acno,
-            id_fund: fund,
-            status: `Split into ${matchingSplits.length} pages`,
-            page_count: record.page_count,
-            split_count: matchingSplits.length,
+          id_ihno: ihNo,
+          id_acno: record.id_acno,
+          id_fund: fund,
+          status: `Split into ${matchingSplits.length} pages`,
+          page_count: record.page_count,
+          split_count: matchingSplits.length,
         });
       } else {
         verificationLog.push({
-            id_ihno: ihNo,
-            id_acno: record.id_acno,
-            id_fund: fund,
-            status: 'Not split',
-            page_count: null,
-            split_count: 0,
+          id_ihno: ihNo,
+          id_acno: record.id_acno,
+          id_fund: fund,
+          status: "Not split",
+          page_count: null,
+          split_count: 0,
         });
       }
     }
