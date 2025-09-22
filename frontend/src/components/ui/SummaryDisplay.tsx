@@ -159,13 +159,59 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           </table>
         </div>
       );
-    } else if (
-      log.totalRows !== undefined &&
-      log.successfulRows !== undefined &&
-      log.badRows !== undefined &&
-      log.message &&
-      log.message.includes("SQL executed successfully")
-    ) {
+    } else if (log.dryRun !== undefined && log.rows !== undefined) {
+      const duplicatesMap = new Map<string, { count: number; entries: any[] }>();
+
+      log.rows.forEach((row: any) => {
+        const key = row.user_attr1;
+        if (!duplicatesMap.has(key)) {
+          duplicatesMap.set(key, { count: 0, entries: [] });
+        }
+        const entry = duplicatesMap.get(key)!;
+        entry.count++;
+        entry.entries.push(row);
+      });
+
+      const duplicateEntries = Array.from(duplicatesMap.values()).filter(entry => entry.count > 1);
+
+      return (
+        <div>
+          <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
+          <p>Dry Run: {log.dryRun ? "Yes" : "No"}</p>
+          <p>Cutoff Timestamp: {log.cutoffTms}</p>
+          <p>Total Duplicates Found: {log.rows.length}</p>
+
+          {duplicateEntries.length > 0 ? (
+            <div className="bg-gray-100 p-2 rounded mt-2">
+              <h5 className="font-semibold">Duplicate Details:</h5>
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-2 py-1">Client ID</th>
+                    <th scope="col" className="px-2 py-1">User Attr1</th>
+                    <th scope="col" className="px-2 py-1">Creation Date</th>
+                    <th scope="col" className="px-2 py-1">Duplicate Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {duplicateEntries.map((entry: any, index: number) => (
+                    <tr key={index} className="bg-white border-b">
+                      <td className="px-2 py-1">{entry.entries[0].client_id}</td>
+                      <td className="px-2 py-1">{entry.entries[0].user_attr1}</td>
+                      <td className="px-2 py-1">{new Date(entry.entries[0].creation_date).toLocaleString()}</td>
+                      <td className="px-2 py-1 font-bold">{entry.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="mt-2">No duplicates found.</p>
+          )}
+        </div>
+      );
+    } else if (log.insertedRows !== undefined && log.badRows !== undefined && log.message && log.message.includes("SQL executed successfully")) {
+
       return (
         <div>
           <h5 className="font-semibold">SQL Execution Summary:</h5>

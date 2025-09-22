@@ -26,38 +26,59 @@ const s3 = new S3Client({
   },
 });
 
+function isAuthError(error: any): boolean {
+  return (
+    error.name === "ExpiredToken" ||
+    error.Code === "InvalidToken" || // Check for error.Code
+    (error.message &&
+      (error.message.includes("token expired") ||
+        error.message.includes("InvalidToken") || // Check for InvalidToken in message
+        error.message.includes("Token-0"))) // Check for Token-0 in message
+  );
+}
+
 export async function uploadFile(
   localFilePath: string,
   bucket: string,
   key: string
 ) {
-  const fileStream = fs.createReadStream(localFilePath);
-  const upload = new Upload({
-    client: s3,
-    params: {
-      Bucket: bucket,
-      Key: key,
-      Body: fileStream,
-    },
-  });
+  try {
+    const fileStream = fs.createReadStream(localFilePath);
+    const upload = new Upload({
+      client: s3,
+      params: {
+        Bucket: bucket,
+        Key: key,
+        Body: fileStream,
+      },
+    });
 
-  upload.on("httpUploadProgress", (progress) => {
-    if (progress.loaded !== undefined && progress.total !== undefined) {
-      console.log(
-        `[PROGRESS] ${key}: ${progress.loaded}/${progress.total} (${(
-          (progress.loaded / progress.total) *
-          100
-        ).toFixed(2)}%)`
-      );
+    upload.on("httpUploadProgress", (progress) => {
+      if (progress.loaded !== undefined && progress.total !== undefined) {
+        console.log(
+          `[PROGRESS] ${key}: ${progress.loaded}/${progress.total} (${(
+            (progress.loaded / progress.total) *
+            100
+          ).toFixed(2)}%)`
+        );
+      } else {
+        console.log(
+          `[PROGRESS] ${key}: Progress update (loaded or total is undefined)`
+        );
+      }
+    });
+
+    await upload.done();
+    console.log(`[UPLOADED] ${key}`);
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error(`S3 uploadFile failed for ${key}: Authentication token expired or invalid. Please refresh your credentials.`);
+      throw new Error("S3 upload failed due to expired or invalid credentials.");
     } else {
-      console.log(
-        `[PROGRESS] ${key}: Progress update (loaded or total is undefined)`
-      );
+      console.error(`S3 uploadFile error for ${key}:`, err);
+      throw err;
     }
-  });
-
-  await upload.done();
-  console.log(`[UPLOADED] ${key}`);
+  }
 }
 
 export async function uploadDirectoryRecursive(
@@ -65,18 +86,28 @@ export async function uploadDirectoryRecursive(
   bucket: string,
   prefix: string
 ) {
-  const entries = fs.readdirSync(localDir, { withFileTypes: true });
+  try {
+    const entries = fs.readdirSync(localDir, { withFileTypes: true });
 
-  for (const entry of entries) {
-    const entryPath = path.join(localDir, entry.name);
-    const entryKey = `${prefix}/${entry.name}`;
+    for (const entry of entries) {
+      const entryPath = path.join(localDir, entry.name);
+      const entryKey = `${prefix}/${entry.name}`;
 
-    if (entry.isDirectory()) {
-      // Recurse into subdirectory
-      await uploadDirectoryRecursive(entryPath, bucket, entryKey);
+      if (entry.isDirectory()) {
+        // Recurse into subdirectory
+        await uploadDirectoryRecursive(entryPath, bucket, entryKey);
+      } else {
+        // Upload file
+        await uploadFile(entryPath, bucket, entryKey);
+      }
+    }
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error(`S3 uploadDirectoryRecursive failed for ${localDir}: Authentication token expired or invalid. Please refresh your credentials.`);
+      throw new Error("S3 upload failed due to expired or invalid credentials.");
     } else {
-      // Upload file
-      await uploadFile(entryPath, bucket, entryKey);
+      console.error(`S3 uploadDirectoryRecursive error for ${localDir}:`, err);
+      throw err;
     }
   }
 }
@@ -86,18 +117,28 @@ export async function uploadSplitFilesToS3(
   bucket: string,
   prefix: string
 ) {
-  const entries = fs.readdirSync(localDir, { withFileTypes: true });
+  try {
+    const entries = fs.readdirSync(localDir, { withFileTypes: true });
 
-  for (const entry of entries) {
-    const entryPath = path.join(localDir, entry.name);
-    const entryKey = `${prefix}/${entry.name}`;
+    for (const entry of entries) {
+      const entryPath = path.join(localDir, entry.name);
+      const entryKey = `${prefix}/${entry.name}`;
 
-    if (entry.isDirectory()) {
-      // Recurse into subdirectory
-      await uploadSplitFilesToS3(entryPath, bucket, entryKey);
+      if (entry.isDirectory()) {
+        // Recurse into subdirectory
+        await uploadSplitFilesToS3(entryPath, bucket, entryKey);
+      } else {
+        // Upload file
+        await uploadFile(entryPath, bucket, entryKey);
+      }
+    }
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error(`S3 uploadSplitFilesToS3 failed for ${localDir}: Authentication token expired or invalid. Please refresh your credentials.`);
+      throw new Error("S3 upload failed due to expired or invalid credentials.");
     } else {
-      // Upload file
-      await uploadFile(entryPath, bucket, entryKey);
+      console.error(`S3 uploadSplitFilesToS3 error for ${localDir}:`, err);
+      throw err;
     }
   }
 }

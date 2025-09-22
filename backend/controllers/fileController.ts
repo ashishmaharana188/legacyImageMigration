@@ -313,12 +313,15 @@ class FileController {
           );
         }
       });
-    } catch (error) {
-      console.error("S3 upload error:", error);
+    } catch (error: any) {
+      const errorMessage = error.message && error.message.includes("expired credentials")
+        ? "S3 upload failed: Authentication token expired. Please refresh your credentials."
+        : error instanceof Error ? error.message : "Unknown error";
+      console.error("S3 upload error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "Failed to upload files to S3",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       });
       // Send WebSocket message on error
       wss.clients.forEach((client: WebSocket) => {
@@ -327,9 +330,7 @@ class FileController {
             JSON.stringify({
               type: "s3UploadStatus",
               status: "error",
-              message: `S3 upload failed: ${
-                error instanceof Error ? error.message : "Unknown error"
-              }`,
+              message: `S3 upload failed: ${errorMessage}`,
             })
           );
         }
@@ -394,13 +395,16 @@ class FileController {
         message: "All split files uploaded to S3 successfully.",
         ...results,
       });
-    } catch (error) {
+    } catch (error: any) {
       // This outer catch handles errors like `fs.readdir` failing
-      console.error("General S3 upload process error:", error);
+      const errorMessage = error.message && error.message.includes("expired credentials")
+        ? "S3 upload process failed: Authentication token expired. Please refresh your credentials."
+        : error instanceof Error ? error.message : "Unknown error";
+      console.error("General S3 upload process error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "A critical error occurred during the S3 upload process.",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       });
     }
   }
@@ -413,12 +417,15 @@ class FileController {
         | undefined;
       const data = await listFiles(prefix, continuationToken);
       res.status(200).json({ statusCode: 200, ...data });
-    } catch (error) {
-      console.error("S3 list error:", error);
+    } catch (error: any) {
+      const errorMessage = error.message && error.message.includes("expired credentials")
+        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+        : error instanceof Error ? error.message : "Unknown error";
+      console.error("S3 list error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "Failed to list S3 files",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       });
     }
   }
@@ -437,12 +444,15 @@ class FileController {
         message: "Files deleted successfully",
         deletedKeys,
       });
-    } catch (error) {
-      console.error("S3 delete error:", error);
+    } catch (error: any) {
+      const errorMessage = error.message && error.message.includes("expired credentials")
+        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+        : error instanceof Error ? error.message : "Unknown error";
+      console.error("S3 delete error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "Failed to delete S3 files",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       });
     }
   }
@@ -612,12 +622,15 @@ class FileController {
       res
         .status(200)
         .json({ statusCode: 200, files, directories, nextContinuationToken });
-    } catch (error) {
-      console.error("S3 search error:", error);
+    } catch (error: any) {
+      const errorMessage = error.message && error.message.includes("expired credentials")
+        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+        : error instanceof Error ? error.message : "Unknown error";
+      console.error("S3 search error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "Failed to search S3 files",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       });
     }
   }
@@ -631,12 +644,15 @@ class FileController {
         | undefined;
       const data = await searchFolders(prefix, pattern, continuationToken);
       res.status(200).json({ statusCode: 200, ...data });
-    } catch (error) {
-      console.error("S3 folder search error:", error);
+    } catch (error: any) {
+      const errorMessage = error.message && error.message.includes("expired credentials")
+        ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+        : error instanceof Error ? error.message : "Unknown error";
+      console.error("S3 folder search error:", errorMessage);
       res.status(500).json({
         statusCode: 500,
         error: "Failed to search S3 folders",
-        details: error instanceof Error ? error.message : "Unknown error",
+        details: errorMessage,
       });
     }
   }

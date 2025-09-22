@@ -44,6 +44,7 @@ interface FileResponse {
   badRows?: number;
   transferredCount?: number; // Added for transfer to mongo
   documents?: any[]; // Added for transfer to mongo to hold document details
+  rows?: any[]; // Added for sanityCheckDuplicates dry-run results
 }
 
 interface S3File {

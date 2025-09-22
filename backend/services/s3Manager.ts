@@ -16,14 +16,25 @@ const s3 = new S3Client({
   },
 });
 
+function isAuthError(error: any): boolean {
+  return (
+    error.name === "ExpiredToken" ||
+    error.Code === "InvalidToken" || // Check for error.Code
+    (error.message &&
+      (error.message.includes("token expired") ||
+        error.message.includes("InvalidToken") || // Check for InvalidToken in message
+        error.message.includes("Token-0"))) // Check for Token-0 in message
+  );
+}
+
 export async function verifyS3Connection(): Promise<void> {
   try {
     console.log("Verifying S3 connection...");
     await s3.send(new ListBucketsCommand({}));
     console.log("S3 connection successful.");
   } catch (error: any) {
-    if (error.name === "ExpiredToken" || (error.message && error.message.includes("token expired"))) {
-      console.error("S3 connection failed: Authentication token expired. Please refresh your credentials.");
+    if (isAuthError(error)) {
+      console.error("S3 connection failed: Authentication token expired or invalid. Please refresh your credentials.");
     } else {
       console.error("S3 connection failed:", error.message || error);
     }
@@ -72,9 +83,14 @@ export async function listFiles(
     };
 
     return page;
-  } catch (err) {
-    console.error(err);
-    throw err; // Re-throw to be handled by controller
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error("S3 listFiles failed: Authentication token expired or invalid. Please refresh your credentials.");
+      throw new Error("S3 operation failed due to expired or invalid credentials.");
+    } else {
+      console.error("S3 listFiles error:", err);
+      throw err; // Re-throw to be handled by controller
+    }
   }
 }
 
@@ -100,9 +116,14 @@ export async function deleteFiles(keys: string[]): Promise<string[]> {
     const deletedKeys = Deleted?.map((d) => d.Key!) || [];
     console.log(`Successfully deleted ${deletedKeys.length} files from S3.`);
     return deletedKeys;
-  } catch (err) {
-    console.error("Error deleting files from S3:", err);
-    return [];
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error("S3 deleteFiles failed: Authentication token expired or invalid. Please refresh your credentials.");
+      throw new Error("S3 operation failed due to expired or invalid credentials.");
+    } else {
+      console.error("Error deleting files from S3:", err);
+      return [];
+    }
   }
 }
 
@@ -156,9 +177,14 @@ export async function searchFiles(
       files: matchedFiles,
       nextContinuationToken: IsTruncated ? NextContinuationToken : undefined,
     };
-  } catch (err) {
-    console.error("Error searching files:", err);
-    throw err;
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error("S3 searchFiles failed: Authentication token expired or invalid. Please refresh your credentials.");
+      throw new Error("S3 operation failed due to expired or invalid credentials.");
+    } else {
+      console.error("Error searching files:", err);
+      throw err;
+    }
   }
 }
 
@@ -200,8 +226,13 @@ export async function searchFolders(
       directories: matchedDirectories,
       nextContinuationToken: IsTruncated ? NextContinuationToken : undefined,
     };
-  } catch (err) {
-    console.error("Error searching folders:", err);
-    throw err;
+  } catch (err: any) {
+    if (isAuthError(err)) {
+      console.error("S3 searchFolders failed: Authentication token expired or invalid. Please refresh your credentials.");
+      throw new Error("S3 operation failed due to expired or invalid credentials.");
+    } else {
+      console.error("Error searching folders:", err);
+      throw err;
+    }
   }
 }
