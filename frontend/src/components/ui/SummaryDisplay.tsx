@@ -111,6 +111,31 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           )}
         </div>
       );
+    } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
+      return (
+        <div>
+          <h5 className="font-semibold">File Upload Summary:</h5>
+          <p>Original File: {log.originalFile}</p>
+          <p>Processed File: {log.processedFile}</p>
+          <h5 className="font-semibold mt-2">Processed Files Details:</h5>
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-1">Row</th>
+                <th scope="col" className="px-2 py-1">Page Count</th>
+              </tr>
+            </thead>
+            <tbody>
+              {log.fileUrls.map((item: any, index: number) => (
+                <tr key={index} className="bg-white border-b">
+                  <td className="px-2 py-1">{item.row}</td>
+                  <td className="px-2 py-1">{item.pageCount}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
     } else if (log.insertedRows !== undefined) {
       return (
         <div>
