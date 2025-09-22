@@ -51,12 +51,7 @@ export async function listFiles(
   prefix: string,
   continuationToken?: string
 ): Promise<S3ListResponse> {
-  console.log(
-    "Entering listFiles function. Prefix:",
-    prefix,
-    "ContinuationToken:",
-    continuationToken
-  );
+
   const command = new ListObjectsV2Command({
     Bucket: S3_BUCKET_NAME,
     Prefix: prefix,
@@ -67,12 +62,7 @@ export async function listFiles(
   try {
     const { Contents, CommonPrefixes, IsTruncated, NextContinuationToken } =
       await s3.send(command);
-    console.log(
-      "S3 Response - IsTruncated:",
-      IsTruncated,
-      "NextContinuationToken:",
-      NextContinuationToken
-    );
+
 
     const page: S3ListResponse = {
       directories: CommonPrefixes?.map((p) => p.Prefix!) || [],
@@ -139,10 +129,7 @@ export async function searchFiles(
   const regex = new RegExp(pattern);
 
   try {
-    console.log(
-      "Sending ListObjectsV2Command with ContinuationToken:",
-      continuationToken
-    );
+
     const command = new ListObjectsV2Command({
       Bucket: S3_BUCKET_NAME,
       Prefix: prefix,
@@ -153,7 +140,7 @@ export async function searchFiles(
     const { Contents, IsTruncated, NextContinuationToken } = await s3.send(
       command
     );
-    console.log("Received NextContinuationToken:", NextContinuationToken);
+
 
     if (Contents) {
       // Log the keys before filtering
