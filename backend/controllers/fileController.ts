@@ -112,12 +112,8 @@ class FileController {
       res.status(200).json({
         statusCode: 200,
         message: "Files split successfully",
-        splitSummary: result.summary, // Changed from splitFiles to splitSummary
-        splitFiles: result.splitFiles.map((file: any) => ({
-          originalPath: file.originalPath,
-          url: `/download-file/${encodeURIComponent(file.splitPath)}`,
-          page: file.page,
-        })),
+        splitSummary: result.summary,
+        splitFiles: result.splitFiles,
       });
     } catch (error) {
       console.error("Split error:", error);
