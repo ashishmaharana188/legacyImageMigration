@@ -183,67 +183,110 @@ export class PdfProcessing {
           trxnType,
         });
 
-        if (!serverId) {
-          processedRows.push({
-            id_fund: fund,
-            id_trtype: trxnType,
-            id_ihno: ihNo,
-            id_path: pathVal,
-            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-            page_count: "Missing serverId",
-          });
-          errors++;
-          this.logger.info(`Row ${rowNumber}: Missing serverId`);
-          continue;
-        }
-        if (!drivePath) {
-          processedRows.push({
-            id_fund: fund,
-            id_trtype: trxnType,
-            id_ihno: ihNo,
-            id_path: pathVal,
-            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-            page_count: "Missing drivePath",
-          });
-          errors++;
-          this.logger.info(`Row ${rowNumber}: Missing drivePath`);
-          continue;
-        }
-        if (!pathVal) {
-          processedRows.push({
-            id_fund: fund,
-            id_trtype: trxnType,
-            id_ihno: ihNo,
-            id_path: pathVal,
-            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-            page_count: "Missing pathVal",
-          });
-          errors++;
-          this.logger.info(`Row ${rowNumber}: Missing pathVal`);
-          continue;
+        this.logger.info(`Current __dirname: ${__dirname}`);
+        const localFilesFolder = path.resolve(__dirname, "../../../localFiles");
+        const localFilePath = path.join(localFilesFolder, pathVal);
+        let sourceFilePath: string;
+        let isLocalFile = false;
+        let isValidSmbPath = true;
+
+        this.logger.info(
+          `Row ${rowNumber}: Checking local file path: ${localFilePath}`
+        );
+        if (
+          await fs
+            .access(localFilePath)
+            .then(() => {
+              this.logger.info(
+                `Row ${rowNumber}: Local file found: ${localFilePath}`
+              );
+              return true;
+            })
+            .catch((err) => {
+              this.logger.warn(
+                `Row ${rowNumber}: Local file not found or inaccessible: ${localFilePath}, Error: ${err.message}`
+              );
+              return false;
+            })
+        ) {
+          sourceFilePath = localFilePath;
+          isLocalFile = true;
+          this.logger.info(
+            `Row ${rowNumber}: Using local file: ${sourceFilePath}`
+          );
+        } else {
+          if (!serverId) {
+            processedRows.push({
+              id_fund: fund,
+              id_trtype: trxnType,
+              id_ihno: ihNo,
+              id_path: pathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count: "Missing serverId",
+            });
+            errors++;
+            this.logger.info(`Row ${rowNumber}: Missing serverId`);
+            isValidSmbPath = false;
+          }
+          if (isValidSmbPath && !drivePath) {
+            processedRows.push({
+              id_fund: fund,
+              id_trtype: trxnType,
+              id_ihno: ihNo,
+              id_path: pathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count: "Missing drivePath",
+            });
+            errors++;
+            this.logger.info(`Row ${rowNumber}: Missing drivePath`);
+            isValidSmbPath = false;
+          }
+          if (isValidSmbPath && !pathVal) {
+            processedRows.push({
+              id_fund: fund,
+              id_trtype: trxnType,
+              id_ihno: ihNo,
+              id_path: pathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count: "Missing pathVal",
+            });
+            errors++;
+            this.logger.info(`Row ${rowNumber}: Missing pathVal`);
+            isValidSmbPath = false;
+          }
+
+          if (isValidSmbPath) {
+            sourceFilePath = path
+              .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
+              .replace(/^(\.\.[\/\\])+/, "");
+            if (sourceFilePath.includes("image")) {
+              sourceFilePath = sourceFilePath.replace(/image/g, folder);
+            } else if (sourceFilePath.includes("common")) {
+              sourceFilePath = sourceFilePath.replace(/common/g, folder);
+            }
+            this.logger.info(
+              `Row ${rowNumber}: Source file path: ${sourceFilePath}`
+            );
+          } else {
+            sourceFilePath = ""; // Ensure sourceFilePath is empty if SMB path is invalid
+          }
         }
 
-        let sourceFilePath = path
-          .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
-          .replace(/^(\.\.[\/\\])+/, "");
-        if (sourceFilePath.includes("image")) {
-          sourceFilePath = sourceFilePath.replace(/image/g, folder);
-        } else if (sourceFilePath.includes("common")) {
-          sourceFilePath = sourceFilePath.replace(/common/g, folder);
+        // If neither local file nor valid SMB path, skip to next row
+        if (!isLocalFile && (!isValidSmbPath || sourceFilePath === "")) {
+          continue;
         }
-        this.logger.info(
-          `Row ${rowNumber}: Source file path: ${sourceFilePath}`
-        );
 
         const fileExt = this.getFileExtension(pathVal);
         this.logger.info(`Row ${rowNumber}: File extension: ${fileExt}`);
         const trxn = this.trxnMap[trxnType] || "Unknown";
 
         if (
-          await fs
+          isLocalFile ||
+          (await fs
             .access(sourceFilePath)
             .then(() => true)
-            .catch(() => false)
+            .catch(() => false))
         ) {
           this.logger.info(`Row ${rowNumber}: Reading file: ${sourceFilePath}`);
           const sourceData = await fs.readFile(sourceFilePath);
