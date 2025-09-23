@@ -185,7 +185,7 @@ export class PdfProcessing {
 
         this.logger.info(`Current __dirname: ${__dirname}`);
         const localFilesFolder = path.resolve(__dirname, "../../../localFiles");
-        let sourceFilePath: string;
+        let sourceFilePath: string = "";
         let isLocalFile = false;
         let isValidSmbPath = true;
         let resolvedPathVal = pathVal; // Use a new variable for pathVal that might get an extension appended
@@ -325,7 +325,7 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              id_path: pathVal,
+              id_path: resolvedPathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: "Path Error",
             });
@@ -358,7 +358,7 @@ export class PdfProcessing {
               id_trtype: trxn,
               id_ihno: ihNo,
 
-              id_path: pathVal,
+              id_path: resolvedPathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: pageCount,
             });
@@ -383,7 +383,7 @@ export class PdfProcessing {
               id_fund: fund,
               id_trtype: trxn,
               id_ihno: ihNo,
-              id_path: pathVal,
+              id_path: resolvedPathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
             });
@@ -396,7 +396,7 @@ export class PdfProcessing {
             id_fund: fund,
             id_trtype: trxn,
             id_ihno: ihNo,
-            id_path: pathVal,
+            id_path: resolvedPathVal,
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Not Found",
           });
