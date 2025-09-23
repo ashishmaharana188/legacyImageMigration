@@ -12,7 +12,7 @@ interface SummaryItem {
   status: string;
 }
 
-interface UploadProgress {
+interface UploadStatus {
   fileName: string;
   progress?: number;
   status?: string;
@@ -22,9 +22,7 @@ const App: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
-  const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(
-    null
-  );
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
 
   useEffect(() => {
@@ -37,11 +35,32 @@ const App: React.FC = () => {
     ws.onmessage = (event) => {
       try {
         const message = JSON.parse(event.data);
+        console.log("WebSocket message received:", message); // Add this line for debugging
         if (message.type === "progress" || message.type === "complete") {
-          setUploadProgress({
-            fileName: message.fileName,
-            progress: message.progress,
-            status: message.status,
+          setUploadStatuses((prevStatuses) => {
+            const existingFileIndex = prevStatuses.findIndex(
+              (s) => s.fileName === message.fileName
+            );
+            if (existingFileIndex > -1) {
+              // Update existing file status
+              const newStatuses = [...prevStatuses];
+              newStatuses[existingFileIndex] = {
+                ...newStatuses[existingFileIndex],
+                progress: message.progress,
+                status: message.status,
+              };
+              return newStatuses;
+            } else {
+              // Add new file status
+              return [
+                ...prevStatuses,
+                {
+                  fileName: message.fileName,
+                  progress: message.progress,
+                  status: message.status,
+                },
+              ];
+            }
           });
         }
       } catch (error) {
@@ -96,7 +115,7 @@ const App: React.FC = () => {
             <SummaryDisplay
               taskLogs={taskLogs}
               summaryData={summaryData}
-              uploadProgress={uploadProgress}
+              uploadStatuses={uploadStatuses}
             />
           </div>
         </Panel>
@@ -115,7 +134,7 @@ const App: React.FC = () => {
               <UploadAndScriptTask
                 updateTaskLog={updateTaskLog}
                 setSummaryData={setSummaryData}
-                setUploadProgress={setUploadProgress}
+                setUploadStatuses={setUploadStatuses}
               />
             )}
             {selectedTask === "sqlAndMongo" && (

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import axios from "axios";
 
 interface SummaryItem {
@@ -6,7 +6,7 @@ interface SummaryItem {
   status: string;
 }
 
-interface UploadProgress {
+interface UploadStatus {
   fileName: string;
   progress?: number;
   status?: string;
@@ -15,13 +15,13 @@ interface UploadProgress {
 interface SummaryDisplayProps {
   taskLogs: { [key: string]: any };
   summaryData: SummaryItem[];
-  uploadProgress: UploadProgress | null;
+  uploadStatuses: UploadStatus[];
 }
 
 const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
   summaryData,
-  uploadProgress,
+  uploadStatuses,
 }) => {
   const [expandedLogContent, setExpandedLogContent] = useState<string | null>(
     null
@@ -29,6 +29,11 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const [parsedBadRows, setParsedBadRows] = useState<any[] | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
+
+  useEffect(() => {
+    // This effect can be used to react to changes in props, if necessary.
+    // For example, automatically expanding a log if it contains an error.
+  }, [taskLogs, uploadStatuses]);
 
   const toggleSplitLog = (logId: string) => {
     setExpandedSplitLog((prev) => (prev === logId ? null : logId));
@@ -454,47 +459,54 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             </div>
           </div>
         ))}
-      </div>
 
-      {summaryData.length > 0 && (
-        <div className="mt-4">
-          <h3 className="text-lg font-semibold mb-1">Summary</h3>
-          <div className="bg-gray-200 p-2 rounded">
-            {summaryData.map((item, index) => (
-              <div key={index} className="mb-2">
-                <p>File: {item.fileName}</p>
-                <p>Status: {item.status}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {uploadProgress && (
-        <div className="mt-4">
-          <h3 className="text-lg font-semibold mb-1">Upload Progress</h3>
-          <div className="bg-gray-200 p-3 rounded">
-            <div key={uploadProgress.fileName} className="mb-5">
-              <p>File: {uploadProgress.fileName}</p>
-              {uploadProgress.status ? (
-                <p>Status: {uploadProgress.status}</p>
-              ) : (
-                <>
-                  <div className="w-full bg-gray-300 rounded-full h-2.5 dark:bg-gray-700">
-                    <div
-                      className="bg-[#212427] brightness-150 h-2.5 rounded-full"
-                      style={{ width: `${uploadProgress.progress}%` }}
-                    ></div>
-                  </div>
-                  <span className="text-sm font-medium text-[#212427] dark:text-[#212427]">
-                    {uploadProgress.progress}%
-                  </span>
-                </>
-              )}
+        {uploadStatuses.length > 0 && (
+          <div className="mb-4">
+            <h4 className="font-semibold capitalize mb-2">
+              S3 Upload Progress
+            </h4>
+            <div className="bg-gray-100 p-2 rounded">
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-2 py-1">
+                      File Name
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uploadStatuses.map((fileStatus) => (
+                    <tr key={fileStatus.fileName} className="bg-white border-b">
+                      <td className="px-2 py-1">{fileStatus.fileName}</td>
+                      <td className="px-2 py-1">
+                        {fileStatus.status === "Done" ? (
+                          <span className="text-black">Done</span>
+                        ) : fileStatus.progress !== undefined ? (
+                          <div className="w-full bg-gray-300 rounded-full h-4">
+                            <div
+                              className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                              style={{
+                                width: `${fileStatus.progress}%`,
+                              }}
+                            >
+                              {fileStatus.progress}%
+                            </div>
+                          </div>
+                        ) : (
+                          "Starting..."
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 };
