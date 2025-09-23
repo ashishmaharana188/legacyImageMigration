@@ -156,18 +156,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
 
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-to-s3",
-        {},
-        {
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
-              );
-              setUploadStatuses([{ fileName: "All files", progress: percentCompleted, status: "Uploading..." }]);
-            }
-          },
-        }
+        "http://localhost:3000/upload-to-s3"
       );
     } catch (error: any) {
       const errorMessage = `Upload to S3 failed: ${
@@ -187,17 +176,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-split-to-s3",
-        {},
-        {
-          onUploadProgress: (progressEvent) => {
-            if (progressEvent.total) {
-              const percentCompleted = Math.round(
-                (progressEvent.loaded * 100) / progressEvent.total
-              );
-              setUploadStatuses([{ fileName: "Split files", progress: percentCompleted, status: "Uploading..." }]);
-            }
-          },
-        }
+        {}
       );
     } catch (error: any) {
       const errorMessage = `Upload of split files to S3 failed: ${
