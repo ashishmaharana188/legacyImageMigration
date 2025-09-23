@@ -185,36 +185,54 @@ export class PdfProcessing {
 
         this.logger.info(`Current __dirname: ${__dirname}`);
         const localFilesFolder = path.resolve(__dirname, "../../../localFiles");
-        const localFilePath = path.join(localFilesFolder, pathVal);
         let sourceFilePath: string;
         let isLocalFile = false;
         let isValidSmbPath = true;
+        let resolvedPathVal = pathVal; // Use a new variable for pathVal that might get an extension appended
 
-        this.logger.info(
-          `Row ${rowNumber}: Checking local file path: ${localFilePath}`
-        );
+        const possibleExtensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
+
+        let foundLocalFile = false;
+        let currentLocalFilePath = path.join(localFilesFolder, pathVal);
+
+        // First, try with the pathVal as is (it might already have an extension)
+        this.logger.info(`Row ${rowNumber}: Checking local file path (as is): ${currentLocalFilePath}`);
         if (
           await fs
-            .access(localFilePath)
-            .then(() => {
-              this.logger.info(
-                `Row ${rowNumber}: Local file found: ${localFilePath}`
-              );
-              return true;
-            })
-            .catch((err) => {
-              this.logger.warn(
-                `Row ${rowNumber}: Local file not found or inaccessible: ${localFilePath}, Error: ${err.message}`
-              );
-              return false;
-            })
+            .access(currentLocalFilePath)
+            .then(() => true)
+            .catch(() => false)
         ) {
-          sourceFilePath = localFilePath;
+          sourceFilePath = currentLocalFilePath;
           isLocalFile = true;
-          this.logger.info(
-            `Row ${rowNumber}: Using local file: ${sourceFilePath}`
-          );
+          foundLocalFile = true;
+          this.logger.info(`Row ${rowNumber}: Local file found (as is): ${sourceFilePath}`);
         } else {
+          // If not found, try appending common extensions
+          for (const ext of possibleExtensions) {
+            currentLocalFilePath = path.join(localFilesFolder, pathVal + ext);
+            this.logger.info(`Row ${rowNumber}: Checking local file path (with extension ${ext}): ${currentLocalFilePath}`);
+            if (
+              await fs
+                .access(currentLocalFilePath)
+                .then(() => true)
+                .catch(() => false)
+            ) {
+              sourceFilePath = currentLocalFilePath;
+              isLocalFile = true;
+              foundLocalFile = true;
+              resolvedPathVal = pathVal + ext; // Update resolvedPathVal with the found extension
+              this.logger.info(`Row ${rowNumber}: Local file found (with extension ${ext}): ${sourceFilePath}`);
+              break; // Stop after finding the first matching extension
+            }
+          }
+        }
+
+        if (foundLocalFile) {
+          // If a local file was found, proceed with it
+          this.logger.info(`Row ${rowNumber}: Using local file: ${sourceFilePath}`);
+        } else {
+          // Fallback to SMB logic if no local file was found
           if (!serverId) {
             processedRows.push({
               id_fund: fund,
@@ -277,7 +295,8 @@ export class PdfProcessing {
           continue;
         }
 
-        const fileExt = this.getFileExtension(pathVal);
+        // Use resolvedPathVal for subsequent operations that need the correct extension
+        const fileExt = this.getFileExtension(resolvedPathVal);
         this.logger.info(`Row ${rowNumber}: File extension: ${fileExt}`);
         const trxn = this.trxnMap[trxnType] || "Unknown";
 
@@ -297,7 +316,7 @@ export class PdfProcessing {
               trxn,
               fund,
               ihNo,
-              pathVal,
+              resolvedPathVal, // Use resolvedPathVal here
               rowNumber
             );
           } catch (err) {
