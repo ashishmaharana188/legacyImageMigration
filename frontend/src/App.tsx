@@ -16,6 +16,8 @@ interface UploadStatus {
   fileName: string;
   progress?: number;
   status?: string;
+  isDirectory?: boolean;
+  totalFiles?: number;
 }
 
 const App: React.FC = () => {
@@ -57,6 +59,10 @@ const App: React.FC = () => {
                   ...newStatuses[existingFileIndex],
                   progress: message.progress,
                   status: message.status,
+                  isDirectory: message.isDirectory,
+                  totalFiles:
+                    message.totalFiles ??
+                    newStatuses[existingFileIndex].totalFiles,
                 };
                 return newStatuses;
               } else {
@@ -66,6 +72,8 @@ const App: React.FC = () => {
                     fileName: message.fileName,
                     progress: message.progress,
                     status: message.status,
+                    isDirectory: message.isDirectory,
+                    totalFiles: message.totalFiles,
                   },
                 ];
               }
@@ -101,7 +109,7 @@ const App: React.FC = () => {
         clearTimeout(reconnectTimeout);
       }
     };
-  }, [reconnectInterval]);
+  }, []);
 
   const handleDrawerOpen = () => {
     setOpen(true);

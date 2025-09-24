@@ -38,6 +38,24 @@ function isAuthError(error: any): boolean {
   );
 }
 
+function countFilesRecursive(dir: string): number {
+  let count = 0;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        count += countFilesRecursive(entryPath);
+      } else {
+        count++;
+      }
+    }
+  } catch (err) {
+    console.error(`Error counting files in ${dir}:`, err);
+  }
+  return count;
+}
+
 export async function uploadFile(
   localFilePath: string,
   bucket: string,
@@ -63,6 +81,7 @@ export async function uploadFile(
             type: "progress",
             fileName: key,
             progress: percentage,
+            isDirectory: false,
           })
         );
       }
@@ -74,6 +93,7 @@ export async function uploadFile(
         type: "complete",
         fileName: key,
         status: "Done",
+        isDirectory: false,
       })
     );
     console.log(`[UPLOADED] ${key}`);
@@ -90,51 +110,132 @@ export async function uploadFile(
   }
 }
 
-export async function uploadDirectoryRecursive(
+async function performRecursiveUpload(
   localDir: string,
   bucket: string,
-  prefix: string
+  prefix: string,
+  uploadFunction: (
+    localDir: string,
+    bucket: string,
+    prefix: string
+  ) => Promise<{ successful: string[]; failed: { name: string; error: string }[] }>
 ) {
+  const totalFiles = countFilesRecursive(localDir);
+  if (totalFiles === 0) {
+    broadcast(
+      JSON.stringify({
+        type: "complete",
+        fileName: prefix,
+        status: "Done",
+        isDirectory: true,
+        totalFiles: 0,
+      })
+    );
+    return { successful: [], failed: [] };
+  }
+  let uploadedFiles = 0;
+
+  broadcast(
+    JSON.stringify({
+      type: "progress",
+      fileName: prefix,
+      progress: 0,
+      status: "In progress",
+      isDirectory: true,
+      totalFiles: totalFiles,
+    })
+  );
+
+  const updateProgress = () => {
+    const progress =
+      totalFiles > 0 ? Math.round((uploadedFiles / totalFiles) * 100) : 100;
+    broadcast(
+      JSON.stringify({
+        type: "progress",
+        fileName: prefix,
+        progress: progress,
+        status: "In progress",
+        isDirectory: true,
+      })
+    );
+  };
+
   const results = {
     successful: [] as string[],
     failed: [] as { name: string; error: string }[],
   };
+
   try {
     const entries = fs.readdirSync(localDir, { withFileTypes: true });
+    const uploadPromises: Promise<void>[] = [];
 
     for (const entry of entries) {
       const entryPath = path.join(localDir, entry.name);
       const entryKey = `${prefix}/${entry.name}`;
 
       if (entry.isDirectory()) {
-        const subDirResults = await uploadDirectoryRecursive(
-          entryPath,
-          bucket,
-          entryKey
-        );
-        results.successful.push(...subDirResults.successful);
-        results.failed.push(...subDirResults.failed);
+        const subDirPromise = (async () => {
+          const subDirResults = await uploadFunction(entryPath, bucket, entryKey);
+          results.successful.push(...subDirResults.successful);
+          results.failed.push(...subDirResults.failed);
+          const filesInSubDir = countFilesRecursive(entryPath);
+          uploadedFiles += filesInSubDir;
+          updateProgress();
+        })();
+        uploadPromises.push(subDirPromise);
       } else {
-        try {
-          await uploadFile(entryPath, bucket, entryKey, entry.name);
-          results.successful.push(entry.name);
-        } catch (uploadError: any) {
-          results.failed.push({ name: entry.name, error: uploadError.message });
-        }
+        const fileUploadPromise = (async () => {
+          try {
+            await uploadFile(entryPath, bucket, entryKey, entry.name);
+            results.successful.push(entry.name);
+            uploadedFiles++;
+            updateProgress();
+          } catch (uploadError: any) {
+            results.failed.push({
+              name: entry.name,
+              error: uploadError.message,
+            });
+          }
+        })();
+        uploadPromises.push(fileUploadPromise);
       }
     }
+
+    await Promise.all(uploadPromises);
+
+    broadcast(
+      JSON.stringify({
+        type: "complete",
+        fileName: prefix,
+        status: "Done",
+        isDirectory: true,
+      })
+    );
+    return results;
   } catch (err: any) {
     if (isAuthError(err)) {
       console.error(
-        `S3 uploadDirectoryRecursive failed for ${localDir}: Authentication token expired or invalid. Please refresh your credentials.`
+        `S3 recursive upload failed for ${localDir}: Authentication token expired or invalid. Please refresh your credentials.`
       );
       throw new Error("S3 upload failed due to expired or invalid credentials.");
     } else {
-      console.error(`S3 uploadDirectoryRecursive error for ${localDir}:`, err);
+      console.error(`S3 recursive upload error for ${localDir}:`, err);
       throw err;
     }
   }
-  return results;
+}
+
+export async function uploadDirectoryRecursive(
+  localDir: string,
+  bucket: string,
+  prefix: string
+) {
+  return performRecursiveUpload(
+    localDir,
+    bucket,
+    prefix,
+    uploadDirectoryRecursive
+  );
 }
 
 export async function uploadSplitFilesToS3(
@@ -142,45 +243,11 @@ export async function uploadSplitFilesToS3(
   bucket: string,
   prefix: string
 ) {
-  const results = {
-    successful: [] as string[],
-    failed: [] as { name: string; error: string }[],
-  };
-  try {
-    const entries = fs.readdirSync(localDir, { withFileTypes: true });
-
-    for (const entry of entries) {
-      const entryPath = path.join(localDir, entry.name);
-      const entryKey = `${prefix}/${entry.name}`;
-
-      if (entry.isDirectory()) {
-        const subDirResults = await uploadSplitFilesToS3(
-          entryPath,
-          bucket,
-          entryKey
-        );
-        results.successful.push(...subDirResults.successful);
-        results.failed.push(...subDirResults.failed);
-      } else {
-        try {
-          await uploadFile(entryPath, bucket, entryKey, entry.name);
-          results.successful.push(entry.name);
-        } catch (uploadError: any) {
-          results.failed.push({ name: entry.name, error: uploadError.message });
-        }
-      }
-    }
-  } catch (err: any) {
-    if (isAuthError(err)) {
-      console.error(
-        `S3 uploadSplitFilesToS3 failed for ${localDir}: Authentication token expired or invalid. Please refresh your credentials.`
-      );
-      throw new Error("S3 upload failed due to expired or invalid credentials.");
-    } else {
-      console.error(`S3 uploadSplitFilesToS3 error for ${localDir}:`, err);
-      throw err;
-    }
-  }
-  return results;
+  return performRecursiveUpload(
+    localDir,
+    bucket,
+    prefix,
+    uploadSplitFilesToS3
+  );
 }
 

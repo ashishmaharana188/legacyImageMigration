@@ -10,6 +10,8 @@ interface UploadStatus {
   fileName: string;
   progress?: number;
   status?: string;
+  isDirectory?: boolean;
+  totalFiles?: number;
 }
 
 interface SummaryDisplayProps {
@@ -59,59 +61,140 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     setExpandedSplitLog((prev) => (prev === logId ? null : logId));
   };
 
-  const groupUploadStatusesByDirectory = (statuses: UploadStatus[]) => {
-    const grouped: {
-      [key: string]: {
-        files: UploadStatus[];
-        totalProgress: number;
-        doneCount: number;
-      };
-    } = {};
+  const renderS3Uploads = () => {
+    const directoryStatuses = uploadStatuses.filter((s) => s.isDirectory);
+    const fileStatuses = uploadStatuses.filter((s) => !s.isDirectory);
 
-    statuses.forEach((status) => {
-      const lastSlashIndex = status.fileName.lastIndexOf("/");
-      let directoryName: string;
+    // Robustly find top-level directories (those that aren't a sub-directory of another)
+    const topLevelDirs = directoryStatuses.filter((dir) =>
+      !directoryStatuses.some(
+        (otherDir) =>
+          dir.fileName !== otherDir.fileName &&
+          dir.fileName.startsWith(otherDir.fileName + "/")
+      )
+    );
 
-      if (lastSlashIndex !== -1) {
-        const fullDirectoryPath = status.fileName.substring(0, lastSlashIndex);
-        const secondLastSlashIndex = fullDirectoryPath.lastIndexOf("/");
+    // Find top-level files (those not inside any directory)
+    const topLevelFiles = fileStatuses.filter(
+      (file) =>
+        !directoryStatuses.some((dir) =>
+          file.fileName.startsWith(dir.fileName + "/")
+        )
+    );
 
-        if (secondLastSlashIndex !== -1) {
-          directoryName = fullDirectoryPath.substring(secondLastSlashIndex + 1);
-        } else {
-          directoryName = fullDirectoryPath; // Case like 'dir/file.pdf'
-        }
-      } else {
-        directoryName = "Other Files"; // Files without any slashes
-      }
+    return (
+      <table className="w-full text-sm text-left">
+        <thead className="text-xs uppercase bg-gray-50">
+          <tr>
+            <th scope="col" className="px-2 py-1">
+              Directory/File Name
+            </th>
+            <th scope="col" className="px-2 py-1">
+              Status
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {/* Render Top-Level Directories */}
+          {topLevelDirs.map((dirStatus) => {
+            // Find direct children (files and subdirs) for this dir
+            const children = uploadStatuses.filter(
+              (child) =>
+                child.fileName.startsWith(dirStatus.fileName + "/") &&
+                child.fileName.split("/").length ===
+                  dirStatus.fileName.split("/").length + 1
+            );
 
-      if (!grouped[directoryName]) {
-        grouped[directoryName] = { files: [], totalProgress: 0, doneCount: 0 };
-      }
-      grouped[directoryName].files.push(status);
-      if (status.status === "Done") {
-        grouped[directoryName].doneCount++;
-      }
-      grouped[directoryName].totalProgress += status.progress || 0;
-    });
-
-    return Object.entries(grouped).map(([directory, data]) => {
-      const totalFiles = data.files.length;
-      const allDone = data.doneCount === totalFiles;
-      const averageProgress =
-        totalFiles > 0 ? Math.round(data.totalProgress / totalFiles) : 0;
-
-      return {
-        directoryName: directory,
-        progress: allDone ? 100 : averageProgress,
-        status: allDone
-          ? "Done"
-          : averageProgress > 0
-          ? "Uploading..."
-          : "Starting...",
-        files: data.files,
-      };
-    });
+            return (
+              <React.Fragment key={dirStatus.fileName}>
+                <tr className="bg-gray-100 border-b font-semibold">
+                  <td className="px-2 py-1">
+                    <button
+                      onClick={() => toggleDirectory(dirStatus.fileName)}
+                      className="font-semibold text-black hover:underline focus:outline-none"
+                    >
+                      {dirStatus.fileName} ({dirStatus.totalFiles ?? 0} files)
+                    </button>
+                  </td>
+                  <td className="px-2 py-1">
+                    {dirStatus.status === "Done" ? (
+                      <span className="text-black">Done</span>
+                    ) : dirStatus.progress !== undefined ? (
+                      <div className="w-full bg-gray-300 rounded-full h-4">
+                        <div
+                          className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                          style={{ width: `${dirStatus.progress}%` }}
+                        >
+                          {dirStatus.progress}%
+                        </div>
+                      </div>
+                    ) : (
+                      "Starting..."
+                    )}
+                  </td>
+                </tr>
+                {/* Render Children if expanded */}
+                {expandedDirectories[dirStatus.fileName] &&
+                  children.map((childStatus) => (
+                    <tr
+                      key={childStatus.fileName}
+                      className="bg-white border-b"
+                    >
+                      <td className="px-2 py-1 pl-8">
+                        {childStatus.fileName.substring(
+                          childStatus.fileName.lastIndexOf("/") + 1
+                        )}
+                        {childStatus.isDirectory &&
+                          ` (${childStatus.totalFiles ?? 0} files)`}
+                      </td>
+                      <td className="px-2 py-1">
+                        {childStatus.status === "Done" ? (
+                          <span className="text-black">Done</span>
+                        ) : childStatus.progress !== undefined ? (
+                          <div className="w-full bg-gray-300 rounded-full h-4">
+                            <div
+                              className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                              style={{
+                                width: `${childStatus.progress}%`,
+                              }}
+                            >
+                              {childStatus.progress}%
+                            </div>
+                          </div>
+                        ) : (
+                          "Starting..."
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+              </React.Fragment>
+            );
+          })}
+          {/* Render Top-Level Files */}
+          {topLevelFiles.map((fileStatus) => (
+            <tr key={fileStatus.fileName} className="bg-white border-b">
+              <td className="px-2 py-1">{fileStatus.fileName}</td>
+              <td className="px-2 py-1">
+                {fileStatus.status === "Done" ? (
+                  <span className="text-black">Done</span>
+                ) : fileStatus.progress !== undefined ? (
+                  <div className="w-full bg-gray-300 rounded-full h-4">
+                    <div
+                      className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                      style={{ width: `${fileStatus.progress}%` }}
+                    >
+                      {fileStatus.progress}%
+                    </div>
+                  </div>
+                ) : (
+                  "Starting..."
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
   };
 
   const parseCsvContent = (csvString: string) => {
@@ -573,70 +656,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 : "Show Details"}
             </button>
             {expandedSections["s3-upload-progress"] && (
-              <div className="bg-gray-100 p-2 rounded">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-2 py-1">
-                        Directory/File Name
-                      </th>
-                      <th scope="col" className="px-2 py-1">
-                        Status
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupUploadStatusesByDirectory(uploadStatuses).map(
-                      (directoryStatus) => (
-                        <React.Fragment key={directoryStatus.directoryName}>
-                          <tr className="bg-gray-100 border-b font-semibold">
-                            <td className="px-2 py-1">
-                              <button
-                                onClick={() =>
-                                  toggleDirectory(directoryStatus.directoryName)
-                                }
-                                className="font-semibold text-black hover:underline focus:outline-none"
-                              >
-                                {directoryStatus.directoryName} (
-                                {directoryStatus.files.length} files)
-                              </button>
-                            </td>
-                            <td className="px-2 py-1">
-                              {directoryStatus.status === "Done" ? (
-                                <span className="text-black">Done</span>
-                              ) : directoryStatus.progress !== undefined ? (
-                                <div className="w-full bg-gray-300 rounded-full h-4">
-                                  <div
-                                    className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                                    style={{
-                                      width: `${directoryStatus.progress}%`,
-                                    }}
-                                  >
-                                    {directoryStatus.progress}%
-                                  </div>
-                                </div>
-                              ) : (
-                                "Starting..."
-                              )}
-                            </td>
-                          </tr>
-                          {expandedDirectories[
-                            directoryStatus.directoryName
-                          ] && (
-                            <tr className="bg-white border-b">
-                              <td className="px-2 py-1 pl-4">
-                                - {directoryStatus.directoryName} -{" "}
-                                {directoryStatus.status}
-                              </td>
-                              <td className="px-2 py-1"></td>
-                            </tr>
-                          )}
-                        </React.Fragment>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <div className="bg-gray-100 p-2 rounded">{renderS3Uploads()}</div>
             )}
           </div>
         )}
