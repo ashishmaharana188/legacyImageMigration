@@ -26,7 +26,9 @@ const App: React.FC = () => {
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
-  const [reconnectInterval, setReconnectInterval] = useState<number | null>(null);
+  const [reconnectInterval, setReconnectInterval] = useState<number | null>(
+    null
+  );
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -141,7 +143,7 @@ const App: React.FC = () => {
       />
       <PanelGroup direction="horizontal" className="flex-grow">
         <Panel defaultSize={33} minSize={10}>
-          <div className="p-4 border-r border-gray-300 h-full">
+          <div className="p-4 border-r border-gray-300 h-full overflow-y-auto">
             <SummaryDisplay
               taskLogs={taskLogs}
               summaryData={summaryData}
