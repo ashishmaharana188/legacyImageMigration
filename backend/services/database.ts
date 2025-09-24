@@ -31,6 +31,40 @@ export class Database {
     this.pool = this.createPool();
   }
 
+  private async reconnectPool(): Promise<void> {
+    this.logger.warn("Attempting to reconnect PostgreSQL pool...");
+    const MAX_RECONNECT_RETRIES = 5;
+    const RECONNECT_DELAY_MS = 5000; // 5 seconds
+
+    for (let i = 0; i < MAX_RECONNECT_RETRIES; i++) {
+      try {
+        if (this.pool) {
+          await this.pool.end();
+          this.logger.info("Existing PostgreSQL pool ended.");
+        }
+        this.pool = this.createPool();
+        await this.warmup(); // Warm up the new pool
+        this.logger.info("PostgreSQL pool reconnected successfully.");
+        return;
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error";
+        this.logger.error(
+          `PostgreSQL pool reconnection failed (attempt ${
+            i + 1
+          }/${MAX_RECONNECT_RETRIES}): ${msg}`
+        );
+        if (i < MAX_RECONNECT_RETRIES - 1) {
+          await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
+        } else {
+          this.logger.error(
+            "Failed to reconnect PostgreSQL pool after multiple attempts."
+          );
+          throw e; // Re-throw after all retries fail
+        }
+      }
+    }
+  }
+
   private createPool(): Pool {
     const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
     const newPool = new Pool({
@@ -42,7 +76,7 @@ export class Database {
         ? parseInt(process.env.DB_PORT || "5433", 10)
         : parseInt(process.env.DB_PORT || "5432", 10),
       max: 20,
-      idleTimeoutMillis: 30000, // 10 seconds
+      idleTimeoutMillis: 30000, // 30 seconds
       connectionTimeoutMillis: 10000,
       keepAlive: true,
     });
@@ -61,6 +95,22 @@ export class Database {
       this.logger.error(
         `pg Pool: unexpected error on idle client: ${err.message}`
       );
+      // Check for critical connection errors that warrant a full pool reconnection
+      if (
+        err.message.includes("ECONNREFUSED") ||
+        err.message.includes("ETIMEDOUT") ||
+        err.message.includes("ENOTFOUND") ||
+        err.message.includes("EHOSTUNREACH")
+      ) {
+        this.logger.error(
+          `pg Pool: Critical connection error detected. Attempting to reconnect pool: ${err.message}`
+        );
+        this.reconnectPool().catch((reconnectErr) => {
+          this.logger.error(
+            `Failed to re-establish PostgreSQL pool after critical error: ${reconnectErr.message}`
+          );
+        });
+      }
     });
 
     // Optional warm-up (tolerant of transient failures; does not mutate pool)
@@ -571,6 +621,23 @@ page_count, client_id
       const badRowsFilePath = await this.writeBadRowsToFile(badRows, "sql_bad_rows.txt");
       return { result: "success", logs, summary: { insertedRows, errorRows: badRows.length, badRows, badRowsFilePath } };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes("ECONNREFUSED") ||
+        msg.includes("ETIMEDOUT") ||
+        msg.includes("ENOTFOUND") ||
+        msg.includes("EHOSTUNREACH")
+      ) {
+        this.logger.error(
+          `executeSql: Critical connection error detected. Attempting to reconnect pool: ${msg}`
+        );
+        await this.reconnectPool().catch((reconnectErr) => {
+          this.logger.error(
+            `executeSql: Failed to re-establish PostgreSQL pool after critical error: ${reconnectErr.message}`
+          );
+        });
+      }
+
       if (client) {
         this.logger.warn("executeSql: error occurred, attempting ROLLBACK");
         try {
@@ -586,7 +653,7 @@ page_count, client_id
       logs.push({
         row: 0,
         status: "error",
-        message: `SQL execution failed: ${err}`,
+        message: `SQL execution failed: ${msg}`,
       });
       return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
     } finally {
@@ -775,6 +842,23 @@ RETURNING d.user_attr1, d.user_attr2;
       }
       return { result: "success", logs, summary };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes("ECONNREFUSED") ||
+        msg.includes("ETIMEDOUT") ||
+        msg.includes("ENOTFOUND") ||
+        msg.includes("EHOSTUNREACH")
+      ) {
+        this.logger.error(
+          `updateFolioAndTransaction: Critical connection error detected. Attempting to reconnect pool: ${msg}`
+        );
+        await this.reconnectPool().catch((reconnectErr) => {
+          this.logger.error(
+            `updateFolioAndTransaction: Failed to re-establish PostgreSQL pool after critical error: ${reconnectErr.message}`
+          );
+        });
+      }
+
       if (client) {
         this.logger.warn(
           "updateFolioAndTransaction: error occurred, attempting ROLLBACK"
@@ -790,7 +874,6 @@ RETURNING d.user_attr1, d.user_attr2;
         }
       }
 
-      const msg = err instanceof Error ? err.message : "Unknown error";
       this.logger.error(`updateFolioAndTransaction: failed: ${msg}`);
       logs.push({
         row: 0,
@@ -964,6 +1047,23 @@ WHERE r2.rn > 1;
         logs,
       };
     } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes("ECONNREFUSED") ||
+        msg.includes("ETIMEDOUT") ||
+        msg.includes("ENOTFOUND") ||
+        msg.includes("EHOSTUNREACH")
+      ) {
+        this.logger.error(
+          `sanityCheckDuplicates: Critical connection error detected. Attempting to reconnect pool: ${msg}`
+        );
+        await this.reconnectPool().catch((reconnectErr) => {
+          this.logger.error(
+            `sanityCheckDuplicates: Failed to re-establish PostgreSQL pool after critical error: ${reconnectErr.message}`
+          );
+        });
+      }
+
       if (client) {
         try {
           await client.query("ROLLBACK");
@@ -972,16 +1072,12 @@ WHERE r2.rn > 1;
         }
       }
       this.logger.error(
-        `sanityCheckDuplicates_v2: failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`
+        `sanityCheckDuplicates_v2: failed: ${msg}`
       );
       logs.push({
         row: 0,
         status: "error",
-        message: `sanityCheckDuplicates_v2 failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
+        message: `sanityCheckDuplicates_v2 failed: ${msg}`,
       });
       return { result: "failed", dryRun, cutoffTms, logs };
     } finally {
