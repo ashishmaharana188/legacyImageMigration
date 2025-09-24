@@ -215,22 +215,10 @@ export class MongoDatabase {
         const docType = data.document_type;
         const docProcess = data.document_process;
 
-        // Custom clientId conversion logic as requested
-        const clientIdStr = data.client_id.toString();
-        let clientIdNum = 0;
-        for (let i = 0; i < clientIdStr.length; i += 2) {
-          const chunk = clientIdStr.substring(i, i + 2);
-          if (chunk.length === 2) {
-            clientIdNum += parseInt(chunk, 10);
-          }
-        }
-
         const doc = {
           activityStatus: data.activity_status || "O",
           applicationId: data.application_id || null,
-          barcode: data.barcode || null,
-          branchId: data.branch_id || "BR01",
-          clientId: clientIdNum, // Use the converted number
+          clientId: data.client_code, // Use the correct client_code
           createdBy: data.created_by || "system",
           createdFrom: new Date(data.creation_date)
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
