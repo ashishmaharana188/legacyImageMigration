@@ -29,14 +29,89 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const [parsedBadRows, setParsedBadRows] = useState<any[] | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<{
+    [key: string]: boolean;
+  }>({});
+  const [expandedDirectories, setExpandedDirectories] = useState<{
+    [key: string]: boolean;
+  }>({});
 
   useEffect(() => {
     // This effect can be used to react to changes in props, if necessary.
     // For example, automatically expanding a log if it contains an error.
   }, [taskLogs, uploadStatuses]);
 
+  const toggleSection = (sectionKey: string) => {
+    setExpandedSections((prev) => ({
+      ...prev,
+      [sectionKey]: !prev[sectionKey],
+    }));
+  };
+
+  const toggleDirectory = (directoryKey: string) => {
+    setExpandedDirectories((prev) => ({
+      ...prev,
+      [directoryKey]: !prev[directoryKey],
+    }));
+  };
+
   const toggleSplitLog = (logId: string) => {
     setExpandedSplitLog((prev) => (prev === logId ? null : logId));
+  };
+
+  const groupUploadStatusesByDirectory = (statuses: UploadStatus[]) => {
+    const grouped: {
+      [key: string]: {
+        files: UploadStatus[];
+        totalProgress: number;
+        doneCount: number;
+      };
+    } = {};
+
+    statuses.forEach((status) => {
+      const lastSlashIndex = status.fileName.lastIndexOf("/");
+      let directoryName: string;
+
+      if (lastSlashIndex !== -1) {
+        const fullDirectoryPath = status.fileName.substring(0, lastSlashIndex);
+        const secondLastSlashIndex = fullDirectoryPath.lastIndexOf("/");
+
+        if (secondLastSlashIndex !== -1) {
+          directoryName = fullDirectoryPath.substring(secondLastSlashIndex + 1);
+        } else {
+          directoryName = fullDirectoryPath; // Case like 'dir/file.pdf'
+        }
+      } else {
+        directoryName = "Other Files"; // Files without any slashes
+      }
+
+      if (!grouped[directoryName]) {
+        grouped[directoryName] = { files: [], totalProgress: 0, doneCount: 0 };
+      }
+      grouped[directoryName].files.push(status);
+      if (status.status === "Done") {
+        grouped[directoryName].doneCount++;
+      }
+      grouped[directoryName].totalProgress += status.progress || 0;
+    });
+
+    return Object.entries(grouped).map(([directory, data]) => {
+      const totalFiles = data.files.length;
+      const allDone = data.doneCount === totalFiles;
+      const averageProgress =
+        totalFiles > 0 ? Math.round(data.totalProgress / totalFiles) : 0;
+
+      return {
+        directoryName: directory,
+        progress: allDone ? 100 : averageProgress,
+        status: allDone
+          ? "Done"
+          : averageProgress > 0
+          ? "Uploading..."
+          : "Starting...",
+        files: data.files,
+      };
+    });
   };
 
   const parseCsvContent = (csvString: string) => {
@@ -142,32 +217,40 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         </div>
       );
     } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
+      const isExpanded = expandedSections[`file-upload-${logKey}`];
       return (
         <div>
           <h5 className="font-semibold">File Upload Summary:</h5>
           <p>Original File: {log.originalFile}</p>
           <p>Processed File: {log.processedFile}</p>
-          <h5 className="font-semibold mt-2">Processed Files Details:</h5>
-          <table className="w-full text-sm text-left">
-            <thead className="text-xs uppercase bg-gray-50">
-              <tr>
-                <th scope="col" className="px-2 py-1">
-                  Row
-                </th>
-                <th scope="col" className="px-2 py-1">
-                  Page Count
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {log.fileUrls.map((item: any, index: number) => (
-                <tr key={index} className="bg-white border-b">
-                  <td className="px-2 py-1">{item.row}</td>
-                  <td className="px-2 py-1">{item.pageCount}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <button onClick={() => toggleSection(`file-upload-${logKey}`)}>
+            {isExpanded ? "Hide Details" : "Show Details"}
+          </button>
+          {isExpanded && (
+            <>
+              <h5 className="font-semibold mt-2">Processed Files Details:</h5>
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-2 py-1">
+                      Row
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Page Count
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {log.fileUrls.map((item: any, index: number) => (
+                    <tr key={index} className="bg-white border-b">
+                      <td className="px-2 py-1">{item.row}</td>
+                      <td className="px-2 py-1">{item.pageCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
         </div>
       );
     } else if (log.dryRun !== undefined && log.rows !== undefined) {
@@ -190,55 +273,64 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         (entry) => entry.count > 1
       );
 
+      const isExpanded = expandedSections[`sanity-check-${logKey}`];
+
       return (
         <div>
           <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
           <p>Dry Run: {log.dryRun ? "Yes" : "No"}</p>
           <p>Cutoff Timestamp: {log.cutoffTms}</p>
           <p>Total Duplicates Found: {log.rows.length}</p>
+          <button onClick={() => toggleSection(`sanity-check-${logKey}`)}>
+            {isExpanded ? "Hide Details" : "Show Details"}
+          </button>
 
-          {duplicateEntries.length > 0 ? (
-            <div className="bg-gray-100 p-2 rounded mt-2">
-              <h5 className="font-semibold">Duplicate Details:</h5>
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs uppercase bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-2 py-1">
-                      Client ID
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      User Attr1
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      Creation Date
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      Duplicate Count
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {duplicateEntries.map((entry: any, index: number) => (
-                    <tr key={index} className="bg-white border-b">
-                      <td className="px-2 py-1">
-                        {entry.entries[0].client_id}
-                      </td>
-                      <td className="px-2 py-1">
-                        {entry.entries[0].user_attr1}
-                      </td>
-                      <td className="px-2 py-1">
-                        {new Date(
-                          entry.entries[0].creation_date
-                        ).toLocaleString()}
-                      </td>
-                      <td className="px-2 py-1 font-bold">{entry.count}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <p className="mt-2">No duplicates found.</p>
+          {isExpanded && (
+            <>
+              {duplicateEntries.length > 0 ? (
+                <div className="bg-gray-100 p-2 rounded mt-2">
+                  <h5 className="font-semibold">Duplicate Details:</h5>
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-2 py-1">
+                          Client ID
+                        </th>
+                        <th scope="col" className="px-2 py-1">
+                          User Attr1
+                        </th>
+                        <th scope="col" className="px-2 py-1">
+                          Creation Date
+                        </th>
+                        <th scope="col" className="px-2 py-1">
+                          Duplicate Count
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {duplicateEntries.map((entry: any, index: number) => (
+                        <tr key={index} className="bg-white border-b">
+                          <td className="px-2 py-1">
+                            {entry.entries[0].client_id}
+                          </td>
+                          <td className="px-2 py-1">
+                            {entry.entries[0].user_attr1}
+                          </td>
+                          <td className="px-2 py-1">
+                            {new Date(
+                              entry.entries[0].creation_date
+                            ).toLocaleString()}
+                          </td>
+                          <td className="px-2 py-1 font-bold">{entry.count}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="mt-2">No duplicates found.</p>
+              )}
+            </>
           )}
         </div>
       );
@@ -323,11 +415,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       log.message.includes("Transferred") &&
       log.message.includes("documents to MongoDB successfully")
     ) {
+      const isExpanded = expandedSections[`mongodb-transfer-${logKey}`];
       return (
         <div>
           <h5 className="font-semibold">MongoDB Transfer Summary:</h5>
           <p>Total Documents Transferred: {log.transferredCount}</p>
-          {log.documents.length > 0 && (
+          <button onClick={() => toggleSection(`mongodb-transfer-${logKey}`)}>
+            {isExpanded ? "Hide Details" : "Show Details"}
+          </button>
+          {isExpanded && log.documents.length > 0 && (
             <div className="bg-gray-100 p-2 rounded mt-2">
               <h5 className="font-semibold">Transferred Documents Details:</h5>
               <table className="w-full text-sm text-left">
@@ -364,6 +460,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       log.message &&
       log.message.includes("Folio and Transaction updated successfully")
     ) {
+      const isExpanded = expandedSections[`folio-transaction-update-${logKey}`];
       return (
         <div>
           <h5 className="font-semibold">
@@ -391,7 +488,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               </tr>
             </tbody>
           </table>
-          {log.badRowsFilePath && log.badRows > 0 && (
+          <button
+            onClick={() => toggleSection(`folio-transaction-update-${logKey}`)}
+          >
+            {isExpanded ? "Hide Details" : "Show Details"}
+          </button>
+          {isExpanded && log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
                 onClick={() =>
@@ -465,45 +567,77 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             <h4 className="font-semibold capitalize mb-2">
               S3 Upload Progress
             </h4>
-            <div className="bg-gray-100 p-2 rounded">
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs uppercase bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-2 py-1">
-                      File Name
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {uploadStatuses.map((fileStatus) => (
-                    <tr key={fileStatus.fileName} className="bg-white border-b">
-                      <td className="px-2 py-1">{fileStatus.fileName}</td>
-                      <td className="px-2 py-1">
-                        {fileStatus.status === "Done" ? (
-                          <span className="text-black">Done</span>
-                        ) : fileStatus.progress !== undefined ? (
-                          <div className="w-full bg-gray-300 rounded-full h-4">
-                            <div
-                              className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                              style={{
-                                width: `${fileStatus.progress}%`,
-                              }}
-                            >
-                              {fileStatus.progress}%
-                            </div>
-                          </div>
-                        ) : (
-                          "Starting..."
-                        )}
-                      </td>
+            <button onClick={() => toggleSection("s3-upload-progress")}>
+              {expandedSections["s3-upload-progress"]
+                ? "Hide Details"
+                : "Show Details"}
+            </button>
+            {expandedSections["s3-upload-progress"] && (
+              <div className="bg-gray-100 p-2 rounded">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs uppercase bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-2 py-1">
+                        Directory/File Name
+                      </th>
+                      <th scope="col" className="px-2 py-1">
+                        Status
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {groupUploadStatusesByDirectory(uploadStatuses).map(
+                      (directoryStatus) => (
+                        <React.Fragment key={directoryStatus.directoryName}>
+                          <tr className="bg-gray-100 border-b font-semibold">
+                            <td className="px-2 py-1">
+                              <button
+                                onClick={() =>
+                                  toggleDirectory(directoryStatus.directoryName)
+                                }
+                                className="font-semibold text-black hover:underline focus:outline-none"
+                              >
+                                {directoryStatus.directoryName} (
+                                {directoryStatus.files.length} files)
+                              </button>
+                            </td>
+                            <td className="px-2 py-1">
+                              {directoryStatus.status === "Done" ? (
+                                <span className="text-black">Done</span>
+                              ) : directoryStatus.progress !== undefined ? (
+                                <div className="w-full bg-gray-300 rounded-full h-4">
+                                  <div
+                                    className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                                    style={{
+                                      width: `${directoryStatus.progress}%`,
+                                    }}
+                                  >
+                                    {directoryStatus.progress}%
+                                  </div>
+                                </div>
+                              ) : (
+                                "Starting..."
+                              )}
+                            </td>
+                          </tr>
+                          {expandedDirectories[
+                            directoryStatus.directoryName
+                          ] && (
+                            <tr className="bg-white border-b">
+                              <td className="px-2 py-1 pl-4">
+                                - {directoryStatus.directoryName} -{" "}
+                                {directoryStatus.status}
+                              </td>
+                              <td className="px-2 py-1"></td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      )
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -61,7 +61,7 @@ export async function uploadFile(
         broadcast(
           JSON.stringify({
             type: "progress",
-            fileName: fileName,
+            fileName: key,
             progress: percentage,
           })
         );
@@ -72,7 +72,7 @@ export async function uploadFile(
     broadcast(
       JSON.stringify({
         type: "complete",
-        fileName: fileName,
+        fileName: key,
         status: "Done",
       })
     );
