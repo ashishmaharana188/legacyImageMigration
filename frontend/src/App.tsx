@@ -142,7 +142,7 @@ const App: React.FC = () => {
         onSelectTask={handleSelectTask} // Pass the new handler
       />
       <PanelGroup direction="horizontal" className="flex-grow">
-        <Panel defaultSize={33} minSize={10}>
+        <Panel defaultSize={67} minSize={10}>
           <div className="p-4 border-r border-gray-300 h-full overflow-y-auto">
             <SummaryDisplay
               taskLogs={taskLogs}
