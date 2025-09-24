@@ -1,11 +1,6 @@
 import React, { useState, useCallback, useEffect } from "react";
 import axios from "axios";
 
-interface SummaryItem {
-  fileName: string;
-  status: string;
-}
-
 interface UploadStatus {
   fileName: string;
   progress?: number;
@@ -15,19 +10,14 @@ interface UploadStatus {
 }
 
 interface SummaryDisplayProps {
-  taskLogs: { [key: string]: any };
-  summaryData: SummaryItem[];
+  taskLogs: { [key: string]: any[] };
   uploadStatuses: UploadStatus[];
 }
 
 const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
-  summaryData,
   uploadStatuses,
 }) => {
-  const [expandedLogContent, setExpandedLogContent] = useState<string | null>(
-    null
-  );
   const [parsedBadRows, setParsedBadRows] = useState<any[] | null>(null);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
@@ -216,7 +206,6 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const toggleBadRowsDisplay = useCallback(
     async (filePath: string, logId: string) => {
       if (expandedLogId === logId) {
-        setExpandedLogContent(null);
         setParsedBadRows(null);
         setExpandedLogId(null);
       } else {
@@ -224,12 +213,10 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           const res = await axios.get(
             `http://localhost:3000/download-generated-file/${filePath}`
           );
-          setExpandedLogContent(res.data);
           setParsedBadRows(parseCsvContent(res.data));
           setExpandedLogId(logId);
         } catch (error) {
           console.error("Failed to fetch bad rows content:", error);
-          setExpandedLogContent("Failed to load content.");
           setParsedBadRows(null);
           setExpandedLogId(logId);
         }
@@ -632,15 +619,19 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     <div className="mt-4 text-black h-full flex flex-col" id="s3uploadprogress">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
       <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30">
-        {Object.entries(taskLogs).map(([task, log]) => (
+        {Object.entries(taskLogs).map(([task, logsArray]) => (
           <div key={task} className="mb-4">
             <h4 className="font-semibold capitalize mb-2">{task}</h4>
             <div className="bg-gray-100 p-2 rounded">
-              {typeof log === "string" ? (
-                <p>{log}</p>
-              ) : (
-                renderSummary(log, task) // Pass 'task' as logKey
-              )}
+              {logsArray.map((logItem: any, index: number) => (
+                <div key={`${task}-${index}`} className="mb-2 last:mb-0">
+                  {typeof logItem === "string" ? (
+                    <p>{logItem}</p>
+                  ) : (
+                    renderSummary(logItem, `${task}-${index}`)
+                  )}
+                </div>
+              ))}
             </div>
           </div>
         ))}

@@ -20,12 +20,83 @@ interface UploadStatus {
   totalFiles?: number;
 }
 
+interface SplitSummaryLog {
+  splitSummary: {
+    totalOriginalFilesProcessed: number;
+    totalExpectedSplits: number;
+    totalSplitFilesGenerated: number;
+    splitErrors: number;
+    totalExpectedPagesFromCsv: number;
+  };
+  splitFiles: Array<{
+    id_fund: string;
+    id_ihno: string;
+    id_acno: string;
+    page_count?: string;
+    split_count?: string;
+  }>;
+}
+
+interface FileUploadLog {
+  originalFile: string;
+  processedFile: string;
+  fileUrls: Array<{
+    row: number;
+    pageCount: number;
+  }>;
+}
+
+interface SanityCheckLog {
+  dryRun: boolean;
+  cutoffTms: string;
+  rows: Array<{
+    user_attr1: string;
+    client_id: string;
+    creation_date: string;
+  }>;
+}
+
+interface SqlExecutionLog {
+  totalRows: number;
+  successfulRows: number;
+  badRows: number;
+  badRowsFilePath?: string;
+  message: string; // "SQL executed successfully"
+}
+
+interface MongoTransferLog {
+  transferredCount: number;
+  documents: Array<{
+    clientId: string;
+    transactionNo: string;
+    workDate: string;
+  }>;
+  message: string; // "Transferred ... documents to MongoDB successfully"
+}
+
+interface FolioTransactionUpdateLog {
+  updatedFolioRows: number;
+  updatedTransactionRows: number;
+  badRows: number;
+  badRowsFilePath?: string;
+  message: string; // "Folio and Transaction updated successfully"
+}
+
+type TaskLog =
+  | string
+  | SplitSummaryLog
+  | FileUploadLog
+  | SanityCheckLog
+  | SqlExecutionLog
+  | MongoTransferLog
+  | FolioTransactionUpdateLog;
+
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
-  const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
+  const [taskLogs, setTaskLogs] = useState<{ [key: string]: TaskLog[] }>({});
   const [reconnectInterval, setReconnectInterval] = useState<number | null>(
     null
   );
@@ -111,7 +182,7 @@ const App: React.FC = () => {
         clearTimeout(reconnectTimeout);
       }
     };
-  }, []);
+  }, [reconnectInterval]);
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -126,8 +197,11 @@ const App: React.FC = () => {
     setOpen(false); // Close sidebar on task selection
   };
 
-  const updateTaskLog = useCallback((task: string, log: any) => {
-    setTaskLogs((prev) => ({ ...prev, [task]: log }));
+  const updateTaskLog = useCallback((task: string, log: TaskLog) => {
+    setTaskLogs((prev) => {
+      const existingLogs = prev[task] || [];
+      return { ...prev, [task]: [...existingLogs, log] };
+    });
   }, []);
 
   return (
@@ -146,7 +220,6 @@ const App: React.FC = () => {
           <div className="p-4 border-r border-gray-300 h-full overflow-y-auto">
             <SummaryDisplay
               taskLogs={taskLogs}
-              summaryData={summaryData}
               uploadStatuses={uploadStatuses}
             />
           </div>
@@ -181,12 +254,22 @@ const App: React.FC = () => {
 
             <div className="flex flex-col items-center justify-center mx-auto">
               {taskLogs.sqlAndMongo &&
-                taskLogs.sqlAndMongo.message &&
-                taskLogs.sqlAndMongo.message.includes("failed") && (
-                  <p className="mt-4 text-red-600">
-                    {taskLogs.sqlAndMongo.message}
-                  </p>
-                )}
+                taskLogs.sqlAndMongo.length > 0 &&
+                (() => {
+                  const lastLog = taskLogs.sqlAndMongo[taskLogs.sqlAndMongo.length - 1];
+                  if (
+                    typeof lastLog !== 'string' &&
+                    ('message' in lastLog) &&
+                    lastLog.message.includes("failed")
+                  ) {
+                    return (
+                      <p className="mt-4 text-red-600">
+                        {lastLog.message}
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
             </div>
           </main>
         </Panel>
