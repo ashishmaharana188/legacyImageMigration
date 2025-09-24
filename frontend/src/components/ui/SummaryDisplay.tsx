@@ -706,38 +706,58 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                           {excelProcessingStatus.badRowsDetails &&
                             excelProcessingStatus.badRowsDetails.length > 0 && (
                               <div className="mt-2">
-                                <h5 className="font-semibold">
-                                  Bad Rows Details:
-                                </h5>
-                                <table className="w-full text-sm text-left">
-                                  <thead className="text-xs uppercase bg-gray-50">
-                                    <tr>
-                                      <th scope="col" className="px-2 py-1">
-                                        IH No
-                                      </th>
-                                      <th scope="col" className="px-2 py-1">
-                                        Reason
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {excelProcessingStatus.badRowsDetails.map(
-                                      (row, index) => (
-                                        <tr
-                                          key={index}
-                                          className="bg-white border-b"
-                                        >
-                                          <td className="px-2 py-1">
-                                            {row.id_ihno}
-                                          </td>
-                                          <td className="px-2 py-1">
-                                            {row.page_count_status}
-                                          </td>
+                                <button
+                                  onClick={() =>
+                                    toggleSection("excel-bad-rows-details")
+                                  }
+                                  className="font-semibold text-black hover:underline focus:outline-none"
+                                >
+                                  {expandedSections["excel-bad-rows-details"]
+                                    ? "Hide Bad Rows Details"
+                                    : "Show Bad Rows Details"}
+                                </button>
+                                {expandedSections["excel-bad-rows-details"] && (
+                                  <div className="bg-gray-100 p-2 rounded mt-2">
+                                    <h5 className="font-semibold">
+                                      Bad Rows Details:
+                                    </h5>
+                                    <table className="w-full text-sm text-left">
+                                      <thead className="text-xs uppercase bg-gray-50">
+                                        <tr>
+                                          <th scope="col" className="px-2 py-1">
+                                            IH No
+                                          </th>
+                                          <th scope="col" className="px-2 py-1">
+                                            AC No
+                                          </th>
+                                          <th scope="col" className="px-2 py-1">
+                                            Reason
+                                          </th>
                                         </tr>
-                                      )
-                                    )}
-                                  </tbody>
-                                </table>
+                                      </thead>
+                                      <tbody>
+                                        {excelProcessingStatus.badRowsDetails.map(
+                                          (row, index) => (
+                                            <tr
+                                              key={index}
+                                              className="bg-white border-b"
+                                            >
+                                              <td className="px-2 py-1">
+                                                {row.id_ihno}
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                {row.id_acno}
+                                              </td>
+                                              <td className="px-2 py-1">
+                                                {row.page_count_status}
+                                              </td>
+                                            </tr>
+                                          )
+                                        )}
+                                      </tbody>
+                                    </table>
+                                  </div>
+                                )}
                               </div>
                             )}
                         </div>

@@ -153,12 +153,21 @@ const App: React.FC = () => {
                 successfulFiles: message.successfulRows || 0,
                 errorFiles: message.errors || 0,
                 notFoundFiles: message.notFound || 0,
-                badRowsDetails: [],
+                badRowsDetails: prevStatuses[existingFileIndex]?.badRowsDetails || [],
               };
 
               if (message.currentRow && (message.currentRow.page_count_status === "Error" || message.currentRow.page_count_status === "Not Found" || message.currentRow.page_count_status === "Path Error" || message.currentRow.page_count_status === "Missing serverId" || message.currentRow.page_count_status === "Missing drivePath" || message.currentRow.page_count_status === "Missing pathVal" || message.currentRow.page_count_status === "Unsupported" || message.currentRow.page_count_status === "PDF Error")) {
-                // Add bad row details if it's an error/not found/unsupported status
-                newStatus.badRowsDetails = [...(prevStatuses[existingFileIndex]?.badRowsDetails || []), message.currentRow];
+                const currentBadRows = newStatus.badRowsDetails || [];
+                const isDuplicate = currentBadRows.some(
+                  (detail) =>
+                    detail.id_ihno === message.currentRow.id_ihno &&
+                    detail.id_acno === message.currentRow.id_acno &&
+                    detail.page_count_status === message.currentRow.page_count_status
+                );
+
+                if (!isDuplicate) {
+                  newStatus.badRowsDetails = [...currentBadRows, message.currentRow];
+                }
               }
 
               if (existingFileIndex > -1) {

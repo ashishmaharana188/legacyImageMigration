@@ -13,9 +13,10 @@ interface S3Item extends S3File {
 
 interface S3BrowserTaskProps {
   updateTaskLog: (task: string, log: any) => void;
+  clearTaskLog: (task: string) => void;
 }
 
-const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
+const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog, clearTaskLog }) => {
   const [s3Files, setS3Files] = useState<S3File[]>([]);
   const [s3Directories, setS3Directories] = useState<string[]>([]);
   const [currentPrefix, setCurrentPrefix] = useState<string>("");
