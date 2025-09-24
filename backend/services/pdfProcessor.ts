@@ -149,6 +149,7 @@ export class PdfProcessing {
     const lastRow = worksheet.rowCount;
     this.logger.info("Total rows to process:", { lastRow });
 
+import { broadcast } from "./webSocketService";
     for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
       const row = worksheet.getRow(rowNumber);
       if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value) {
@@ -158,6 +159,24 @@ export class PdfProcessing {
 
       totalRows++;
       this.logger.info(`Processing row ${rowNumber}`);
+      const currentProcessedRows = rowNumber - 1;
+      broadcast(JSON.stringify({
+        type: "progressUpdate",
+        totalRows: lastRow - 1, // Exclude header row
+        processedRows: currentProcessedRows,
+        successfulRows: successfulRows,
+        errors: errors,
+        notFound: notFound,
+        currentRow: {
+          rowNumber: rowNumber,
+          id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
+          id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
+          id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
+          id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
+          id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+          page_count_status: "Processing"
+        }
+      }));
 
       try {
         const serverId =
@@ -244,6 +263,23 @@ export class PdfProcessing {
             });
             errors++;
             this.logger.info(`Row ${rowNumber}: Missing serverId`);
+            broadcast(JSON.stringify({
+              type: "progressUpdate",
+              totalRows: lastRow - 1,
+              processedRows: currentProcessedRows,
+              successfulRows: successfulRows,
+              errors: errors,
+              notFound: notFound,
+              currentRow: {
+                rowNumber: rowNumber,
+                id_fund: fund,
+                id_trtype: trxnType,
+                id_ihno: ihNo,
+                id_path: pathVal,
+                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                page_count_status: "Missing serverId"
+              }
+            }));
             isValidSmbPath = false;
           }
           if (isValidSmbPath && !drivePath) {
@@ -257,6 +293,23 @@ export class PdfProcessing {
             });
             errors++;
             this.logger.info(`Row ${rowNumber}: Missing drivePath`);
+            broadcast(JSON.stringify({
+              type: "progressUpdate",
+              totalRows: lastRow - 1,
+              processedRows: currentProcessedRows,
+              successfulRows: successfulRows,
+              errors: errors,
+              notFound: notFound,
+              currentRow: {
+                rowNumber: rowNumber,
+                id_fund: fund,
+                id_trtype: trxnType,
+                id_ihno: ihNo,
+                id_path: pathVal,
+                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                page_count_status: "Missing drivePath"
+              }
+            }));
             isValidSmbPath = false;
           }
           if (isValidSmbPath && !pathVal) {
@@ -270,6 +323,23 @@ export class PdfProcessing {
             });
             errors++;
             this.logger.info(`Row ${rowNumber}: Missing pathVal`);
+            broadcast(JSON.stringify({
+              type: "progressUpdate",
+              totalRows: lastRow - 1,
+              processedRows: currentProcessedRows,
+              successfulRows: successfulRows,
+              errors: errors,
+              notFound: notFound,
+              currentRow: {
+                rowNumber: rowNumber,
+                id_fund: fund,
+                id_trtype: trxnType,
+                id_ihno: ihNo,
+                id_path: pathVal,
+                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                page_count_status: "Missing pathVal"
+              }
+            }));
             isValidSmbPath = false;
           }
 
@@ -330,6 +400,23 @@ export class PdfProcessing {
               page_count: "Path Error",
             });
             errors++;
+            broadcast(JSON.stringify({
+              type: "progressUpdate",
+              totalRows: lastRow - 1,
+              processedRows: currentProcessedRows,
+              successfulRows: successfulRows,
+              errors: errors,
+              notFound: notFound,
+              currentRow: {
+                rowNumber: rowNumber,
+                id_fund: fund,
+                id_trtype: trxn,
+                id_ihno: ihNo,
+                id_path: resolvedPathVal,
+                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                page_count_status: "Path Error"
+              }
+            }));
             continue;
           }
           this.logger.info(
@@ -371,9 +458,43 @@ export class PdfProcessing {
                 destinationPath: destinationFilePath,
                 pageCount,
               });
+              broadcast(JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxn,
+                  id_ihno: ihNo,
+                  id_path: resolvedPathVal,
+                  id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status: pageCount
+                }
+              }));
             } else {
               errors++;
               this.logger.info(`Row ${rowNumber}: Unsupported file type`);
+              broadcast(JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxn,
+                  id_ihno: ihNo,
+                  id_path: resolvedPathVal,
+                  id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status: "Unsupported"
+                }
+              }));
             }
           } catch (err) {
             this.logger.error(`Row ${rowNumber}: Page count error`, {
@@ -388,6 +509,23 @@ export class PdfProcessing {
               page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
             });
             errors++;
+            broadcast(JSON.stringify({
+              type: "progressUpdate",
+              totalRows: lastRow - 1,
+              processedRows: currentProcessedRows,
+              successfulRows: successfulRows,
+              errors: errors,
+              notFound: notFound,
+              currentRow: {
+                rowNumber: rowNumber,
+                id_fund: fund,
+                id_trtype: trxn,
+                id_ihno: ihNo,
+                id_path: resolvedPathVal,
+                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                page_count_status: fileExt === ".pdf" ? "PDF Error" : "Unsupported"
+              }
+            }));
             continue;
           }
         } else {
@@ -401,6 +539,23 @@ export class PdfProcessing {
             page_count: "Not Found",
           });
           notFound++;
+          broadcast(JSON.stringify({
+            type: "progressUpdate",
+            totalRows: lastRow - 1,
+            processedRows: currentProcessedRows,
+            successfulRows: successfulRows,
+            errors: errors,
+            notFound: notFound,
+            currentRow: {
+              rowNumber: rowNumber,
+              id_fund: fund,
+              id_trtype: trxn,
+              id_ihno: ihNo,
+              id_path: resolvedPathVal,
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count_status: "Not Found"
+            }
+          }));
         }
       } catch (err) {
         this.logger.error(`Error processing row ${rowNumber}`, { error: err });
@@ -413,8 +568,34 @@ export class PdfProcessing {
           page_count: "Error",
         });
         errors++;
+        broadcast(JSON.stringify({
+          type: "progressUpdate",
+          totalRows: lastRow - 1,
+          processedRows: currentProcessedRows,
+          successfulRows: successfulRows,
+          errors: errors,
+          notFound: notFound,
+          currentRow: {
+            rowNumber: rowNumber,
+            id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
+            id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
+            id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
+            id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
+            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+            page_count_status: "Error"
+          }
+        }));
       }
     }
+
+    broadcast(JSON.stringify({
+      type: "progressComplete",
+      totalRows: lastRow - 1,
+      processedRows: lastRow - 1,
+      successfulRows: successfulRows,
+      errors: errors,
+      notFound: notFound
+    }));
 
     const csvWorkbook = new ExcelJS.Workbook();
     const csvWorksheet = csvWorkbook.addWorksheet("Processed");

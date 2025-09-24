@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect } from "react";
 import axios from "axios";
 import UploadAndScriptUI from "../ui/UploadAndScriptUI";
 
@@ -70,6 +70,56 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const [splitMessage, setSplitMessage] = useState<string>("");
   const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [progressData, setProgressData] = useState<any>(null); // { totalRows, processedRows, successfulRows, errors, notFound }
+  const [badRowsDetails, setBadRowsDetails] = useState<any[]>([]); // { rowNumber, id_acno, id_ihno, page_count_status }
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:3000"); // Connect to your WebSocket server
+
+    ws.onopen = () => {
+      console.log("WebSocket connection established");
+    };
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "progressUpdate") {
+        setProgressData({
+          totalRows: message.totalRows,
+          processedRows: message.processedRows,
+          successfulRows: message.successfulRows,
+          errors: message.errors,
+          notFound: message.notFound,
+        });
+        if (
+          message.currentRow.page_count_status !== "Processing" &&
+          typeof message.currentRow.page_count_status !== "number"
+        ) {
+          setBadRowsDetails((prev) => [...prev, message.currentRow]);
+        }
+      } else if (message.type === "progressComplete") {
+        setProgressData({
+          totalRows: message.totalRows,
+          processedRows: message.processedRows,
+          successfulRows: message.successfulRows,
+          errors: message.errors,
+          notFound: message.notFound,
+        });
+        console.log("Processing complete");
+      }
+    };
+
+    ws.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+
+    ws.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, []);
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -201,6 +251,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       handleSplitFiles={handleSplitFiles}
       handleUploadToS3={handleUploadToS3}
       handleUploadSplitFilesToS3={handleUploadSplitFilesToS3}
+      progressData={progressData}
+      badRowsDetails={badRowsDetails}
     />
   );
 };
