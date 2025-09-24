@@ -3,10 +3,23 @@ import axios from "axios";
 
 interface UploadStatus {
   fileName: string;
-  progress?: number;
+  progress?: number; // This will be the calculated percentage
   status?: string;
   isDirectory?: boolean;
-  totalFiles?: number;
+  totalFiles?: number; // This will map to totalRows from backend
+  processedFiles?: number; // This will map to processedRows from backend
+  successfulFiles?: number; // This will map to successfulRows from backend
+  errorFiles?: number; // This will map to errors from backend
+  notFoundFiles?: number; // This will map to notFound from backend
+  badRowsDetails?: Array<{
+    rowNumber: number;
+    id_fund: string;
+    id_trtype: string;
+    id_ihno: string;
+    id_path: string;
+    id_acno: string;
+    page_count_status: string | number;
+  }>;
 }
 
 interface SummaryDisplayProps {
@@ -18,7 +31,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
   uploadStatuses,
 }) => {
-  const [parsedBadRows, setParsedBadRows] = useState<any[] | null>(null);
+  const [parsedBadRows, setParsedBadRows] = useState<any[] | null>([]);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
   const [expandedSplitLog, setExpandedSplitLog] = useState<string | null>(null);
   const [expandedSections, setExpandedSections] = useState<{
@@ -27,6 +40,13 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const [expandedDirectories, setExpandedDirectories] = useState<{
     [key: string]: boolean;
   }>({});
+
+  const excelProcessingStatus = uploadStatuses.find(
+    (s) => s.fileName === "excel_processing"
+  );
+  const s3UploadStatuses = uploadStatuses.filter(
+    (s) => s.fileName !== "excel_processing"
+  );
 
   useEffect(() => {
     // This effect can be used to react to changes in props, if necessary.
@@ -52,8 +72,8 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   };
 
   const renderS3Uploads = () => {
-    const directoryStatuses = uploadStatuses.filter((s) => s.isDirectory);
-    const fileStatuses = uploadStatuses.filter((s) => !s.isDirectory);
+    const directoryStatuses = s3UploadStatuses.filter((s) => s.isDirectory);
+    const fileStatuses = s3UploadStatuses.filter((s) => !s.isDirectory);
 
     // Robustly find top-level directories (those that aren't a sub-directory of another)
     const topLevelDirs = directoryStatuses.filter((dir) =>
@@ -88,7 +108,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           {/* Render Top-Level Directories */}
           {topLevelDirs.map((dirStatus) => {
             // Find direct children (files and subdirs) for this dir
-            const children = uploadStatuses.filter(
+            const children = s3UploadStatuses.filter(
               (child) =>
                 child.fileName.startsWith(dirStatus.fileName + "/") &&
                 child.fileName.split("/").length ===
@@ -299,26 +319,30 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           {isExpanded && (
             <>
               <h5 className="font-semibold mt-2">Processed Files Details:</h5>
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs uppercase bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-2 py-1">
-                      Row
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      Page Count
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {log.fileUrls.map((item: any, index: number) => (
-                    <tr key={index} className="bg-white border-b">
-                      <td className="px-2 py-1">{item.row}</td>
-                      <td className="px-2 py-1">{item.pageCount}</td>
+              {log.fileUrls.length > 0 ? (
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs uppercase bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-2 py-1">
+                        Row
+                      </th>
+                      <th scope="col" className="px-2 py-1">
+                        Page Count
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {log.fileUrls.map((item: any, index: number) => (
+                      <tr key={index} className="bg-white border-b">
+                        <td className="px-2 py-1">{item.row}</td>
+                        <td className="px-2 py-1">{item.pageCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-2">No files were successfully processed.</p>
+              )}
             </>
           )}
         </div>
@@ -616,7 +640,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   };
 
   return (
-    <div className="mt-4 text-black h-full flex flex-col" id="s3uploadprogress">
+    <div className="mt-4 text-black h-full flex flex-col">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
       <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30">
         {Object.entries(taskLogs).map(([task, logsArray]) => (
@@ -632,25 +656,116 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                   )}
                 </div>
               ))}
+
+              {task === "uploadAndScript" && (
+                <>
+                  {excelProcessingStatus && (
+                    <div className="mt-4">
+                      <h5 className="font-semibold">
+                        Excel Processing Progress
+                      </h5>
+                      <button
+                        onClick={() =>
+                          toggleSection("excel-processing-progress")
+                        }
+                      >
+                        {expandedSections["excel-processing-progress"]
+                          ? "Hide Details"
+                          : "Show Details"}
+                      </button>
+                      {expandedSections["excel-processing-progress"] && (
+                        <div className="bg-gray-100 p-2 rounded">
+                          {excelProcessingStatus.progress !== undefined && (
+                            <>
+                              <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
+                                <div
+                                  className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                                  style={{
+                                    width: `${excelProcessingStatus.progress}%`,
+                                  }}
+                                >
+                                  {excelProcessingStatus.progress}%
+                                </div>
+                              </div>
+                              <div className="text-sm">
+                                <p>
+                                  <strong>Total:</strong>{" "}
+                                  {excelProcessingStatus.totalFiles} |{" "}
+                                  <strong>Processed:</strong>{" "}
+                                  {excelProcessingStatus.processedFiles} |{" "}
+                                  <strong>Successful:</strong>{" "}
+                                  {excelProcessingStatus.successfulFiles} |{" "}
+                                  <strong>Errors:</strong>{" "}
+                                  {excelProcessingStatus.errorFiles} |{" "}
+                                  <strong>Not Found:</strong>{" "}
+                                  {excelProcessingStatus.notFoundFiles}
+                                </p>
+                              </div>
+                            </>
+                          )}
+                          {excelProcessingStatus.badRowsDetails &&
+                            excelProcessingStatus.badRowsDetails.length > 0 && (
+                              <div className="mt-2">
+                                <h5 className="font-semibold">
+                                  Bad Rows Details:
+                                </h5>
+                                <table className="w-full text-sm text-left">
+                                  <thead className="text-xs uppercase bg-gray-50">
+                                    <tr>
+                                      <th scope="col" className="px-2 py-1">
+                                        IH No
+                                      </th>
+                                      <th scope="col" className="px-2 py-1">
+                                        Reason
+                                      </th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {excelProcessingStatus.badRowsDetails.map(
+                                      (row, index) => (
+                                        <tr
+                                          key={index}
+                                          className="bg-white border-b"
+                                        >
+                                          <td className="px-2 py-1">
+                                            {row.id_ihno}
+                                          </td>
+                                          <td className="px-2 py-1">
+                                            {row.page_count_status}
+                                          </td>
+                                        </tr>
+                                      )
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {s3UploadStatuses.length > 0 && (
+                    <div className="mt-4">
+                      <h5 className="font-semibold">S3 Upload Progress</h5>
+                      <button
+                        onClick={() => toggleSection("s3-upload-progress")}
+                      >
+                        {expandedSections["s3-upload-progress"]
+                          ? "Hide Details"
+                          : "Show Details"}
+                      </button>
+                      {expandedSections["s3-upload-progress"] && (
+                        <div className="bg-gray-100 p-2 rounded">
+                          {renderS3Uploads()}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         ))}
-
-        {uploadStatuses.length > 0 && (
-          <div className="mb-4">
-            <h4 className="font-semibold capitalize mb-2">
-              S3 Upload Progress
-            </h4>
-            <button onClick={() => toggleSection("s3-upload-progress")}>
-              {expandedSections["s3-upload-progress"]
-                ? "Hide Details"
-                : "Show Details"}
-            </button>
-            {expandedSections["s3-upload-progress"] && (
-              <div className="bg-gray-100 p-2 rounded">{renderS3Uploads()}</div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

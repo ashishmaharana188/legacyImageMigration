@@ -5,6 +5,7 @@ import path from "path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
+import { broadcast } from "./webSocketService";
 
 interface ProcessingResult {
   outputFileName: string;
@@ -149,7 +150,6 @@ export class PdfProcessing {
     const lastRow = worksheet.rowCount;
     this.logger.info("Total rows to process:", { lastRow });
 
-import { broadcast } from "./webSocketService";
     for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
       const row = worksheet.getRow(rowNumber);
       if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value) {
@@ -160,23 +160,26 @@ import { broadcast } from "./webSocketService";
       totalRows++;
       this.logger.info(`Processing row ${rowNumber}`);
       const currentProcessedRows = rowNumber - 1;
-      broadcast(JSON.stringify({
-        type: "progressUpdate",
-        totalRows: lastRow - 1, // Exclude header row
-        processedRows: currentProcessedRows,
-        successfulRows: successfulRows,
-        errors: errors,
-        notFound: notFound,
-        currentRow: {
-          rowNumber: rowNumber,
-          id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
-          id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
-          id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
-          id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
-          id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-          page_count_status: "Processing"
-        }
-      }));
+      broadcast(
+        JSON.stringify({
+          type: "progressUpdate",
+          totalRows: lastRow - 1, // Exclude header row
+          processedRows: currentProcessedRows,
+          successfulRows: successfulRows,
+          errors: errors,
+          notFound: notFound,
+          currentRow: {
+            rowNumber: rowNumber,
+            id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
+            id_trtype:
+              row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
+            id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
+            id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
+            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+            page_count_status: "Processing",
+          },
+        })
+      );
 
       try {
         const serverId =
@@ -209,13 +212,22 @@ import { broadcast } from "./webSocketService";
         let isValidSmbPath = true;
         let resolvedPathVal = pathVal; // Use a new variable for pathVal that might get an extension appended
 
-        const possibleExtensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
+        const possibleExtensions = [
+          ".pdf",
+          ".tif",
+          ".tiff",
+          ".jpg",
+          ".jpeg",
+          ".png",
+        ];
 
         let foundLocalFile = false;
         let currentLocalFilePath = path.join(localFilesFolder, pathVal);
 
         // First, try with the pathVal as is (it might already have an extension)
-        this.logger.info(`Row ${rowNumber}: Checking local file path (as is): ${currentLocalFilePath}`);
+        this.logger.info(
+          `Row ${rowNumber}: Checking local file path (as is): ${currentLocalFilePath}`
+        );
         if (
           await fs
             .access(currentLocalFilePath)
@@ -225,12 +237,16 @@ import { broadcast } from "./webSocketService";
           sourceFilePath = currentLocalFilePath;
           isLocalFile = true;
           foundLocalFile = true;
-          this.logger.info(`Row ${rowNumber}: Local file found (as is): ${sourceFilePath}`);
+          this.logger.info(
+            `Row ${rowNumber}: Local file found (as is): ${sourceFilePath}`
+          );
         } else {
           // If not found, try appending common extensions
           for (const ext of possibleExtensions) {
             currentLocalFilePath = path.join(localFilesFolder, pathVal + ext);
-            this.logger.info(`Row ${rowNumber}: Checking local file path (with extension ${ext}): ${currentLocalFilePath}`);
+            this.logger.info(
+              `Row ${rowNumber}: Checking local file path (with extension ${ext}): ${currentLocalFilePath}`
+            );
             if (
               await fs
                 .access(currentLocalFilePath)
@@ -241,7 +257,9 @@ import { broadcast } from "./webSocketService";
               isLocalFile = true;
               foundLocalFile = true;
               resolvedPathVal = pathVal + ext; // Update resolvedPathVal with the found extension
-              this.logger.info(`Row ${rowNumber}: Local file found (with extension ${ext}): ${sourceFilePath}`);
+              this.logger.info(
+                `Row ${rowNumber}: Local file found (with extension ${ext}): ${sourceFilePath}`
+              );
               break; // Stop after finding the first matching extension
             }
           }
@@ -249,7 +267,9 @@ import { broadcast } from "./webSocketService";
 
         if (foundLocalFile) {
           // If a local file was found, proceed with it
-          this.logger.info(`Row ${rowNumber}: Using local file: ${sourceFilePath}`);
+          this.logger.info(
+            `Row ${rowNumber}: Using local file: ${sourceFilePath}`
+          );
         } else {
           // Fallback to SMB logic if no local file was found
           if (!serverId) {
@@ -263,23 +283,26 @@ import { broadcast } from "./webSocketService";
             });
             errors++;
             this.logger.info(`Row ${rowNumber}: Missing serverId`);
-            broadcast(JSON.stringify({
-              type: "progressUpdate",
-              totalRows: lastRow - 1,
-              processedRows: currentProcessedRows,
-              successfulRows: successfulRows,
-              errors: errors,
-              notFound: notFound,
-              currentRow: {
-                rowNumber: rowNumber,
-                id_fund: fund,
-                id_trtype: trxnType,
-                id_ihno: ihNo,
-                id_path: pathVal,
-                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                page_count_status: "Missing serverId"
-              }
-            }));
+            broadcast(
+              JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxnType,
+                  id_ihno: ihNo,
+                  id_path: pathVal,
+                  id_acno:
+                    row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status: "Missing serverId",
+                },
+              })
+            );
             isValidSmbPath = false;
           }
           if (isValidSmbPath && !drivePath) {
@@ -293,23 +316,26 @@ import { broadcast } from "./webSocketService";
             });
             errors++;
             this.logger.info(`Row ${rowNumber}: Missing drivePath`);
-            broadcast(JSON.stringify({
-              type: "progressUpdate",
-              totalRows: lastRow - 1,
-              processedRows: currentProcessedRows,
-              successfulRows: successfulRows,
-              errors: errors,
-              notFound: notFound,
-              currentRow: {
-                rowNumber: rowNumber,
-                id_fund: fund,
-                id_trtype: trxnType,
-                id_ihno: ihNo,
-                id_path: pathVal,
-                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                page_count_status: "Missing drivePath"
-              }
-            }));
+            broadcast(
+              JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxnType,
+                  id_ihno: ihNo,
+                  id_path: pathVal,
+                  id_acno:
+                    row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status: "Missing drivePath",
+                },
+              })
+            );
             isValidSmbPath = false;
           }
           if (isValidSmbPath && !pathVal) {
@@ -323,23 +349,26 @@ import { broadcast } from "./webSocketService";
             });
             errors++;
             this.logger.info(`Row ${rowNumber}: Missing pathVal`);
-            broadcast(JSON.stringify({
-              type: "progressUpdate",
-              totalRows: lastRow - 1,
-              processedRows: currentProcessedRows,
-              successfulRows: successfulRows,
-              errors: errors,
-              notFound: notFound,
-              currentRow: {
-                rowNumber: rowNumber,
-                id_fund: fund,
-                id_trtype: trxnType,
-                id_ihno: ihNo,
-                id_path: pathVal,
-                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                page_count_status: "Missing pathVal"
-              }
-            }));
+            broadcast(
+              JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxnType,
+                  id_ihno: ihNo,
+                  id_path: pathVal,
+                  id_acno:
+                    row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status: "Missing pathVal",
+                },
+              })
+            );
             isValidSmbPath = false;
           }
 
@@ -400,23 +429,26 @@ import { broadcast } from "./webSocketService";
               page_count: "Path Error",
             });
             errors++;
-            broadcast(JSON.stringify({
-              type: "progressUpdate",
-              totalRows: lastRow - 1,
-              processedRows: currentProcessedRows,
-              successfulRows: successfulRows,
-              errors: errors,
-              notFound: notFound,
-              currentRow: {
-                rowNumber: rowNumber,
-                id_fund: fund,
-                id_trtype: trxn,
-                id_ihno: ihNo,
-                id_path: resolvedPathVal,
-                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                page_count_status: "Path Error"
-              }
-            }));
+            broadcast(
+              JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxn,
+                  id_ihno: ihNo,
+                  id_path: resolvedPathVal,
+                  id_acno:
+                    row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status: "Path Error",
+                },
+              })
+            );
             continue;
           }
           this.logger.info(
@@ -458,43 +490,49 @@ import { broadcast } from "./webSocketService";
                 destinationPath: destinationFilePath,
                 pageCount,
               });
-              broadcast(JSON.stringify({
-                type: "progressUpdate",
-                totalRows: lastRow - 1,
-                processedRows: currentProcessedRows,
-                successfulRows: successfulRows,
-                errors: errors,
-                notFound: notFound,
-                currentRow: {
-                  rowNumber: rowNumber,
-                  id_fund: fund,
-                  id_trtype: trxn,
-                  id_ihno: ihNo,
-                  id_path: resolvedPathVal,
-                  id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                  page_count_status: pageCount
-                }
-              }));
+              broadcast(
+                JSON.stringify({
+                  type: "progressUpdate",
+                  totalRows: lastRow - 1,
+                  processedRows: currentProcessedRows,
+                  successfulRows: successfulRows,
+                  errors: errors,
+                  notFound: notFound,
+                  currentRow: {
+                    rowNumber: rowNumber,
+                    id_fund: fund,
+                    id_trtype: trxn,
+                    id_ihno: ihNo,
+                    id_path: resolvedPathVal,
+                    id_acno:
+                      row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                    page_count_status: pageCount,
+                  },
+                })
+              );
             } else {
               errors++;
               this.logger.info(`Row ${rowNumber}: Unsupported file type`);
-              broadcast(JSON.stringify({
-                type: "progressUpdate",
-                totalRows: lastRow - 1,
-                processedRows: currentProcessedRows,
-                successfulRows: successfulRows,
-                errors: errors,
-                notFound: notFound,
-                currentRow: {
-                  rowNumber: rowNumber,
-                  id_fund: fund,
-                  id_trtype: trxn,
-                  id_ihno: ihNo,
-                  id_path: resolvedPathVal,
-                  id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                  page_count_status: "Unsupported"
-                }
-              }));
+              broadcast(
+                JSON.stringify({
+                  type: "progressUpdate",
+                  totalRows: lastRow - 1,
+                  processedRows: currentProcessedRows,
+                  successfulRows: successfulRows,
+                  errors: errors,
+                  notFound: notFound,
+                  currentRow: {
+                    rowNumber: rowNumber,
+                    id_fund: fund,
+                    id_trtype: trxn,
+                    id_ihno: ihNo,
+                    id_path: resolvedPathVal,
+                    id_acno:
+                      row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                    page_count_status: "Unsupported",
+                  },
+                })
+              );
             }
           } catch (err) {
             this.logger.error(`Row ${rowNumber}: Page count error`, {
@@ -509,23 +547,27 @@ import { broadcast } from "./webSocketService";
               page_count: fileExt === ".pdf" ? "PDF Error" : "Unsupported",
             });
             errors++;
-            broadcast(JSON.stringify({
-              type: "progressUpdate",
-              totalRows: lastRow - 1,
-              processedRows: currentProcessedRows,
-              successfulRows: successfulRows,
-              errors: errors,
-              notFound: notFound,
-              currentRow: {
-                rowNumber: rowNumber,
-                id_fund: fund,
-                id_trtype: trxn,
-                id_ihno: ihNo,
-                id_path: resolvedPathVal,
-                id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-                page_count_status: fileExt === ".pdf" ? "PDF Error" : "Unsupported"
-              }
-            }));
+            broadcast(
+              JSON.stringify({
+                type: "progressUpdate",
+                totalRows: lastRow - 1,
+                processedRows: currentProcessedRows,
+                successfulRows: successfulRows,
+                errors: errors,
+                notFound: notFound,
+                currentRow: {
+                  rowNumber: rowNumber,
+                  id_fund: fund,
+                  id_trtype: trxn,
+                  id_ihno: ihNo,
+                  id_path: resolvedPathVal,
+                  id_acno:
+                    row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                  page_count_status:
+                    fileExt === ".pdf" ? "PDF Error" : "Unsupported",
+                },
+              })
+            );
             continue;
           }
         } else {
@@ -539,23 +581,26 @@ import { broadcast } from "./webSocketService";
             page_count: "Not Found",
           });
           notFound++;
-          broadcast(JSON.stringify({
-            type: "progressUpdate",
-            totalRows: lastRow - 1,
-            processedRows: currentProcessedRows,
-            successfulRows: successfulRows,
-            errors: errors,
-            notFound: notFound,
-            currentRow: {
-              rowNumber: rowNumber,
-              id_fund: fund,
-              id_trtype: trxn,
-              id_ihno: ihNo,
-              id_path: resolvedPathVal,
-              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-              page_count_status: "Not Found"
-            }
-          }));
+          broadcast(
+            JSON.stringify({
+              type: "progressUpdate",
+              totalRows: lastRow - 1,
+              processedRows: currentProcessedRows,
+              successfulRows: successfulRows,
+              errors: errors,
+              notFound: notFound,
+              currentRow: {
+                rowNumber: rowNumber,
+                id_fund: fund,
+                id_trtype: trxn,
+                id_ihno: ihNo,
+                id_path: resolvedPathVal,
+                id_acno:
+                  row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+                page_count_status: "Not Found",
+              },
+            })
+          );
         }
       } catch (err) {
         this.logger.error(`Error processing row ${rowNumber}`, { error: err });
@@ -568,34 +613,39 @@ import { broadcast } from "./webSocketService";
           page_count: "Error",
         });
         errors++;
-        broadcast(JSON.stringify({
-          type: "progressUpdate",
-          totalRows: lastRow - 1,
-          processedRows: currentProcessedRows,
-          successfulRows: successfulRows,
-          errors: errors,
-          notFound: notFound,
-          currentRow: {
-            rowNumber: rowNumber,
-            id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
-            id_trtype: row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
-            id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
-            id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
-            id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-            page_count_status: "Error"
-          }
-        }));
+        broadcast(
+          JSON.stringify({
+            type: "progressUpdate",
+            totalRows: lastRow - 1,
+            processedRows: currentProcessedRows,
+            successfulRows: successfulRows,
+            errors: errors,
+            notFound: notFound,
+            currentRow: {
+              rowNumber: rowNumber,
+              id_fund: row.getCell(headerIndices["id_fund"]).text?.trim() || "",
+              id_trtype:
+                row.getCell(headerIndices["id_trtype"]).text?.trim() || "",
+              id_ihno: row.getCell(headerIndices["id_ihno"]).text?.trim() || "",
+              id_path: row.getCell(headerIndices["id_path"]).text?.trim() || "",
+              id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+              page_count_status: "Error",
+            },
+          })
+        );
       }
     }
 
-    broadcast(JSON.stringify({
-      type: "progressComplete",
-      totalRows: lastRow - 1,
-      processedRows: lastRow - 1,
-      successfulRows: successfulRows,
-      errors: errors,
-      notFound: notFound
-    }));
+    broadcast(
+      JSON.stringify({
+        type: "progressComplete",
+        totalRows: lastRow - 1,
+        processedRows: lastRow - 1,
+        successfulRows: successfulRows,
+        errors: errors,
+        notFound: notFound,
+      })
+    );
 
     const csvWorkbook = new ExcelJS.Workbook();
     const csvWorksheet = csvWorkbook.addWorksheet("Processed");

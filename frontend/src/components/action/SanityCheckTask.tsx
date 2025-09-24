@@ -5,10 +5,12 @@ import dayjs from "dayjs";
 
 interface SanityCheckTaskProps {
   updateTaskLog: (task: string, log: any) => void;
+  clearTaskLog: (task: string) => void;
 }
 
 const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   updateTaskLog,
+  clearTaskLog,
 }) => {
   const [isDeleteEnabled, setIsDeleteEnabled] = useState(false);
   const [normalize, setNormalize] = useState(false);
@@ -20,12 +22,14 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   const handleSanityCheck = useCallback(
     async (dryRun: boolean) => {
       if (!cutoffDate) {
-        updateTaskLog('sanityCheck', { message: "Please select a cutoff date." });
+        updateTaskLog("sanityCheck", {
+          message: "Please select a cutoff date.",
+        });
         return;
       }
-
+      clearTaskLog("sanityCheck");
       const action = dryRun ? "Finding" : "Deleting";
-      updateTaskLog('sanityCheck', { message: `${action} duplicates...` });
+      updateTaskLog("sanityCheck", { message: `${action} duplicates...` });
       setIsLoading(true);
 
       // Format the date to YYYY-MM-DD and append T00:00:00.0000
@@ -41,17 +45,19 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
             cutoffTms,
           }
         );
-        updateTaskLog('sanityCheck', res.data);
+        updateTaskLog("sanityCheck", res.data);
       } catch (error: unknown) {
         const axiosError = error as any;
         const errorMessage =
           axiosError.response?.data?.error || "An unknown error occurred.";
-        updateTaskLog('sanityCheck', { message: `Sanity check failed: ${errorMessage}` });
+        updateTaskLog("sanityCheck", {
+          message: `Sanity check failed: ${errorMessage}`,
+        });
       } finally {
         setIsLoading(false);
       }
     },
-    [normalize, cutoffDate, updateTaskLog]
+    [normalize, cutoffDate, updateTaskLog, clearTaskLog]
   );
 
   return (

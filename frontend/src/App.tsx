@@ -14,10 +14,23 @@ interface SummaryItem {
 
 interface UploadStatus {
   fileName: string;
-  progress?: number;
+  progress?: number; // This will be the calculated percentage
   status?: string;
   isDirectory?: boolean;
-  totalFiles?: number;
+  totalFiles?: number; // This will map to totalRows from backend
+  processedFiles?: number; // This will map to processedRows from backend
+  successfulFiles?: number; // This will map to successfulRows from backend
+  errorFiles?: number; // This will map to errors from backend
+  notFoundFiles?: number; // This will map to notFound from backend
+  badRowsDetails?: Array<{
+    rowNumber: number;
+    id_fund: string;
+    id_trtype: string;
+    id_ihno: string;
+    id_path: string;
+    id_acno: string;
+    page_count_status: string | number;
+  }>;
 }
 
 interface SplitSummaryLog {
@@ -119,7 +132,48 @@ const App: React.FC = () => {
         try {
           const message = JSON.parse(event.data);
           console.log("WebSocket message received:", message);
-          if (message.type === "progress" || message.type === "complete") {
+
+          if (message.type === "progressUpdate" || message.type === "progressComplete") {
+            setUploadStatuses((prevStatuses) => {
+              const fileName = "excel_processing"; // A fixed identifier for this task
+              const existingFileIndex = prevStatuses.findIndex(
+                (s) => s.fileName === fileName
+              );
+
+              const totalRows = message.totalRows || 0;
+              const processedRows = message.processedRows || 0;
+              const progressPercentage = totalRows > 0 ? Math.round((processedRows / totalRows) * 100) : 0;
+
+              let newStatus: UploadStatus = {
+                fileName: fileName,
+                progress: progressPercentage,
+                status: message.type === "progressComplete" ? "Complete" : "Processing",
+                totalFiles: totalRows,
+                processedFiles: processedRows,
+                successfulFiles: message.successfulRows || 0,
+                errorFiles: message.errors || 0,
+                notFoundFiles: message.notFound || 0,
+                badRowsDetails: [],
+              };
+
+              if (message.currentRow && (message.currentRow.page_count_status === "Error" || message.currentRow.page_count_status === "Not Found" || message.currentRow.page_count_status === "Path Error" || message.currentRow.page_count_status === "Missing serverId" || message.currentRow.page_count_status === "Missing drivePath" || message.currentRow.page_count_status === "Missing pathVal" || message.currentRow.page_count_status === "Unsupported" || message.currentRow.page_count_status === "PDF Error")) {
+                // Add bad row details if it's an error/not found/unsupported status
+                newStatus.badRowsDetails = [...(prevStatuses[existingFileIndex]?.badRowsDetails || []), message.currentRow];
+              }
+
+              if (existingFileIndex > -1) {
+                const updatedStatuses = [...prevStatuses];
+                updatedStatuses[existingFileIndex] = {
+                  ...updatedStatuses[existingFileIndex],
+                  ...newStatus,
+                };
+                return updatedStatuses;
+              } else {
+                return [...prevStatuses, newStatus];
+              }
+            });
+          } else if (message.type === "progress" || message.type === "complete") {
+            // Existing S3 upload progress handling
             setUploadStatuses((prevStatuses) => {
               const existingFileIndex = prevStatuses.findIndex(
                 (s) => s.fileName === message.fileName
@@ -198,9 +252,13 @@ const App: React.FC = () => {
 
   const updateTaskLog = useCallback((task: string, log: TaskLog) => {
     setTaskLogs((prev) => {
-      const existingLogs = prev[task] || [];
-      return { ...prev, [task]: [...existingLogs, log] };
+      // Overwrite the existing log for the task with the new log
+      return { ...prev, [task]: [log] };
     });
+  }, []);
+
+  const clearTaskLog = useCallback((task: string) => {
+    setTaskLogs((prev) => ({ ...prev, [task]: [] }));
   }, []);
 
   return (
@@ -237,18 +295,28 @@ const App: React.FC = () => {
             {selectedTask === "uploadAndScript" && (
               <UploadAndScriptTask
                 updateTaskLog={updateTaskLog}
+                clearTaskLog={clearTaskLog}
                 setSummaryData={setSummaryData}
                 setUploadStatuses={setUploadStatuses}
               />
             )}
             {selectedTask === "sqlAndMongo" && (
-              <SQLAndMongoTask updateTaskLog={updateTaskLog} />
+              <SQLAndMongoTask
+                updateTaskLog={updateTaskLog}
+                clearTaskLog={clearTaskLog}
+              />
             )}
             {selectedTask === "sanityCheck" && (
-              <SanityCheckTask updateTaskLog={updateTaskLog} />
+              <SanityCheckTask
+                updateTaskLog={updateTaskLog}
+                clearTaskLog={clearTaskLog}
+              />
             )}
             {selectedTask === "s3Browser" && (
-              <S3BrowserTask updateTaskLog={updateTaskLog} />
+              <S3BrowserTask
+                updateTaskLog={updateTaskLog}
+                clearTaskLog={clearTaskLog}
+              />
             )}
 
             <div className="flex flex-col items-center justify-center mx-auto">
