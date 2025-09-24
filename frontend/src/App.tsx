@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import UploadAndScriptTask from "./components/action/UploadAndScriptTask";
 import SQLAndMongoTask from "./components/action/SQLAndMongoTask";
 import S3BrowserTask from "./components/action/S3BrowserTask";
@@ -97,9 +97,7 @@ const App: React.FC = () => {
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: TaskLog[] }>({});
-  const [reconnectInterval, setReconnectInterval] = useState<number | null>(
-    null
-  );
+  const reconnectAttempts = useRef(0);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -114,7 +112,7 @@ const App: React.FC = () => {
           clearTimeout(reconnectTimeout);
           reconnectTimeout = null;
         }
-        setReconnectInterval(null); // Reset reconnect interval on successful connection
+        reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
       };
 
       ws.onmessage = (event) => {
@@ -159,13 +157,14 @@ const App: React.FC = () => {
 
       ws.onclose = () => {
         console.log("WebSocket disconnected. Attempting to reconnect...");
-        if (!reconnectTimeout) {
-          // Only set a new timeout if one isn't already active
-          reconnectTimeout = setTimeout(() => {
-            setReconnectInterval((prev) => (prev ? prev * 2 : 1000)); // Exponential backoff
-            connectWebSocket();
-          }, reconnectInterval || 1000); // Start with 1 second, then use exponential backoff
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
         }
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000); // Max 30 seconds
+        reconnectTimeout = setTimeout(() => {
+          reconnectAttempts.current++;
+          connectWebSocket();
+        }, delay);
       };
 
       ws.onerror = (error) => {
@@ -182,7 +181,7 @@ const App: React.FC = () => {
         clearTimeout(reconnectTimeout);
       }
     };
-  }, [reconnectInterval]);
+  }, []); // Empty dependency array to ensure useEffect runs only once
 
   const handleDrawerOpen = () => {
     setOpen(true);

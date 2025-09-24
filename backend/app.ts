@@ -204,6 +204,7 @@ const startServer = async () => {
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
+    console.log("Express server listening, initializing WebSocket server...");
   });
 
   initWebSocket(expressServer);

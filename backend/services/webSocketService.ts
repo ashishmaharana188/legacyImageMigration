@@ -7,7 +7,7 @@ export const initWebSocket = (server: Server) => {
   wss = new WebSocketServer({ server });
 
   wss.on('connection', (ws: WebSocket) => {
-    console.log('Client connected');
+    console.log('Client successfully connected to WebSocket server');
     ws.on('close', () => {
       console.log('Client disconnected');
     });
