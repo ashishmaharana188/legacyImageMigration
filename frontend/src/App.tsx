@@ -24,62 +24,84 @@ const App: React.FC = () => {
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: any }>({});
+  const [reconnectInterval, setReconnectInterval] = useState<number | null>(null);
 
   useEffect(() => {
-    const ws = new WebSocket("ws://localhost:3000");
+    let ws: WebSocket | null = null;
+    let reconnectTimeout: NodeJS.Timeout | null = null;
 
-    ws.onopen = () => {
-      console.log("WebSocket connected");
-    };
+    const connectWebSocket = () => {
+      ws = new WebSocket("ws://localhost:3000");
 
-    ws.onmessage = (event) => {
-      try {
-        const message = JSON.parse(event.data);
-        console.log("WebSocket message received:", message); // Add this line for debugging
-        if (message.type === "progress" || message.type === "complete") {
-          setUploadStatuses((prevStatuses) => {
-            const existingFileIndex = prevStatuses.findIndex(
-              (s) => s.fileName === message.fileName
-            );
-            if (existingFileIndex > -1) {
-              // Update existing file status
-              const newStatuses = [...prevStatuses];
-              newStatuses[existingFileIndex] = {
-                ...newStatuses[existingFileIndex],
-                progress: message.progress,
-                status: message.status,
-              };
-              return newStatuses;
-            } else {
-              // Add new file status
-              return [
-                ...prevStatuses,
-                {
-                  fileName: message.fileName,
+      ws.onopen = () => {
+        console.log("WebSocket connected");
+        if (reconnectTimeout) {
+          clearTimeout(reconnectTimeout);
+          reconnectTimeout = null;
+        }
+        setReconnectInterval(null); // Reset reconnect interval on successful connection
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          console.log("WebSocket message received:", message);
+          if (message.type === "progress" || message.type === "complete") {
+            setUploadStatuses((prevStatuses) => {
+              const existingFileIndex = prevStatuses.findIndex(
+                (s) => s.fileName === message.fileName
+              );
+              if (existingFileIndex > -1) {
+                const newStatuses = [...prevStatuses];
+                newStatuses[existingFileIndex] = {
+                  ...newStatuses[existingFileIndex],
                   progress: message.progress,
                   status: message.status,
-                },
-              ];
-            }
-          });
+                };
+                return newStatuses;
+              } else {
+                return [
+                  ...prevStatuses,
+                  {
+                    fileName: message.fileName,
+                    progress: message.progress,
+                    status: message.status,
+                  },
+                ];
+              }
+            });
+          }
+        } catch (error) {
+          console.error("Error parsing WebSocket message:", error);
         }
-      } catch (error) {
-        console.error("Error parsing WebSocket message:", error);
-      }
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket disconnected. Attempting to reconnect...");
+        if (!reconnectTimeout) {
+          // Only set a new timeout if one isn't already active
+          reconnectTimeout = setTimeout(() => {
+            setReconnectInterval((prev) => (prev ? prev * 2 : 1000)); // Exponential backoff
+            connectWebSocket();
+          }, reconnectInterval || 1000); // Start with 1 second, then use exponential backoff
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error("WebSocket error:", error);
+        ws?.close(); // Close to trigger onclose and reconnection attempt
+      };
     };
 
-    ws.onclose = () => {
-      console.log("WebSocket disconnected");
-    };
-
-    ws.onerror = (error) => {
-      console.error("WebSocket error:", error);
-    };
+    connectWebSocket(); // Initial connection
 
     return () => {
-      ws.close();
+      ws?.close();
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
     };
-  }, []);
+  }, [reconnectInterval]);
 
   const handleDrawerOpen = () => {
     setOpen(true);
