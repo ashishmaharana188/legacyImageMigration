@@ -24,7 +24,6 @@ interface S3BrowserUIProps {
   totalSearchPages: number;
   paginatedItems: S3Item[];
   paginatedSearchResults: S3Item[];
-  searchContinuationToken: string | undefined;
   setIsFilterMode: React.Dispatch<React.SetStateAction<boolean>>;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   setClientPage: React.Dispatch<React.SetStateAction<number>>;
@@ -34,7 +33,6 @@ interface S3BrowserUIProps {
   handleDirectoryClick: (directoryKey: string) => void;
   handleBreadcrumbClick: (index: number) => void;
   handleSearch: () => Promise<void>;
-  handleLoadMoreSearch: () => void;
   handleReload: () => void;
 }
 
@@ -53,7 +51,6 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   totalSearchPages,
   paginatedItems,
   paginatedSearchResults,
-  searchContinuationToken,
   setIsFilterMode,
   setSearchTerm,
   setClientPage,
@@ -63,7 +60,6 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   handleDirectoryClick,
   handleBreadcrumbClick,
   handleSearch,
-  handleLoadMoreSearch,
   handleReload,
 }) => {
   return (
