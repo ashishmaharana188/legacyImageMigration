@@ -63,56 +63,10 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
 
-  const handleUploadSplitFilesToS3 = useCallback(async () => {
-    setLoading(true);
-    clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Uploading split files to S3...");
-    try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-split-files-to-s3"
-      );
-      updateTaskLog("sqlAndMongo", res.data);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog(
-          "sqlAndMongo",
-          error.response?.data || { message: "An unknown error occurred." }
-        );
-      } else {
-        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, clearTaskLog]);
-
-  const handleUploadToS3 = useCallback(async () => {
-    setLoading(true);
-    clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Uploading processed file to S3...");
-    try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-to-s3"
-      );
-      updateTaskLog("sqlAndMongo", res.data);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog(
-          "sqlAndMongo",
-          error.response?.data || { message: "An unknown error occurred." }
-        );
-      } else {
-        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, clearTaskLog]);
-
   const handleTransferToMongo = useCallback(async () => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Transferring data to MongoDB...");
+    updateTaskLog("sqlAndMongo", "Transferring data to MongoDB");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/transfer-to-mongo"
@@ -135,7 +89,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   const handleGenerateSql = useCallback(async () => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Generating SQL...");
+    updateTaskLog("sqlAndMongo", "Generating SQL");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/generate-sql"
@@ -158,7 +112,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   const handleExecuteSql = useCallback(async () => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Executing SQL...");
+    updateTaskLog("sqlAndMongo", "Executing SQL");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/process-sql-mongo",
@@ -182,7 +136,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   const handleupdateFolioAndTransaction = useCallback(async () => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Updating folio and transaction...");
+    updateTaskLog("sqlAndMongo", "Updating folio and transaction");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/process-sql-mongo",
@@ -206,7 +160,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   const handleReconnect = useCallback(async () => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Reconnecting to the database...");
+    updateTaskLog("sqlAndMongo", "Reconnecting to the database");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/reconnect"

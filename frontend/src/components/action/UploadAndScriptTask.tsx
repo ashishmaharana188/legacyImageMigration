@@ -199,8 +199,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     }
     clearTaskLog("uploadAndScript");
     setLoading(true);
-    setUploadMessage("Uploading...");
-    updateTaskLog("uploadAndScript", "Uploading...");
+    setUploadMessage("Uploading");
+    updateTaskLog("uploadAndScript", "Uploading");
     const formData = new FormData();
     formData.append("excel", selectedFile);
 
@@ -235,14 +235,14 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     clearTaskLog("uploadAndScript");
     setUploadStatuses([]); // Clear previous upload progress
     setLoading(true);
-    setSplitMessage("Splitting files...");
-    updateTaskLog("uploadAndScript", "Splitting files...");
+    setSplitMessage("Splitting files");
+    updateTaskLog("uploadAndScript", "Splitting files");
 
     // Initialize splitting progress status
     setUploadStatuses((prevStatuses) => {
       const splittingStatus: UploadStatus = {
         fileName: "splitting_progress",
-        status: "Starting...",
+        status: "Starting",
         totalOriginalFilesProcessed: 0,
         totalExpectedSplits: 0,
         totalSplitFilesGenerated: 0,
@@ -284,7 +284,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const handleUploadToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");
     setLoading(true);
-    setUploadMessage("Uploading to S3...");
+    setUploadMessage("Uploading to S3");
     setSummaryData([]); // Clear previous summary data
     setUploadStatuses([]); // Clear previous upload progress
 
@@ -306,7 +306,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const handleUploadSplitFilesToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");
     setLoading(true);
-    setSplitMessage("Uploading split files to S3...");
+    setSplitMessage("Uploading split files to S3");
     setUploadStatuses([]); // Clear previous upload progress
     try {
       const res = await axios.post<FileResponse>(
