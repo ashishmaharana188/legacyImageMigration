@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import axios from "axios";
 
 interface UploadStatus {
@@ -40,6 +40,61 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const [expandedDirectories, setExpandedDirectories] = useState<{
     [key: string]: boolean;
   }>({});
+
+  // New state to accumulate all task logs
+  const [allTaskLogs, setAllTaskLogs] = useState<{ [key: string]: any[] }>({});
+
+  // Ref to keep track of the previous taskLogs prop to detect new entries
+  const prevTaskLogsRef = useRef<{ [key: string]: any[] }>({});
+
+  useEffect(() => {
+    setAllTaskLogs((prevAllTaskLogs) => {
+      const newAllTaskLogs = { ...prevAllTaskLogs };
+      let hasChanges = false;
+
+      for (const taskKey in taskLogs) {
+        const currentLogs = taskLogs[taskKey];
+        let accumulatedLogsForTask = [...(prevAllTaskLogs[taskKey] || [])]; // Create a mutable copy
+
+        // Identify new logs that are not yet in the accumulated logs
+        const newLogsToAdd = currentLogs.filter((currentLog) =>
+          !accumulatedLogsForTask.some(
+            (accumulatedLog) => JSON.stringify(accumulatedLog) === JSON.stringify(currentLog)
+          )
+        );
+
+        if (newLogsToAdd.length > 0) {
+          hasChanges = true;
+          newLogsToAdd.forEach((newLog) => {
+            if (newLog.splitSummary) {
+              // If it's a splitSummary, find the last existing splitSummary and replace it
+              const lastSplitSummaryIndex = accumulatedLogsForTask.findIndex(
+                (log) => log.splitSummary
+              );
+              if (lastSplitSummaryIndex !== -1) {
+                accumulatedLogsForTask[lastSplitSummaryIndex] = newLog;
+              } else {
+                accumulatedLogsForTask.push(newLog);
+              }
+            } else {
+              // For other logs, just append if truly new
+              accumulatedLogsForTask.push(newLog);
+            }
+          });
+          newAllTaskLogs[taskKey] = accumulatedLogsForTask;
+        } else if (currentLogs.length > 0 && accumulatedLogsForTask.length === 0) {
+          // This case handles initial population if accumulatedLogsForTask is empty
+          newAllTaskLogs[taskKey] = [...currentLogs];
+          hasChanges = true;
+        }
+      }
+
+      // Update the ref with the current taskLogs prop for the next comparison
+      prevTaskLogsRef.current = taskLogs;
+
+      return hasChanges ? newAllTaskLogs : prevAllTaskLogs;
+    });
+  }, [taskLogs]); // Depend on taskLogs prop
 
   const excelProcessingStatus = uploadStatuses.find(
     (s) => s.fileName === "excel_processing"
@@ -672,7 +727,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     <div className="mt-4 text-black h-full flex flex-col">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
       <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30">
-        {Object.entries(taskLogs).map(([task, logsArray]) => (
+        {Object.entries(allTaskLogs).map(([task, logsArray]) => ( // Use allTaskLogs here
           <div key={task} className="mb-4">
             <h4 className="font-semibold capitalize mb-2">{task}</h4>
             <div className="bg-gray-100 p-2 rounded">
