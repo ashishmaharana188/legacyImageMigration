@@ -1022,6 +1022,7 @@ RETURNING d.user_attr1, d.user_attr2;
     dryRun?: boolean;
     normalize?: boolean;
     cutoffTms?: string;
+    clientCode?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
@@ -1035,100 +1036,128 @@ RETURNING d.user_attr1, d.user_attr2;
       dryRun = true,
       normalize = false,
       cutoffTms = "2025-09-09T00:00:00.0000",
+      clientCode,
     } = params;
     this.logger.info(
-      `sanityCheckDuplicates: Received cutoffTms: ${cutoffTms}, dryRun: ${dryRun}, normalize: ${normalize}`
+      `sanityCheckDuplicates: Received cutoffTms: ${cutoffTms}, dryRun: ${dryRun}, normalize: ${normalize}, clientCode: ${clientCode}`
     );
     let client: PoolClient | null = null;
 
-    const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
-
-    // Query for Rule 1: Deletes post-cutoff entries for keys that existed pre-cutoff for the same client.
-    const deleteRule1Sql = `
-WITH pre_cutoff_keys AS (
-  SELECT DISTINCT client_id, ${keyExpr} AS k
-  FROM investor.aif_document_details
-  WHERE user_attr1 IS NOT NULL
-    AND client_id IS NOT NULL
-    AND creation_date <= $1::timestamptz
-)
-DELETE FROM investor.aif_document_details d
-WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM pre_cutoff_keys)
-  AND d.creation_date > $1::timestamptz
-RETURNING d.id
-`;
-
-    // Query for Rule 2: Deletes newer duplicates from post-cutoff-only keys for the same client.
-    const deleteRule2Sql = `
-WITH post_cutoff_only_keys AS (
-    SELECT client_id, ${keyExpr} AS k
-    FROM investor.aif_document_details
-    WHERE user_attr1 IS NOT NULL
-      AND client_id IS NOT NULL
-    GROUP BY client_id, ${keyExpr}
-    HAVING MIN(creation_date) > $1::timestamptz
-),
-dups_to_delete AS (
-    SELECT
-        d.id,
-        ROW_NUMBER() OVER (
-            PARTITION BY d.client_id, ${keyExpr}
-            ORDER BY d.creation_date ASC, d.id ASC
-        ) as rn
-    FROM investor.aif_document_details d
-    JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k
-)
-DELETE FROM investor.aif_document_details t
-USING dups_to_delete d
-WHERE t.id = d.id
-  AND d.rn > 1
-RETURNING t.id
-`;
-
-    const previewSql = `
-WITH
--- CTEs for Rule 2 Preview
-post_cutoff_only_keys AS (
-  SELECT client_id, ${keyExpr} AS k
-  FROM investor.aif_document_details
-  WHERE user_attr1 IS NOT NULL
-    AND client_id IS NOT NULL
-  GROUP BY client_id, ${keyExpr}
-  HAVING MIN(creation_date) > $2::timestamptz
-),
-post_cutoff_dups_ranked AS (
-  SELECT d.*,
-         ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
-  FROM investor.aif_document_details d
-  WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM post_cutoff_only_keys)
-)
--- Rule 1 Preview
-SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
-FROM investor.aif_document_details d
-WHERE (d.client_id, ${keyExpr}) IN (
-    SELECT DISTINCT client_id, ${keyExpr}
-    FROM investor.aif_document_details
-    WHERE user_attr1 IS NOT NULL
-      AND client_id IS NOT NULL
-      AND creation_date <= $1::timestamptz
-)
-AND d.creation_date > $1::timestamptz
-
-UNION ALL
-
--- Rule 2 Preview
-SELECT r2.*, 'Rule 2' as reason
-FROM post_cutoff_dups_ranked r2
-WHERE r2.rn > 1;
-`;
-
     try {
-      this.logger.info(
-        `sanityCheckDuplicates: start (cutoff=${cutoffTms}, dryRun=${dryRun}, normalize=${normalize})`
-      );
-
       client = await this.getPool().connect();
       await client.query("BEGIN");
+
+      let clientId: number | null = null;
+      if (clientCode) {
+        const clientRes = await client.query(
+          "SELECT id FROM fund.client_master WHERE client_code = $1",
+          [clientCode]
+        );
+        if (clientRes.rows.length > 0) {
+          clientId = clientRes.rows[0].id;
+          this.logger.info(
+            `sanityCheckDuplicates: Found client_id: ${clientId} for client_code: ${clientCode}`
+          );
+        } else {
+          await client.query("ROLLBACK");
+          this.logger.warn(
+            `sanityCheckDuplicates: Client code '${clientCode}' not found.`
+          );
+          return {
+            result: "failed",
+            dryRun,
+            cutoffTms,
+            logs: [
+              {
+                row: 0,
+                status: "error",
+                message: `Client code '${clientCode}' not found.`,
+              },
+            ],
+          };
+        }
+      }
+
+      const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
+      const clientFilter = clientId ? `AND client_id = ${clientId}` : "";
+
+      const deleteRule1Sql = `
+        WITH pre_cutoff_keys AS (
+          SELECT DISTINCT client_id, ${keyExpr} AS k
+          FROM investor.aif_document_details
+          WHERE user_attr1 IS NOT NULL
+            AND client_id IS NOT NULL
+            AND creation_date <= $1::timestamptz
+            ${clientFilter}
+        )
+        DELETE FROM investor.aif_document_details d
+        WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM pre_cutoff_keys)
+          AND d.creation_date > $1::timestamptz
+        RETURNING d.id
+      `;
+
+      const deleteRule2Sql = `
+        WITH post_cutoff_only_keys AS (
+            SELECT client_id, ${keyExpr} AS k
+            FROM investor.aif_document_details
+            WHERE user_attr1 IS NOT NULL
+              AND client_id IS NOT NULL
+              ${clientFilter}
+            GROUP BY client_id, ${keyExpr}
+            HAVING MIN(creation_date) > $1::timestamptz
+        ),
+        dups_to_delete AS (
+            SELECT
+                d.id,
+                ROW_NUMBER() OVER (
+                    PARTITION BY d.client_id, ${keyExpr}
+                    ORDER BY d.creation_date ASC, d.id ASC
+                ) as rn
+            FROM investor.aif_document_details d
+            JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k
+        )
+        DELETE FROM investor.aif_document_details t
+        USING dups_to_delete d
+        WHERE t.id = d.id
+          AND d.rn > 1
+        RETURNING t.id
+      `;
+
+      const previewSql = `
+        WITH
+        post_cutoff_only_keys AS (
+          SELECT client_id, ${keyExpr} AS k
+          FROM investor.aif_document_details
+          WHERE user_attr1 IS NOT NULL
+            AND client_id IS NOT NULL
+            ${clientFilter}
+          GROUP BY client_id, ${keyExpr}
+          HAVING MIN(creation_date) > $2::timestamptz
+        ),
+        post_cutoff_dups_ranked AS (
+          SELECT d.*,
+                 ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
+          FROM investor.aif_document_details d
+          WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM post_cutoff_only_keys)
+        )
+        SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
+        FROM investor.aif_document_details d
+        WHERE (d.client_id, ${keyExpr}) IN (
+            SELECT DISTINCT client_id, ${keyExpr}
+            FROM investor.aif_document_details
+            WHERE user_attr1 IS NOT NULL
+              AND client_id IS NOT NULL
+              AND creation_date <= $1::timestamptz
+              ${clientFilter}
+        )
+        AND d.creation_date > $1::timestamptz
+
+        UNION ALL
+
+        SELECT r2.*, 'Rule 2' as reason
+        FROM post_cutoff_dups_ranked r2
+        WHERE r2.rn > 1;
+      `;
 
       if (dryRun) {
         const previewRes = await client.query(previewSql, [
@@ -1137,7 +1166,7 @@ WHERE r2.rn > 1;
         ]);
         await client.query("ROLLBACK");
         this.logger.info(
-          `sanityCheckDuplicates_v2: dry-run complete, ${previewRes.rows.length} rows would be deleted`
+          `sanityCheckDuplicates: dry-run complete, ${previewRes.rows.length} rows would be deleted`
         );
         return {
           result: "success",
@@ -1148,7 +1177,6 @@ WHERE r2.rn > 1;
         };
       }
 
-      // Execute Rule 1 Delete
       const delRes1 = await client.query(deleteRule1Sql, [cutoffTms]);
       logs.push({
         row: 0,
@@ -1156,7 +1184,6 @@ WHERE r2.rn > 1;
         message: `Rule 1 (pre-existing keys) deleted ${delRes1.rowCount} rows.`,
       });
 
-      // Execute Rule 2 Delete
       const delRes2 = await client.query(deleteRule2Sql, [cutoffTms]);
       logs.push({
         row: 0,
@@ -1168,7 +1195,7 @@ WHERE r2.rn > 1;
 
       const totalDeleted = (delRes1.rowCount ?? 0) + (delRes2.rowCount ?? 0);
       this.logger.info(
-        `sanityCheckDuplicates_v2: committed. Total deleted: ${totalDeleted} rows.`
+        `sanityCheckDuplicates: committed. Total deleted: ${totalDeleted} rows.`
       );
 
       return {
@@ -1200,14 +1227,14 @@ WHERE r2.rn > 1;
         try {
           await client.query("ROLLBACK");
         } catch (e) {
-          this.logger.error(`sanityCheckDuplicates_v2: ROLLBACK failed: ${e}`);
+          this.logger.error(`sanityCheckDuplicates: ROLLBACK failed: ${e}`);
         }
       }
-      this.logger.error(`sanityCheckDuplicates_v2: failed: ${msg}`);
+      this.logger.error(`sanityCheckDuplicates: failed: ${msg}`);
       logs.push({
         row: 0,
         status: "error",
-        message: `sanityCheckDuplicates_v2 failed: ${msg}`,
+        message: `sanityCheckDuplicates failed: ${msg}`,
       });
       return { result: "failed", dryRun, cutoffTms, logs };
     } finally {

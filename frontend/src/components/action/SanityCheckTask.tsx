@@ -17,6 +17,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   const [cutoffDate, setCutoffDate] = useState<dayjs.Dayjs | null>(
     dayjs("2025-09-05")
   );
+  const [clientCode, setClientCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSanityCheck = useCallback(
@@ -28,8 +29,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
         return;
       }
       clearTaskLog("sanityCheck");
-      const action = dryRun ? "Finding" : "Deleting";
-      updateTaskLog("sanityCheck", { message: `${action} duplicates...` });
+      updateTaskLog("sanityCheck", "Duplicate Check in Progress");
       setIsLoading(true);
 
       // Format the date to YYYY-MM-DD and append T00:00:00.0000
@@ -43,6 +43,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
             dryRun,
             normalize,
             cutoffTms,
+            clientCode,
           }
         );
         updateTaskLog("sanityCheck", res.data);
@@ -57,7 +58,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
         setIsLoading(false);
       }
     },
-    [normalize, cutoffDate, updateTaskLog, clearTaskLog]
+    [normalize, cutoffDate, clientCode, updateTaskLog, clearTaskLog]
   );
 
   return (
@@ -69,6 +70,8 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       setNormalize={setNormalize}
       cutoffDate={cutoffDate}
       setCutoffDate={setCutoffDate}
+      clientCode={clientCode}
+      setClientCode={setClientCode}
       isLoading={isLoading}
     />
   );

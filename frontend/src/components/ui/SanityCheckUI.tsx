@@ -9,6 +9,8 @@ interface SanityCheckUIProps {
   setNormalize: (value: boolean) => void;
   cutoffDate: dayjs.Dayjs | null;
   setCutoffDate: (value: dayjs.Dayjs | null) => void;
+  clientCode: string;
+  setClientCode: (value: string) => void;
   isLoading: boolean;
 }
 
@@ -20,6 +22,8 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
   setNormalize,
   cutoffDate,
   setCutoffDate,
+  clientCode,
+  setClientCode,
   isLoading,
 }) => {
   return (
@@ -30,6 +34,14 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
           type="date"
           value={cutoffDate ? cutoffDate.format("YYYY-MM-DD") : ""}
           onChange={(e) => setCutoffDate(dayjs(e.target.value))}
+          disabled={isLoading}
+          className="p-2 border rounded"
+        />
+        <input
+          type="text"
+          placeholder="Enter Client Code (optional)"
+          value={clientCode}
+          onChange={(e) => setClientCode(e.target.value)}
           disabled={isLoading}
           className="p-2 border rounded"
         />

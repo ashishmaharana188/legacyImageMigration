@@ -238,12 +238,13 @@ class FileController {
 
   async sanityCheckDuplicates(req: Request, res: Response) {
     try {
-      const { cutoffTms, dryRun, normalize } = req.body;
+      const { cutoffTms, dryRun, normalize, clientCode } = req.body;
       const processor = new Database();
       const result = await processor.sanityCheckDuplicates({
         dryRun,
         normalize,
         cutoffTms,
+        clientCode,
       });
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
