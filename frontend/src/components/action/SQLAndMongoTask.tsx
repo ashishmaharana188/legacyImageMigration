@@ -206,8 +206,6 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   return (
     <SQLAndMongoUI
       loading={loading}
-      handleUploadSplitFilesToS3={handleUploadSplitFilesToS3}
-      handleUploadToS3={handleUploadToS3}
       handleTransferToMongo={handleTransferToMongo}
       handleGenerateSql={handleGenerateSql}
       handleExecuteSql={handleExecuteSql}

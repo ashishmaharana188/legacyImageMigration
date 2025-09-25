@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import axios from "axios";
 import UploadAndScriptUI from "../ui/UploadAndScriptUI";
 
@@ -11,6 +11,33 @@ interface SplitFile {
   originalPath: string;
   url: string;
   page: number;
+}
+
+interface UploadStatus {
+  fileName: string;
+  progress?: number;
+  status?: string;
+  isDirectory?: boolean;
+  totalFiles?: number; // This will map to totalRows from backend
+  processedFiles?: number; // This will map to processedRows from backend
+  successfulFiles?: number; // This will map to successfulRows from backend
+  errorFiles?: number; // This will map to errors from backend
+  notFoundFiles?: number; // This will map to notFound from backend
+  badRowsDetails?: Array<{
+    rowNumber: number;
+    id_fund: string;
+    id_trtype: string;
+    id_ihno: string;
+    id_path: string;
+    id_acno: string;
+    page_count_status: string | number;
+  }>;
+  totalOriginalFilesProcessed?: number;
+  totalExpectedSplits?: number;
+  totalSplitFilesGenerated?: number;
+  splitErrors?: number;
+  totalExpectedPagesFromCsv?: number;
+  currentlySplittingFiles?: string;
 }
 
 interface FileResponse {
@@ -48,12 +75,6 @@ interface FileResponse {
   badRows?: number;
 }
 
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-}
-
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
   clearTaskLog: (task: string) => void;
@@ -72,6 +93,90 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const [splitMessage, setSplitMessage] = useState<string>("");
   const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+
+  const ws = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    ws.current = new WebSocket("ws://localhost:3000");
+
+    ws.current.onopen = () => {
+      console.log("WebSocket connection opened");
+    };
+
+    ws.current.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      console.log("WebSocket message received:", message);
+
+      if (message.type === "splitProgressUpdate") {
+        setUploadStatuses((prevStatuses) => {
+          const existingSplitStatusIndex = prevStatuses.findIndex(
+            (s) => s.fileName === "splitting_progress"
+          );
+
+          const newSplitStatus: UploadStatus = {
+            fileName: "splitting_progress",
+            status: message.status || "In Progress",
+            totalOriginalFilesProcessed: message.totalOriginalFilesProcessed,
+            totalExpectedSplits: message.totalExpectedSplits,
+            totalSplitFilesGenerated: message.totalSplitFilesGenerated,
+            splitErrors: message.splitErrors,
+            currentlySplittingFiles: message.currentlySplittingFiles,
+          };
+
+          if (newSplitStatus.totalExpectedSplits && newSplitStatus.totalExpectedSplits > 0) {
+            newSplitStatus.progress = (
+              ((newSplitStatus.totalSplitFilesGenerated ?? 0) /
+                newSplitStatus.totalExpectedSplits) *
+              100
+            );
+          }
+
+          if (existingSplitStatusIndex > -1) {
+            const updatedStatuses = [...prevStatuses];
+            updatedStatuses[existingSplitStatusIndex] = newSplitStatus;
+            return updatedStatuses;
+          } else {
+            return [...prevStatuses, newSplitStatus];
+          }
+        });
+        updateTaskLog("uploadAndScript", { splitSummary: message });
+      } else if (message.type === "splitProgressComplete") {
+        setUploadStatuses((prevStatuses) => {
+          const existingSplitStatusIndex = prevStatuses.findIndex(
+            (s) => s.fileName === "splitting_progress"
+          );
+          if (existingSplitStatusIndex > -1) {
+            const updatedStatuses = [...prevStatuses];
+            updatedStatuses[existingSplitStatusIndex] = {
+              ...updatedStatuses[existingSplitStatusIndex],
+              status: "Done",
+              progress: 100,
+              totalOriginalFilesProcessed: message.totalOriginalFilesProcessed,
+              totalExpectedSplits: message.totalExpectedSplits,
+              totalSplitFilesGenerated: message.totalSplitFilesGenerated,
+              splitErrors: message.splitErrors,
+              totalExpectedPagesFromCsv: message.totalExpectedPagesFromCsv,
+            };
+            return updatedStatuses;
+          }
+          return prevStatuses;
+        });
+        updateTaskLog("uploadAndScript", { splitSummary: message });
+      }
+    };
+
+    ws.current.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+
+    ws.current.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
+
+    return () => {
+      ws.current?.close();
+    };
+  }, [setUploadStatuses, updateTaskLog]);
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,7 +208,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         formData,
         {
           headers: {
-            "Content-Type": "multipart/form-type",
+            "Content-Type": "multipart/form-data",
           },
         }
       );
@@ -126,9 +231,26 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       return;
     }
     clearTaskLog("uploadAndScript");
+    setUploadStatuses([]); // Clear previous upload progress
     setLoading(true);
     setSplitMessage("Splitting files...");
     updateTaskLog("uploadAndScript", "Splitting files...");
+
+    // Initialize splitting progress status
+    setUploadStatuses((prevStatuses) => {
+      const splittingStatus: UploadStatus = {
+        fileName: "splitting_progress",
+        status: "Starting...",
+        totalOriginalFilesProcessed: 0,
+        totalExpectedSplits: 0,
+        totalSplitFilesGenerated: 0,
+        splitErrors: 0,
+        currentlySplittingFiles: "",
+        progress: 0,
+      };
+      return [...prevStatuses, splittingStatus];
+    });
+
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/split-files",
@@ -145,10 +267,17 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       }`;
       setSplitMessage(errorMessage);
       updateTaskLog("uploadAndScript", { message: errorMessage });
+      setUploadStatuses((prevStatuses) =>
+        prevStatuses.map((s) =>
+          s.fileName === "splitting_progress"
+            ? { ...s, status: "Failed", progress: 0 }
+            : s
+        )
+      );
     } finally {
       setLoading(false);
     }
-  }, [selectedFile, updateTaskLog, clearTaskLog]);
+  }, [selectedFile, updateTaskLog, clearTaskLog, setUploadStatuses]);
 
   const handleUploadToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");

@@ -7,7 +7,7 @@ import pLimit from "p-limit";
 import winston from "winston";
 import { exec } from "child_process";
 import util from "util";
-import { S3_BUCKET_NAME } from "../utils/s3Config";
+import { broadcast } from "./webSocketService";
 import { parse } from "csv-parse/sync"; // Import csv-parse
 
 interface SplitResult {
@@ -202,6 +202,17 @@ export class Splitting {
               const fileStats = await fs.stat(filePath);
               if (fileStats.isFile()) {
                 totalOriginalFilesProcessed++; // Increment for each original file processed
+                broadcast(
+                  JSON.stringify({
+                    type: "splitProgressUpdate",
+                    totalOriginalFilesProcessed,
+                    totalExpectedSplits,
+                    totalSplitFilesGenerated,
+                    splitErrors,
+                    currentlySplittingFiles: file, // Use 'file' here as it's the current file being processed
+                    status: `Processing original file: ${file}`,
+                  })
+                );
                 const fileName = path.basename(filePath);
                 console.log(
                   `[DEBUG] Processing file: ${fileName}, Full path: ${filePath}`
@@ -215,6 +226,17 @@ export class Splitting {
                     error: err,
                   });
                   splitErrors++; // Increment error count
+                  broadcast(
+                    JSON.stringify({
+                      type: "splitProgressUpdate",
+                      totalOriginalFilesProcessed,
+                      totalExpectedSplits,
+                      totalSplitFilesGenerated,
+                      splitErrors,
+                      currentlySplittingFiles: fileName,
+                      status: `Error reading file: ${fileName}`,
+                    })
+                  );
                   return;
                 }
 
@@ -251,6 +273,17 @@ export class Splitting {
                         page: i + 1,
                       });
                       totalSplitFilesGenerated++; // Increment for each split file generated
+                      broadcast(
+                        JSON.stringify({
+                          type: "splitProgressUpdate",
+                          totalOriginalFilesProcessed,
+                          totalExpectedSplits,
+                          totalSplitFilesGenerated,
+                          splitErrors,
+                          currentlySplittingFiles: splitFileName,
+                          status: `Generated split file: ${splitFileName}`,
+                        })
+                      );
                     }
                   } else if (fileExt === ".tif" || fileExt === ".tiff") {
                     const metadata = await sharp(fileBuffer).metadata();
@@ -279,18 +312,51 @@ export class Splitting {
                         page: i + 1,
                       });
                       totalSplitFilesGenerated++; // Increment for each split file generated
+                      broadcast(
+                        JSON.stringify({
+                          type: "splitProgressUpdate",
+                          totalOriginalFilesProcessed,
+                          totalExpectedSplits,
+                          totalSplitFilesGenerated,
+                          splitErrors,
+                          currentlySplittingFiles: splitFileName,
+                          status: `Generated split file: ${splitFileName}`,
+                        })
+                      );
                     }
                   } else {
                     this.logger.warn(
                       `Skipping unsupported file format: ${fileName}`
                     );
                     splitErrors++; // Increment error count for unsupported files
+                    broadcast(
+                      JSON.stringify({
+                        type: "splitProgressUpdate",
+                        totalOriginalFilesProcessed,
+                        totalExpectedSplits,
+                        totalSplitFilesGenerated,
+                        splitErrors,
+                        currentlySplittingFiles: fileName,
+                        status: `Skipping unsupported file: ${fileName}`,
+                      })
+                    );
                   }
                 } catch (err) {
                   this.logger.error(`Error processing ${fileName}`, {
                     error: err,
                   });
                   splitErrors++;
+                  broadcast(
+                    JSON.stringify({
+                      type: "splitProgressUpdate",
+                      totalOriginalFilesProcessed,
+                      totalExpectedSplits,
+                      totalSplitFilesGenerated,
+                      splitErrors,
+                      currentlySplittingFiles: fileName,
+                      status: `Error processing file: ${fileName}`,
+                    })
+                  );
                   try {
                     const fallbackSplitFilePaths = await runPythonFallback(
                       filePath,
@@ -305,6 +371,17 @@ export class Splitting {
                         page: 0,
                       }); // Page number is unknown from fallback
                       totalSplitFilesGenerated++;
+                      broadcast(
+                        JSON.stringify({
+                          type: "splitProgressUpdate",
+                          totalOriginalFilesProcessed,
+                          totalExpectedSplits,
+                          totalSplitFilesGenerated,
+                          splitErrors,
+                          currentlySplittingFiles: path.basename(splitPath),
+                          status: `Generated fallback split file: ${path.basename(splitPath)}`,
+                        })
+                      );
                     });
                   } catch (fallbackErr) {
                     this.logger.error(`Fallback also failed for ${fileName}`, {
@@ -318,6 +395,17 @@ export class Splitting {
                           : undefined,
                     });
                     splitErrors++;
+                    broadcast(
+                      JSON.stringify({
+                        type: "splitProgressUpdate",
+                        totalOriginalFilesProcessed,
+                        totalExpectedSplits,
+                        totalSplitFilesGenerated,
+                        splitErrors,
+                        currentlySplittingFiles: fileName,
+                        status: `Fallback failed for file: ${fileName}`,
+                      })
+                    );
                   }
                 }
               }
@@ -332,6 +420,20 @@ export class Splitting {
     await fs.mkdir(this.splitFolder, { recursive: true });
     await scanAndProcessDirectory(this.baseFolder, this.splitFolder);
     this.logger.info("File splitting complete");
+
+    const totalExpectedPagesFromCsv = await this.getTotalExpectedPagesFromCsv();
+
+    broadcast(
+      JSON.stringify({
+        type: "splitProgressComplete",
+        totalOriginalFilesProcessed,
+        totalExpectedSplits,
+        totalSplitFilesGenerated,
+        splitErrors,
+        totalExpectedPagesFromCsv,
+        status: "File splitting complete",
+      })
+    );
 
     const latestCsvPath = await this.getLatestProcessedCsvPath();
     let csvRecords: any[] = [];
@@ -396,8 +498,6 @@ export class Splitting {
         });
       }
     }
-
-    const totalExpectedPagesFromCsv = await this.getTotalExpectedPagesFromCsv();
 
     return {
       splitFiles: verificationLog,

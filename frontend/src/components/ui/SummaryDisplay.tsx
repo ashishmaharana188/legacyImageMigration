@@ -45,7 +45,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     (s) => s.fileName === "excel_processing"
   );
   const s3UploadStatuses = uploadStatuses.filter(
-    (s) => s.fileName !== "excel_processing"
+    (s) => s.fileName !== "excel_processing" && s.fileName !== "splitting_progress"
   );
 
   useEffect(() => {
@@ -264,44 +264,73 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             Total Expected Pages from CSV:{" "}
             {log.splitSummary.totalExpectedPagesFromCsv}
           </p>
+          <p>
+            Currently Splitting Files:{" "}
+            {log.splitSummary.currentlySplittingFiles ?? 0}
+          </p>
+          {log.splitSummary.totalExpectedSplits > 0 && (
+            <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
+              <div
+                className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                style={{
+                  width: `${
+                    (log.splitSummary.totalSplitFilesGenerated /
+                      log.splitSummary.totalExpectedSplits) *
+                    100
+                  }%`,
+                }}
+              >
+                {Math.round(
+                  (log.splitSummary.totalSplitFilesGenerated /
+                    log.splitSummary.totalExpectedSplits) *
+                    100
+                )}
+                %
+              </div>
+            </div>
+          )}
           <button onClick={() => toggleSplitLog(logKey)}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
           {isExpanded && (
             <div className="bg-gray-100 p-2 rounded mt-2">
               <h5 className="font-semibold">Split Verification Log:</h5>
-              <table className="w-full text-sm text-left">
-                <thead className="text-xs uppercase bg-gray-50">
-                  <tr>
-                    <th scope="col" className="px-2 py-1">
-                      Fund
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      IH No
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      AC No
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      CSV Page Count
-                    </th>
-                    <th scope="col" className="px-2 py-1">
-                      Split Count
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {log.splitFiles.map((item: any, index: number) => (
-                    <tr key={index} className="bg-white border-b">
-                      <td className="px-2 py-1">{item.id_fund}</td>
-                      <td className="px-2 py-1">{item.id_ihno}</td>
-                      <td className="px-2 py-1">{item.id_acno}</td>
-                      <td className="px-2 py-1">{item.page_count ?? "N/A"}</td>
-                      <td className="px-2 py-1">{item.split_count ?? "N/A"}</td>
+              {log.splitFiles && log.splitFiles.length > 0 ? (
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs uppercase bg-gray-50">
+                    <tr>
+                      <th scope="col" className="px-2 py-1">
+                        Fund
+                      </th>
+                      <th scope="col" className="px-2 py-1">
+                        IH No
+                      </th>
+                      <th scope="col" className="px-2 py-1">
+                        AC No
+                      </th>
+                      <th scope="col" className="px-2 py-1">
+                        CSV Page Count
+                      </th>
+                      <th scope="col" className="px-2 py-1">
+                        Split Count
+                      </th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {log.splitFiles.map((item: any, index: number) => (
+                      <tr key={index} className="bg-white border-b">
+                        <td className="px-2 py-1">{item.id_fund}</td>
+                        <td className="px-2 py-1">{item.id_ihno}</td>
+                        <td className="px-2 py-1">{item.id_acno}</td>
+                        <td className="px-2 py-1">{item.page_count ?? "N/A"}</td>
+                        <td className="px-2 py-1">{item.split_count ?? "N/A"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p className="mt-2">No split file details available yet or no files were split.</p>
+              )}
             </div>
           )}
         </div>
