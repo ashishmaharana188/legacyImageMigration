@@ -673,6 +673,24 @@ class FileController {
       });
     }
   }
+  async reconnect(req: Request, res: Response) {
+    try {
+      const database = new Database();
+      await database.reconnect();
+      res.status(200).json({
+        statusCode: 200,
+        message: "Database reconnected successfully",
+      });
+    } catch (error) {
+      console.error("Reconnect error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to reconnect to the database",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   async downloadGeneratedFile(req: Request, res: Response) {
     try {
       const filename = req.params.filename;

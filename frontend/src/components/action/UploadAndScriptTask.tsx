@@ -18,11 +18,11 @@ interface UploadStatus {
   progress?: number;
   status?: string;
   isDirectory?: boolean;
-  totalFiles?: number; // This will map to totalRows from backend
-  processedFiles?: number; // This will map to processedRows from backend
-  successfulFiles?: number; // This will map to successfulRows from backend
-  errorFiles?: number; // This will map to errors from backend
-  notFoundFiles?: number; // This will map to notFound from backend
+  totalFiles?: number;
+  processedFiles?: number;
+  successfulFiles?: number;
+  errorFiles?: number;
+  notFoundFiles?: number;
   badRowsDetails?: Array<{
     rowNumber: number;
     id_fund: string;
@@ -68,8 +68,8 @@ interface FileResponse {
   splitFiles?: SplitFile[];
   error?: string;
   directories?: string[];
-  files?: any[]; // Replace 'any' with a specific type if you have one for S3 files
-  badRowsFilePath?: string | null; // Added for bad rows file download
+  files?: any[];
+  badRowsFilePath?: string | null;
   updatedFolioRows?: number;
   updatedTransactionRows?: number;
   badRows?: number;
@@ -123,12 +123,14 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
             currentlySplittingFiles: message.currentlySplittingFiles,
           };
 
-          if (newSplitStatus.totalExpectedSplits && newSplitStatus.totalExpectedSplits > 0) {
-            newSplitStatus.progress = (
+          if (
+            newSplitStatus.totalExpectedSplits &&
+            newSplitStatus.totalExpectedSplits > 0
+          ) {
+            newSplitStatus.progress =
               ((newSplitStatus.totalSplitFilesGenerated ?? 0) /
                 newSplitStatus.totalExpectedSplits) *
-              100
-            );
+              100;
           }
 
           if (existingSplitStatusIndex > -1) {

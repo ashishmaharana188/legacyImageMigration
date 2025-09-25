@@ -203,6 +203,29 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     }
   }, [updateTaskLog, clearTaskLog]);
 
+  const handleReconnect = useCallback(async () => {
+    setLoading(true);
+    clearTaskLog("sqlAndMongo");
+    updateTaskLog("sqlAndMongo", "Reconnecting to the database...");
+    try {
+      const res = await axios.post<FileResponse>(
+        "http://localhost:3000/reconnect"
+      );
+      updateTaskLog("sqlAndMongo", res.data);
+    } catch (error: unknown) {
+      if (axios.isAxiosError(error)) {
+        updateTaskLog(
+          "sqlAndMongo",
+          error.response?.data || { message: "An unknown error occurred." }
+        );
+      } else {
+        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [updateTaskLog, clearTaskLog]);
+
   return (
     <SQLAndMongoUI
       loading={loading}
@@ -210,6 +233,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       handleGenerateSql={handleGenerateSql}
       handleExecuteSql={handleExecuteSql}
       handleupdateFolioAndTransaction={handleupdateFolioAndTransaction}
+      handleReconnect={handleReconnect}
     />
   );
 };

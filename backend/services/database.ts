@@ -1085,6 +1085,17 @@ WHERE r2.rn > 1;
     }
   }
 
+  public async reconnect(): Promise<void> {
+    this.logger.info("Manual reconnection triggered.");
+    if (this.pool) {
+      await this.pool.end();
+      this.logger.info("Existing PostgreSQL pool ended manually.");
+    }
+    this.pool = this.createPool();
+    await this.warmup();
+    this.logger.info("New PostgreSQL pool created and warmed up manually.");
+  }
+
   private async writeBadRowsToFile(
     badRows: { id_ihno?: string | number; user_attr1?: string; user_attr2?: string; reason: string }[],
     baseFilename: string // Changed from filename to baseFilename

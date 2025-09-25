@@ -67,4 +67,3 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
   );
 };
 export default UploadAndScriptUI;
-

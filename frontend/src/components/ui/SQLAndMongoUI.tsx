@@ -7,12 +7,14 @@ interface SQLAndMongoUIProps {
   handleGenerateSql: () => Promise<void>;
   handleExecuteSql: () => Promise<void>;
   handleupdateFolioAndTransaction: () => Promise<void>;
+  handleReconnect: () => Promise<void>;
 }
 
 const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
   handleTransferToMongo,
   handleExecuteSql,
   handleupdateFolioAndTransaction,
+  handleReconnect,
 }) => {
   return (
     <div>
@@ -30,6 +32,9 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
         </button>
         <button onClick={handleTransferToMongo} className="btn">
           Transfer to Mongo
+        </button>
+        <button onClick={handleReconnect} className="btn btn-danger">
+          Reconnect to DB
         </button>
       </div>
     </div>
