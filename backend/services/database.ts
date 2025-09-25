@@ -54,7 +54,9 @@ export class Database {
           }/${MAX_RECONNECT_RETRIES}): ${msg}`
         );
         if (i < MAX_RECONNECT_RETRIES - 1) {
-          await new Promise((resolve) => setTimeout(resolve, RECONNECT_DELAY_MS));
+          await new Promise((resolve) =>
+            setTimeout(resolve, RECONNECT_DELAY_MS)
+          );
         } else {
           this.logger.error(
             "Failed to reconnect PostgreSQL pool after multiple attempts."
@@ -199,7 +201,7 @@ export class Database {
         filename: "logs/error.log",
         level: "error",
       }),
-      new winston.transports.File({ filename: "logs/combined.log" })
+      new winston.transports.File({ filename: "logs/combined.log" }),
     ],
   });
 
@@ -452,7 +454,16 @@ page_count, client_id
     }
   }
 
-  async executeSql(): Promise<{ result: string; logs: SqlLog[], summary: { insertedRows: number, errorRows: number, badRows: any[], badRowsFilePath: string | null } }> {
+  async executeSql(): Promise<{
+    result: string;
+    logs: SqlLog[];
+    summary: {
+      insertedRows: number;
+      errorRows: number;
+      badRows: any[];
+      badRowsFilePath: string | null;
+    };
+  }> {
     const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
 
@@ -468,7 +479,16 @@ page_count, client_id
           status: "error",
           message: "No transactions to execute",
         });
-        return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
+        return {
+          result: "failed",
+          logs,
+          summary: {
+            insertedRows: 0,
+            errorRows: 0,
+            badRows: [],
+            badRowsFilePath: null,
+          },
+        };
       }
 
       this.logger.info("executeSql: attempting pool.connect()");
@@ -547,7 +567,10 @@ page_count, client_id
             status: "error",
             message: "Invalid file extension",
           });
-          badRows.push({ id_ihno: data.id_ihno, reason: 'Invalid file extension' });
+          badRows.push({
+            id_ihno: data.id_ihno,
+            reason: "Invalid file extension",
+          });
           continue;
         }
 
@@ -566,7 +589,10 @@ page_count, client_id
             status: "error",
             message: `Client ID not found for id_fund: ${data.id_fund}`,
           });
-          badRows.push({ id_ihno: data.id_ihno, reason: `Client ID not found for id_fund: ${data.id_fund}` });
+          badRows.push({
+            id_ihno: data.id_ihno,
+            reason: `Client ID not found for id_fund: ${data.id_fund}`,
+          });
           continue; // Skip this row if client_id is not found
         }
         const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
@@ -618,8 +644,20 @@ page_count, client_id
       await client.query("COMMIT");
       this.logger.info("executeSql: COMMIT successful");
       this.logger.info("SQL executed successfully");
-      const badRowsFilePath = await this.writeBadRowsToFile(badRows, "sql_bad_rows.txt");
-      return { result: "success", logs, summary: { insertedRows, errorRows: badRows.length, badRows, badRowsFilePath } };
+      const badRowsFilePath = await this.writeBadRowsToFile(
+        badRows,
+        "sql_bad_rows.txt"
+      );
+      return {
+        result: "success",
+        logs,
+        summary: {
+          insertedRows,
+          errorRows: badRows.length,
+          badRows,
+          badRowsFilePath,
+        },
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (
@@ -655,7 +693,16 @@ page_count, client_id
         status: "error",
         message: `SQL execution failed: ${msg}`,
       });
-      return { result: "failed", logs, summary: { insertedRows: 0, errorRows: 0, badRows: [], badRowsFilePath: null } };
+      return {
+        result: "failed",
+        logs,
+        summary: {
+          insertedRows: 0,
+          errorRows: 0,
+          badRows: [],
+          badRowsFilePath: null,
+        },
+      };
     } finally {
       if (client) {
         client.release();
@@ -664,7 +711,16 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(): Promise<{ result: string; logs: SqlLog[], summary: { updatedFolioRows: number, updatedTransactionRows: number, badRows: { user_attr1: string, user_attr2: string, reason: string }[], badRowsFilePath: string | null } }> {
+  async updateFolioAndTransaction(): Promise<{
+    result: string;
+    logs: SqlLog[];
+    summary: {
+      updatedFolioRows: number;
+      updatedTransactionRows: number;
+      badRows: { user_attr1: string; user_attr2: string; reason: string }[];
+      badRowsFilePath: string | null;
+    };
+  }> {
     this.logger.info("Starting updateFolioAndTransaction");
     const { transactions } = await this.generateSql();
 
@@ -678,7 +734,7 @@ page_count, client_id
     );
 
     const initialTransactionIdentifiers = new Set<string>();
-    transactions.forEach(tx => {
+    transactions.forEach((tx) => {
       initialTransactionIdentifiers.add(`${tx.id_ihno}-${tx.id_acno}`);
     });
 
@@ -768,8 +824,10 @@ SELECT DISTINCT
       const updateFolioResult = await client.query(updateFolioQuery, [
         processedFolioNumbers,
       ]);
-      updateFolioResult.rows.forEach(row => {
-        updatedTransactionIdentifiers.add(`${row.user_attr1}-${row.user_attr2}`);
+      updateFolioResult.rows.forEach((row) => {
+        updatedTransactionIdentifiers.add(
+          `${row.user_attr1}-${row.user_attr2}`
+        );
       });
       logs.push({
         row: 0,
@@ -803,8 +861,10 @@ RETURNING d.user_attr1, d.user_attr2;
         updateTransactionQuery,
         [uniqueClientCodes, processedFolioNumbers]
       );
-      updateTransactionResult.rows.forEach(row => {
-        updatedTransactionIdentifiers.add(`${row.user_attr1}-${row.user_attr2}`);
+      updateTransactionResult.rows.forEach((row) => {
+        updatedTransactionIdentifiers.add(
+          `${row.user_attr1}-${row.user_attr2}`
+        );
       });
       logs.push({
         row: 0,
@@ -820,26 +880,33 @@ RETURNING d.user_attr1, d.user_attr2;
       this.logger.info("updateFolioAndTransaction: COMMIT successful");
       this.logger.info("Folio and transaction updates completed");
 
-      const badRows: { user_attr1: string, user_attr2: string, reason: string }[] = [];
-      transactions.forEach(tx => {
+      const badRows: {
+        user_attr1: string;
+        user_attr2: string;
+        reason: string;
+      }[] = [];
+      transactions.forEach((tx) => {
         const identifier = `${tx.id_ihno}-${tx.id_acno}`;
         if (!updatedTransactionIdentifiers.has(identifier)) {
           badRows.push({
             user_attr1: tx.id_ihno.toString(),
             user_attr2: tx.id_acno,
-            reason: "Folio or Transaction not updated"
+            reason: "Folio or Transaction not updated",
           });
         }
       });
 
-      const badRowsFilePath = await this.writeBadRowsToFile(badRows, "folio_update_bad_rows.txt");
+      const badRowsFilePath = await this.writeBadRowsToFile(
+        badRows,
+        "folio_update_bad_rows.txt"
+      );
 
       const summary = {
         updatedFolioRows: updateFolioResult.rowCount || 0,
         updatedTransactionRows: updateTransactionResult.rowCount || 0,
         badRows: badRows,
-        badRowsFilePath: badRowsFilePath
-      }
+        badRowsFilePath: badRowsFilePath,
+      };
       return { result: "success", logs, summary };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -880,7 +947,16 @@ RETURNING d.user_attr1, d.user_attr2;
         status: "error",
         message: `Folio update failed: ${msg}`,
       });
-      return { result: "failed", logs, summary: { updatedFolioRows: 0, updatedTransactionRows: 0, badRows: [], badRowsFilePath: null } };
+      return {
+        result: "failed",
+        logs,
+        summary: {
+          updatedFolioRows: 0,
+          updatedTransactionRows: 0,
+          badRows: [],
+          badRowsFilePath: null,
+        },
+      };
     } finally {
       if (client) {
         client.release();
@@ -888,6 +964,57 @@ RETURNING d.user_attr1, d.user_attr2;
           "updateFolioAndTransaction: client released back to pool"
         );
       }
+    }
+  }
+
+  private async writeBadRowsToFile(
+    badRows: {
+      id_ihno?: string | number;
+      user_attr1?: string;
+      user_attr2?: string;
+      reason: string;
+    }[],
+    baseFilename: string // Changed from filename to baseFilename
+  ): Promise<string | null> {
+    if (badRows.length === 0) {
+      return null;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.-]/g, "_"); // YYYY-MM-DDTHH_mm_ss_sssZ
+    const filenameWithTimestamp = `${timestamp}_${baseFilename}`;
+    const filePath = path.join(__dirname, "../../logs", filenameWithTimestamp);
+    let content = "";
+
+    if (badRows[0].id_ihno !== undefined) {
+      content = "id_ihno,reason\n";
+      badRows.forEach((row) => {
+        content += `${row.id_ihno},\"${row.reason}\"\n`;
+      });
+    } else if (
+      badRows[0].user_attr1 !== undefined ||
+      badRows[0].user_attr2 !== undefined
+    ) {
+      content = "user_attr1,user_attr2,reason\n";
+      badRows.forEach((row) => {
+        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},\"${
+          row.reason
+        }\"\n`;
+      });
+    } else {
+      // Fallback if structure is unexpected
+      content = "reason\n";
+      badRows.forEach((row) => {
+        content += `\"${row.reason}\"\n`;
+      });
+    }
+
+    try {
+      await fs.writeFile(filePath, content);
+      this.logger.info(`Bad rows written to ${filePath}`);
+      return filenameWithTimestamp; // Return only the filename with timestamp, not the full path
+    } catch (error) {
+      this.logger.error(`Error writing bad rows to file ${filePath}: ${error}`);
+      return null;
     }
   }
 
@@ -916,38 +1043,40 @@ RETURNING d.user_attr1, d.user_attr2;
 
     const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
 
-    // Query for Rule 1: Deletes post-cutoff entries for keys that existed pre-cutoff.
+    // Query for Rule 1: Deletes post-cutoff entries for keys that existed pre-cutoff for the same client.
     const deleteRule1Sql = `
 WITH pre_cutoff_keys AS (
-  SELECT DISTINCT ${keyExpr} AS k
+  SELECT DISTINCT client_id, ${keyExpr} AS k
   FROM investor.aif_document_details
   WHERE user_attr1 IS NOT NULL
+    AND client_id IS NOT NULL
     AND creation_date <= $1::timestamptz
 )
 DELETE FROM investor.aif_document_details d
-WHERE ${keyExpr} IN (SELECT k FROM pre_cutoff_keys)
+WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM pre_cutoff_keys)
   AND d.creation_date > $1::timestamptz
 RETURNING d.id
 `;
 
-    // Query for Rule 2: Deletes newer duplicates from post-cutoff-only keys.
+    // Query for Rule 2: Deletes newer duplicates from post-cutoff-only keys for the same client.
     const deleteRule2Sql = `
 WITH post_cutoff_only_keys AS (
-    SELECT ${keyExpr} AS k
+    SELECT client_id, ${keyExpr} AS k
     FROM investor.aif_document_details
     WHERE user_attr1 IS NOT NULL
-    GROUP BY ${keyExpr}
+      AND client_id IS NOT NULL
+    GROUP BY client_id, ${keyExpr}
     HAVING MIN(creation_date) > $1::timestamptz
 ),
 dups_to_delete AS (
     SELECT
         d.id,
         ROW_NUMBER() OVER (
-            PARTITION BY ${keyExpr}
+            PARTITION BY d.client_id, ${keyExpr}
             ORDER BY d.creation_date ASC, d.id ASC
         ) as rn
     FROM investor.aif_document_details d
-    JOIN post_cutoff_only_keys p ON ${keyExpr} = p.k
+    JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k
 )
 DELETE FROM investor.aif_document_details t
 USING dups_to_delete d
@@ -960,25 +1089,28 @@ RETURNING t.id
 WITH
 -- CTEs for Rule 2 Preview
 post_cutoff_only_keys AS (
-  SELECT ${keyExpr} AS k
+  SELECT client_id, ${keyExpr} AS k
   FROM investor.aif_document_details
   WHERE user_attr1 IS NOT NULL
-  GROUP BY ${keyExpr}
+    AND client_id IS NOT NULL
+  GROUP BY client_id, ${keyExpr}
   HAVING MIN(creation_date) > $2::timestamptz
 ),
 post_cutoff_dups_ranked AS (
   SELECT d.*,
-         ROW_NUMBER() OVER (PARTITION BY ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
+         ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
   FROM investor.aif_document_details d
-  WHERE ${keyExpr} IN (SELECT k FROM post_cutoff_only_keys)
+  WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM post_cutoff_only_keys)
 )
 -- Rule 1 Preview
 SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
 FROM investor.aif_document_details d
-WHERE ${keyExpr} IN (
-    SELECT DISTINCT ${keyExpr}
+WHERE (d.client_id, ${keyExpr}) IN (
+    SELECT DISTINCT client_id, ${keyExpr}
     FROM investor.aif_document_details
-    WHERE user_attr1 IS NOT NULL AND creation_date <= $1::timestamptz
+    WHERE user_attr1 IS NOT NULL
+      AND client_id IS NOT NULL
+      AND creation_date <= $1::timestamptz
 )
 AND d.creation_date > $1::timestamptz
 
@@ -1071,9 +1203,7 @@ WHERE r2.rn > 1;
           this.logger.error(`sanityCheckDuplicates_v2: ROLLBACK failed: ${e}`);
         }
       }
-      this.logger.error(
-        `sanityCheckDuplicates_v2: failed: ${msg}`
-      );
+      this.logger.error(`sanityCheckDuplicates_v2: failed: ${msg}`);
       logs.push({
         row: 0,
         status: "error",
@@ -1094,47 +1224,6 @@ WHERE r2.rn > 1;
     this.pool = this.createPool();
     await this.warmup();
     this.logger.info("New PostgreSQL pool created and warmed up manually.");
-  }
-
-  private async writeBadRowsToFile(
-    badRows: { id_ihno?: string | number; user_attr1?: string; user_attr2?: string; reason: string }[],
-    baseFilename: string // Changed from filename to baseFilename
-  ): Promise<string | null> {
-    if (badRows.length === 0) {
-      return null;
-    }
-
-    const timestamp = new Date().toISOString().replace(/[:.-]/g, "_"); // YYYY-MM-DDTHH_mm_ss_sssZ
-    const filenameWithTimestamp = `${timestamp}_${baseFilename}`;
-    const filePath = path.join(__dirname, "../../logs", filenameWithTimestamp);
-    let content = "";
-
-    if (badRows[0].id_ihno !== undefined) {
-      content = "id_ihno,reason\n";
-      badRows.forEach(row => {
-        content += `${row.id_ihno},\"${row.reason}\"\n`;
-      });
-    } else if (badRows[0].user_attr1 !== undefined || badRows[0].user_attr2 !== undefined) {
-      content = "user_attr1,user_attr2,reason\n";
-      badRows.forEach(row => {
-        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},\"${row.reason}\"\n`;
-      });
-    } else {
-      // Fallback if structure is unexpected
-      content = "reason\n";
-      badRows.forEach(row => {
-        content += `\"${row.reason}\"\n`;
-      });
-    }
-
-    try {
-      await fs.writeFile(filePath, content);
-      this.logger.info(`Bad rows written to ${filePath}`);
-      return filenameWithTimestamp; // Return only the filename with timestamp, not the full path
-    } catch (error) {
-      this.logger.error(`Error writing bad rows to file ${filePath}: ${error}`);
-      return null;
-    }
   }
 
   public async getAifDocumentDetails(): Promise<any[]> {

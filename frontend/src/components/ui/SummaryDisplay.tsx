@@ -57,10 +57,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         let accumulatedLogsForTask = [...(prevAllTaskLogs[taskKey] || [])]; // Create a mutable copy
 
         // Identify new logs that are not yet in the accumulated logs
-        const newLogsToAdd = currentLogs.filter((currentLog) =>
-          !accumulatedLogsForTask.some(
-            (accumulatedLog) => JSON.stringify(accumulatedLog) === JSON.stringify(currentLog)
-          )
+        const newLogsToAdd = currentLogs.filter(
+          (currentLog) =>
+            !accumulatedLogsForTask.some(
+              (accumulatedLog) =>
+                JSON.stringify(accumulatedLog) === JSON.stringify(currentLog)
+            )
         );
 
         if (newLogsToAdd.length > 0) {
@@ -82,7 +84,10 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             }
           });
           newAllTaskLogs[taskKey] = accumulatedLogsForTask;
-        } else if (currentLogs.length > 0 && accumulatedLogsForTask.length === 0) {
+        } else if (
+          currentLogs.length > 0 &&
+          accumulatedLogsForTask.length === 0
+        ) {
           // This case handles initial population if accumulatedLogsForTask is empty
           newAllTaskLogs[taskKey] = [...currentLogs];
           hasChanges = true;
@@ -100,7 +105,8 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     (s) => s.fileName === "excel_processing"
   );
   const s3UploadStatuses = uploadStatuses.filter(
-    (s) => s.fileName !== "excel_processing" && s.fileName !== "splitting_progress"
+    (s) =>
+      s.fileName !== "excel_processing" && s.fileName !== "splitting_progress"
   );
 
   useEffect(() => {
@@ -131,12 +137,13 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     const fileStatuses = s3UploadStatuses.filter((s) => !s.isDirectory);
 
     // Robustly find top-level directories (those that aren't a sub-directory of another)
-    const topLevelDirs = directoryStatuses.filter((dir) =>
-      !directoryStatuses.some(
-        (otherDir) =>
-          dir.fileName !== otherDir.fileName &&
-          dir.fileName.startsWith(otherDir.fileName + "/")
-      )
+    const topLevelDirs = directoryStatuses.filter(
+      (dir) =>
+        !directoryStatuses.some(
+          (otherDir) =>
+            dir.fileName !== otherDir.fileName &&
+            dir.fileName.startsWith(otherDir.fileName + "/")
+        )
     );
 
     // Find top-level files (those not inside any directory)
@@ -377,14 +384,20 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                         <td className="px-2 py-1">{item.id_fund}</td>
                         <td className="px-2 py-1">{item.id_ihno}</td>
                         <td className="px-2 py-1">{item.id_acno}</td>
-                        <td className="px-2 py-1">{item.page_count ?? "N/A"}</td>
-                        <td className="px-2 py-1">{item.split_count ?? "N/A"}</td>
+                        <td className="px-2 py-1">
+                          {item.page_count ?? "N/A"}
+                        </td>
+                        <td className="px-2 py-1">
+                          {item.split_count ?? "N/A"}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
               ) : (
-                <p className="mt-2">No split file details available yet or no files were split.</p>
+                <p className="mt-2">
+                  No split file details available yet or no files were split.
+                </p>
               )}
             </div>
           )}
@@ -448,7 +461,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       });
 
       const duplicateEntries = Array.from(duplicatesMap.values()).filter(
-        (entry) => entry.count > 1
+        (entry) => entry.count > 0
       );
 
       const isExpanded = expandedSections[`sanity-check-${logKey}`];
@@ -549,7 +562,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 onClick={() =>
                   toggleBadRowsDisplay(log.badRowsFilePath, logKey)
                 }
-                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
@@ -668,9 +681,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           </table>
           <button
             onClick={() => toggleSection(`folio-transaction-update-${logKey}`)}
-          >
-            {isExpanded ? "Hide Details" : "Show Details"}
-          </button>
+          ></button>
           {isExpanded && log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
@@ -727,149 +738,165 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     <div className="mt-4 text-black h-full flex flex-col">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
       <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30">
-        {Object.entries(allTaskLogs).map(([task, logsArray]) => ( // Use allTaskLogs here
-          <div key={task} className="mb-4">
-            <h4 className="font-semibold capitalize mb-2">{task}</h4>
-            <div className="bg-gray-100 p-2 rounded">
-              {logsArray.map((logItem: any, index: number) => (
-                <div key={`${task}-${index}`} className="mb-2 last:mb-0">
-                  {typeof logItem === "string" ? (
-                    <p>{logItem}</p>
-                  ) : (
-                    renderSummary(logItem, `${task}-${index}`)
-                  )}
-                </div>
-              ))}
+        {Object.entries(allTaskLogs).map(
+          (
+            [task, logsArray] // Use allTaskLogs here
+          ) => (
+            <div key={task} className="mb-4">
+              <h4 className="font-semibold capitalize mb-2">{task}</h4>
+              <div className="bg-gray-100 p-2 rounded">
+                {logsArray.map((logItem: any, index: number) => (
+                  <div key={`${task}-${index}`} className="mb-2 last:mb-0">
+                    {typeof logItem === "string" ? (
+                      <p>{logItem}</p>
+                    ) : (
+                      renderSummary(logItem, `${task}-${index}`)
+                    )}
+                  </div>
+                ))}
 
-              {task === "uploadAndScript" && (
-                <>
-                  {excelProcessingStatus && (
-                    <div className="mt-4">
-                      <h5 className="font-semibold">
-                        Excel Processing Progress
-                      </h5>
-                      <button
-                        onClick={() =>
-                          toggleSection("excel-processing-progress")
-                        }
-                      >
-                        {expandedSections["excel-processing-progress"]
-                          ? "Hide Details"
-                          : "Show Details"}
-                      </button>
-                      {expandedSections["excel-processing-progress"] && (
-                        <div className="bg-gray-100 p-2 rounded">
-                          {excelProcessingStatus.progress !== undefined && (
-                            <>
-                              <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
-                                <div
-                                  className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                                  style={{
-                                    width: `${excelProcessingStatus.progress}%`,
-                                  }}
-                                >
-                                  {excelProcessingStatus.progress}%
-                                </div>
-                              </div>
-                              <div className="text-sm">
-                                <p>
-                                  <strong>Total:</strong>{" "}
-                                  {excelProcessingStatus.totalFiles} |{" "}
-                                  <strong>Processed:</strong>{" "}
-                                  {excelProcessingStatus.processedFiles} |{" "}
-                                  <strong>Successful:</strong>{" "}
-                                  {excelProcessingStatus.successfulFiles} |{" "}
-                                  <strong>Errors:</strong>{" "}
-                                  {excelProcessingStatus.errorFiles} |{" "}
-                                  <strong>Not Found:</strong>{" "}
-                                  {excelProcessingStatus.notFoundFiles}
-                                </p>
-                              </div>
-                            </>
-                          )}
-                          {excelProcessingStatus.badRowsDetails &&
-                            excelProcessingStatus.badRowsDetails.length > 0 && (
-                              <div className="mt-2">
-                                <button
-                                  onClick={() =>
-                                    toggleSection("excel-bad-rows-details")
-                                  }
-                                  className="font-semibold text-black hover:underline focus:outline-none"
-                                >
-                                  {expandedSections["excel-bad-rows-details"]
-                                    ? "Hide Bad Rows Details"
-                                    : "Show Bad Rows Details"}
-                                </button>
-                                {expandedSections["excel-bad-rows-details"] && (
-                                  <div className="bg-gray-100 p-2 rounded mt-2">
-                                    <h5 className="font-semibold">
-                                      Bad Rows Details:
-                                    </h5>
-                                    <table className="w-full text-sm text-left">
-                                      <thead className="text-xs uppercase bg-gray-50">
-                                        <tr>
-                                          <th scope="col" className="px-2 py-1">
-                                            IH No
-                                          </th>
-                                          <th scope="col" className="px-2 py-1">
-                                            AC No
-                                          </th>
-                                          <th scope="col" className="px-2 py-1">
-                                            Reason
-                                          </th>
-                                        </tr>
-                                      </thead>
-                                      <tbody>
-                                        {excelProcessingStatus.badRowsDetails.map(
-                                          (row, index) => (
-                                            <tr
-                                              key={index}
-                                              className="bg-white border-b"
-                                            >
-                                              <td className="px-2 py-1">
-                                                {row.id_ihno}
-                                              </td>
-                                              <td className="px-2 py-1">
-                                                {row.id_acno}
-                                              </td>
-                                              <td className="px-2 py-1">
-                                                {row.page_count_status}
-                                              </td>
-                                            </tr>
-                                          )
-                                        )}
-                                      </tbody>
-                                    </table>
+                {task === "uploadAndScript" && (
+                  <>
+                    {excelProcessingStatus && (
+                      <div className="mt-4">
+                        <h5 className="font-semibold">
+                          Excel Processing Progress
+                        </h5>
+                        <button
+                          onClick={() =>
+                            toggleSection("excel-processing-progress")
+                          }
+                        >
+                          {expandedSections["excel-processing-progress"]
+                            ? "Hide Details"
+                            : "Show Details"}
+                        </button>
+                        {expandedSections["excel-processing-progress"] && (
+                          <div className="bg-gray-100 p-2 rounded">
+                            {excelProcessingStatus.progress !== undefined && (
+                              <>
+                                <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
+                                  <div
+                                    className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                                    style={{
+                                      width: `${excelProcessingStatus.progress}%`,
+                                    }}
+                                  >
+                                    {excelProcessingStatus.progress}%
                                   </div>
-                                )}
-                              </div>
+                                </div>
+                                <div className="text-sm">
+                                  <p>
+                                    <strong>Total:</strong>{" "}
+                                    {excelProcessingStatus.totalFiles} |{" "}
+                                    <strong>Processed:</strong>{" "}
+                                    {excelProcessingStatus.processedFiles} |{" "}
+                                    <strong>Successful:</strong>{" "}
+                                    {excelProcessingStatus.successfulFiles} |{" "}
+                                    <strong>Errors:</strong>{" "}
+                                    {excelProcessingStatus.errorFiles} |{" "}
+                                    <strong>Not Found:</strong>{" "}
+                                    {excelProcessingStatus.notFoundFiles}
+                                  </p>
+                                </div>
+                              </>
                             )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {s3UploadStatuses.length > 0 && (
-                    <div className="mt-4">
-                      <h5 className="font-semibold">S3 Upload Progress</h5>
-                      <button
-                        onClick={() => toggleSection("s3-upload-progress")}
-                      >
-                        {expandedSections["s3-upload-progress"]
-                          ? "Hide Details"
-                          : "Show Details"}
-                      </button>
-                      {expandedSections["s3-upload-progress"] && (
-                        <div className="bg-gray-100 p-2 rounded">
-                          {renderS3Uploads()}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </>
-              )}
+                            {excelProcessingStatus.badRowsDetails &&
+                              excelProcessingStatus.badRowsDetails.length >
+                                0 && (
+                                <div className="mt-2">
+                                  <button
+                                    onClick={() =>
+                                      toggleSection("excel-bad-rows-details")
+                                    }
+                                    className="font-semibold text-black hover:underline focus:outline-none"
+                                  >
+                                    {expandedSections["excel-bad-rows-details"]
+                                      ? "Hide Bad Rows Details"
+                                      : "Show Bad Rows Details"}
+                                  </button>
+                                  {expandedSections[
+                                    "excel-bad-rows-details"
+                                  ] && (
+                                    <div className="bg-gray-100 p-2 rounded mt-2">
+                                      <h5 className="font-semibold">
+                                        Bad Rows Details:
+                                      </h5>
+                                      <table className="w-full text-sm text-left">
+                                        <thead className="text-xs uppercase bg-gray-50">
+                                          <tr>
+                                            <th
+                                              scope="col"
+                                              className="px-2 py-1"
+                                            >
+                                              IH No
+                                            </th>
+                                            <th
+                                              scope="col"
+                                              className="px-2 py-1"
+                                            >
+                                              AC No
+                                            </th>
+                                            <th
+                                              scope="col"
+                                              className="px-2 py-1"
+                                            >
+                                              Reason
+                                            </th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {excelProcessingStatus.badRowsDetails.map(
+                                            (row, index) => (
+                                              <tr
+                                                key={index}
+                                                className="bg-white border-b"
+                                              >
+                                                <td className="px-2 py-1">
+                                                  {row.id_ihno}
+                                                </td>
+                                                <td className="px-2 py-1">
+                                                  {row.id_acno}
+                                                </td>
+                                                <td className="px-2 py-1">
+                                                  {row.page_count_status}
+                                                </td>
+                                              </tr>
+                                            )
+                                          )}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {s3UploadStatuses.length > 0 && (
+                      <div className="mt-4">
+                        <h5 className="font-semibold">S3 Upload Progress</h5>
+                        <button
+                          onClick={() => toggleSection("s3-upload-progress")}
+                        >
+                          {expandedSections["s3-upload-progress"]
+                            ? "Hide Details"
+                            : "Show Details"}
+                        </button>
+                        {expandedSections["s3-upload-progress"] && (
+                          <div className="bg-gray-100 p-2 rounded">
+                            {renderS3Uploads()}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        )}
       </div>
     </div>
   );
