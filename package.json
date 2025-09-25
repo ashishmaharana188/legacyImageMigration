@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "PDF processor full-stack application - monorepo",
   "private": true,
+  "type": "module",
   "workspaces": [
     "frontend",
     "backend"
