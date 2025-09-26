@@ -80,6 +80,8 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       return "folio-transaction-update-summary"; // Only one folio/transaction update summary per task
     } else if (log.updatedDocuments) {
       return "mongo-update-summary";
+    } else if (log.duplicates && Array.isArray(log.duplicates)) {
+      return "mongo-duplicate-check-summary";
     } else if (log.message) {
       return log.message; // Fallback for other logs with a message
     }
@@ -769,6 +771,48 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 </div>
               )}
             </>
+          )}
+        </div>
+      );
+    } else if (log.duplicates && Array.isArray(log.duplicates)) {
+      const isExpanded = expandedSections[`mongo-duplicate-check-${logKey}`];
+      return (
+        <div>
+          <h5 className="font-semibold">MongoDB Duplicate Check Summary:</h5>
+          {log.message && <p className="text-sm mb-2">{log.message}</p>}
+          {log.duplicates.length > 0 ? (
+            <p>Total unique duplicate entries found: {log.duplicates.length}</p>
+          ) : (
+            <p>No MongoDB duplicates found.</p>
+          )}
+          {log.duplicates.length > 0 && (
+            <button onClick={() => toggleSection(`mongo-duplicate-check-${logKey}`)}>
+              {isExpanded ? "Hide Details" : "Show Details"}
+            </button>
+          )}
+
+          {isExpanded && log.duplicates.length > 0 && (
+            <div className="bg-gray-100 p-2 rounded mt-2">
+              <h5 className="font-semibold">Duplicate Details:</h5>
+              <table className="w-full text-sm text-left">
+                <thead className="text-xs uppercase bg-gray-50">
+                  <tr>
+                    <th scope="col" className="px-2 py-1">Client ID</th>
+                    <th scope="col" className="px-2 py-1">Transaction No</th>
+                    <th scope="col" className="px-2 py-1">Duplicate Count</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {log.duplicates.map((dup: any, index: number) => (
+                    <tr key={index} className="bg-white border-b">
+                      <td className="px-2 py-1">{dup._id.clientId}</td>
+                      <td className="px-2 py-1">{dup._id.transactionNo}</td>
+                      <td className="px-2 py-1 font-bold">{dup.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       );

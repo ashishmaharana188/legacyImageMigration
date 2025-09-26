@@ -128,14 +128,6 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
               {isLoadingMongo ? "Deleting" : "Delete Duplicates"}
             </button>
           )}
-          {duplicateMongoCheckResult && (
-            <div className="mt-4 p-2 border rounded bg-gray-100">
-              <h4 className="font-semibold">Duplicate Mongo Check Result:</h4>
-              <pre className="whitespace-pre-wrap text-sm">
-                {JSON.stringify(duplicateMongoCheckResult, null, 2)}
-              </pre>
-            </div>
-          )}
         </div>
       </div>
     </div>
