@@ -25,6 +25,7 @@ backend/.env.production
 backend/uploads
 keys
 backend/keys
+temp.txt
 
 
 # Editor directories and files
