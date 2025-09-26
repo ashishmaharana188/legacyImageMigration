@@ -44,8 +44,43 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   // New state to accumulate all task logs
   const [allTaskLogs, setAllTaskLogs] = useState<{ [key: string]: any[] }>({});
 
-  // Ref to keep track of the previous taskLogs prop to detect new entries
-  const prevTaskLogsRef = useRef<{ [key: string]: any[] }>({});
+  // Helper to generate a unique identifier for a log entry
+  const getLogIdentifier = (log: any): string => {
+    if (typeof log === "string") {
+      return log; // For simple string messages, the message itself is the identifier
+    } else if (log.splitSummary) {
+      return "splitSummary"; // Only one splitSummary log per task
+    } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
+      return `file-upload-${log.originalFile}`; // Identify by original file name
+    } else if (log.dryRun !== undefined && log.rows !== undefined) {
+      return "sanity-check-duplicates"; // Only one sanity check log per task
+    } else if (
+      log.successfulRows !== undefined &&
+      log.badRows !== undefined &&
+      log.message &&
+      log.message.includes("SQL executed successfully")
+    ) {
+      return "sql-execution-summary"; // Only one SQL execution summary per task
+    } else if (
+      log.transferredCount !== undefined &&
+      log.documents !== undefined &&
+      log.message &&
+      log.message.includes("Transferred") &&
+      log.message.includes("documents to MongoDB successfully")
+    ) {
+      return "mongodb-transfer-summary"; // Only one MongoDB transfer summary per task
+    } else if (
+      log.updatedFolioRows !== undefined &&
+      log.updatedTransactionRows !== undefined &&
+      log.message &&
+      log.message.includes("Folio and Transaction updated successfully")
+    ) {
+      return "folio-transaction-update-summary"; // Only one folio/transaction update summary per task
+    } else if (log.message) {
+      return log.message; // Fallback for other logs with a message
+    }
+    return JSON.stringify(log); // Fallback for anything else (less ideal)
+  };
 
   useEffect(() => {
     setAllTaskLogs((prevAllTaskLogs) => {
@@ -54,49 +89,42 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
       for (const taskKey in taskLogs) {
         const currentLogs = taskLogs[taskKey];
-        let accumulatedLogsForTask = [...(prevAllTaskLogs[taskKey] || [])]; // Create a mutable copy
+        const accumulatedLogsForTask = [...(prevAllTaskLogs[taskKey] || [])];
+        const updatedLogsForTask: any[] = [];
+        const existingLogIdentifiers = new Set<string>();
 
-        // Identify new logs that are not yet in the accumulated logs
-        const newLogsToAdd = currentLogs.filter(
-          (currentLog) =>
-            !accumulatedLogsForTask.some(
-              (accumulatedLog) =>
-                JSON.stringify(accumulatedLog) === JSON.stringify(currentLog)
-            )
-        );
+        // First, add existing logs to the updated list, tracking their identifiers
+        accumulatedLogsForTask.forEach((log) => {
+          const identifier = getLogIdentifier(log);
+          updatedLogsForTask.push(log);
+          existingLogIdentifiers.add(identifier);
+        });
 
-        if (newLogsToAdd.length > 0) {
-          hasChanges = true;
-          newLogsToAdd.forEach((newLog) => {
-            if (newLog.splitSummary) {
-              // If it's a splitSummary, find the last existing splitSummary and replace it
-              const lastSplitSummaryIndex = accumulatedLogsForTask.findIndex(
-                (log) => log.splitSummary
-              );
-              if (lastSplitSummaryIndex !== -1) {
-                accumulatedLogsForTask[lastSplitSummaryIndex] = newLog;
-              } else {
-                accumulatedLogsForTask.push(newLog);
-              }
-            } else {
-              // For other logs, just append if truly new
-              accumulatedLogsForTask.push(newLog);
+        // Then, process current logs
+        currentLogs.forEach((currentLog) => {
+          const identifier = getLogIdentifier(currentLog);
+          if (existingLogIdentifiers.has(identifier)) {
+            // If an existing log has the same identifier, replace it
+            const indexToUpdate = updatedLogsForTask.findIndex(
+              (log) => getLogIdentifier(log) === identifier
+            );
+            if (indexToUpdate !== -1) {
+              updatedLogsForTask[indexToUpdate] = currentLog;
+              hasChanges = true;
             }
-          });
-          newAllTaskLogs[taskKey] = accumulatedLogsForTask;
-        } else if (
-          currentLogs.length > 0 &&
-          accumulatedLogsForTask.length === 0
-        ) {
-          // This case handles initial population if accumulatedLogsForTask is empty
-          newAllTaskLogs[taskKey] = [...currentLogs];
-          hasChanges = true;
+          } else {
+            // Otherwise, append the new log
+            updatedLogsForTask.push(currentLog);
+            existingLogIdentifiers.add(identifier); // Add new identifier to set
+            hasChanges = true;
+          }
+        });
+
+        // If the number of logs changed or any log was updated, set the new array
+        if (hasChanges || updatedLogsForTask.length !== accumulatedLogsForTask.length) {
+          newAllTaskLogs[taskKey] = updatedLogsForTask;
         }
       }
-
-      // Update the ref with the current taskLogs prop for the next comparison
-      prevTaskLogsRef.current = taskLogs;
-
       return hasChanges ? newAllTaskLogs : prevAllTaskLogs;
     });
   }, [taskLogs]); // Depend on taskLogs prop
@@ -531,6 +559,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       log.message &&
       log.message.includes("SQL executed successfully")
     ) {
+      const isExpanded = expandedSections["sql-execution-summary"];
       return (
         <div>
           <h5 className="font-semibold">SQL Execution Summary:</h5>
@@ -559,9 +588,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           {log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
-                onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
-                }
+                onClick={() => toggleBadRowsDisplay(log.badRowsFilePath, logKey)}
                 className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
@@ -606,12 +633,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       log.message.includes("Transferred") &&
       log.message.includes("documents to MongoDB successfully")
     ) {
-      const isExpanded = expandedSections[`mongodb-transfer-${logKey}`];
+      const isExpanded = expandedSections["mongodb-transfer-summary"];
       return (
         <div>
           <h5 className="font-semibold">MongoDB Transfer Summary:</h5>
           <p>Total Documents Transferred: {log.transferredCount}</p>
-          <button onClick={() => toggleSection(`mongodb-transfer-${logKey}`)}>
+          <button onClick={() => toggleSection("mongodb-transfer-summary")}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
           {isExpanded && log.documents.length > 0 && (
@@ -651,7 +678,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       log.message &&
       log.message.includes("Folio and Transaction updated successfully")
     ) {
-      const isExpanded = expandedSections[`folio-transaction-update-${logKey}`];
+      const isExpanded = expandedSections["folio-transaction-update-summary"];
       return (
         <div>
           <h5 className="font-semibold">
@@ -680,14 +707,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             </tbody>
           </table>
           <button
-            onClick={() => toggleSection(`folio-transaction-update-${logKey}`)}
+            onClick={() => toggleSection("folio-transaction-update-summary")}
           ></button>
           {isExpanded && log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
-                onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
-                }
+                onClick={() => toggleBadRowsDisplay(log.badRowsFilePath, logKey)}
                 className="mt-2 text-black hover:underline focus:outline-none"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
@@ -745,12 +770,12 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             <div key={task} className="mb-4">
               <h4 className="font-semibold capitalize mb-2">{task}</h4>
               <div className="bg-gray-100 p-2 rounded">
-                {logsArray.map((logItem: any, index: number) => (
-                  <div key={`${task}-${index}`} className="mb-2 last:mb-0">
+                {logsArray.map((logItem: any) => (
+                  <div key={getLogIdentifier(logItem)} className="mb-2 last:mb-0">
                     {typeof logItem === "string" ? (
                       <p>{logItem}</p>
                     ) : (
-                      renderSummary(logItem, `${task}-${index}`)
+                      renderSummary(logItem, getLogIdentifier(logItem))
                     )}
                   </div>
                 ))}
