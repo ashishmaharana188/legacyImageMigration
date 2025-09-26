@@ -133,14 +133,14 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     }
   }, [updateTaskLog, clearTaskLog]);
 
-  const handleupdateFolioAndTransaction = useCallback(async () => {
+  const handleupdateFolioAndTransaction = useCallback(async (updateAll: boolean) => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
     updateTaskLog("sqlAndMongo", "Updating folio and transaction");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/process-sql-mongo",
-        { action: "updateFolioAndTransaction" }
+        { action: "updateFolioAndTransaction", updateAll }
       );
       updateTaskLog("sqlAndMongo", res.data);
     } catch (error: unknown) {

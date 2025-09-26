@@ -711,7 +711,7 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(): Promise<{
+  async updateFolioAndTransaction(updateAll: boolean): Promise<{
     result: string;
     logs: SqlLog[];
     summary: {
@@ -721,10 +721,35 @@ page_count, client_id
       badRowsFilePath: string | null;
     };
   }> {
-    this.logger.info("Starting updateFolioAndTransaction");
+    this.logger.info(`Starting updateFolioAndTransaction with updateAll: ${updateAll}`);
     const { transactions } = await this.generateSql();
 
-    const processedFolioNumbers = await this.getProcessedFolioNumbers();
+    let processedFolioNumbers: string[] = [];
+    if (!updateAll) {
+      processedFolioNumbers = await this.getProcessedFolioNumbers();
+      if (processedFolioNumbers.length === 0) {
+        this.logger.warn(
+          "updateFolioAndTransaction: No processed folio numbers found from processed CSV. Skipping updates."
+        );
+        return {
+          result: "failed",
+          logs: [
+            {
+              row: 0,
+              status: "error",
+              message: "No processed folio numbers found to update.",
+            },
+          ],
+          summary: {
+            updatedFolioRows: 0,
+            updatedTransactionRows: 0,
+            badRows: [],
+            badRowsFilePath: null,
+          },
+        };
+      }
+    }
+
     // Get unique id_fund values
     const uniqueClientCodes = [
       ...new Set(transactions.map((tx) => tx.id_fund)),
@@ -743,11 +768,6 @@ page_count, client_id
     const updatedTransactionIdentifiers = new Set<string>();
 
     try {
-      if (processedFolioNumbers.length === 0) {
-        this.logger.warn(
-          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
-        );
-      }
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
       client = await this.getPool().connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
@@ -784,16 +804,14 @@ SELECT DISTINCT
   FROM trxn.aif_transaction_summary ts
   JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
   JOIN fund.client_master cm ON cm.id = fo.client_id
-  WHERE fo.folio_number = ANY($1::text[])
+  WHERE ${updateAll ? 'TRUE' : 'fo.folio_number = ANY($1::text[])'}
     AND ts.created_by = 'aifappendersvc'
     AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
       this.logger.info(
-        `updateFolioAndTransaction: inserting temp for ${processedFolioNumbers.length} folios`
+        `updateFolioAndTransaction: inserting temp for ${updateAll ? 'all' : processedFolioNumbers.length} folios`
       );
-      const insertResult = await client.query(insertTempQuery, [
-        processedFolioNumbers,
-      ]);
+      const insertResult = await client.query(insertTempQuery, updateAll ? [] : [processedFolioNumbers]);
       logs.push({
         row: 0,
         status: "executed",
@@ -817,13 +835,11 @@ SELECT DISTINCT
       LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
     WHERE (d.user_attr2 = f.folio_number
         OR d.transaction_reference_id = t.ihno)
-      AND d.user_attr2 = ANY($1::text[])
+      ${updateAll ? '' : 'AND d.user_attr2 = ANY($1::text[])'}
     RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
-      const updateFolioResult = await client.query(updateFolioQuery, [
-        processedFolioNumbers,
-      ]);
+      const updateFolioResult = await client.query(updateFolioQuery, updateAll ? [] : [processedFolioNumbers]);
       updateFolioResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
@@ -848,8 +864,8 @@ WHERE ts.client_id = d.client_id
   AND ts.folio_id = d.folio_id
   AND ts.user_attr5 = d.user_attr1
   AND d.created_by = 'system'
-  AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))
-  AND d.user_attr2 = ANY($2::text[])
+  ${updateAll ? '' : 'AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))'}
+  ${updateAll ? '' : 'AND d.user_attr2 = ANY($2::text[])'}
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
   AND ts.created_by = 'aifappendersvc'
 RETURNING d.user_attr1, d.user_attr2;
@@ -859,7 +875,7 @@ RETURNING d.user_attr1, d.user_attr2;
       );
       const updateTransactionResult = await client.query(
         updateTransactionQuery,
-        [uniqueClientCodes, processedFolioNumbers]
+        updateAll ? [] : [uniqueClientCodes, processedFolioNumbers]
       );
       updateTransactionResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(

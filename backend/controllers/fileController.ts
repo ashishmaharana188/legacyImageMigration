@@ -143,7 +143,7 @@ class FileController {
   }
 
   async processSqlMongo(req: Request, res: Response) {
-    const { action } = req.body;
+    const { action, updateAll } = req.body;
     const database = new Database();
 
     if (action === "executeSql") {
@@ -166,7 +166,7 @@ class FileController {
         });
       }
     } else if (action === "updateFolioAndTransaction") {
-      const { result, summary } = await database.updateFolioAndTransaction();
+      const { result, summary } = await database.updateFolioAndTransaction(updateAll);
       if (result === "success") {
         return res.json({
           message: "Folio and Transaction updated successfully",

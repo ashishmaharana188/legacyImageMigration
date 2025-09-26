@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 
 interface SQLAndMongoUIProps {
   loading: boolean;
@@ -6,7 +6,7 @@ interface SQLAndMongoUIProps {
   handleTransferToMongo: () => Promise<void>;
   handleGenerateSql: () => Promise<void>;
   handleExecuteSql: () => Promise<void>;
-  handleupdateFolioAndTransaction: () => Promise<void>;
+  handleupdateFolioAndTransaction: (updateAll: boolean) => Promise<void>;
   handleReconnect: () => Promise<void>;
 }
 
@@ -16,18 +16,44 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
   handleupdateFolioAndTransaction,
   handleReconnect,
 }) => {
+  const [updateAll, setUpdateAll] = useState<boolean>(false);
+
   return (
     <div>
       <h3 className="text-xl font-bold text-black mb-4">
         SQL and Mongo Operations
       </h3>
+      <div className="flex gap-4 mb-4">
+        <label className="inline-flex items-center">
+          <input
+            type="radio"
+            className="form-radio"
+            name="updateOption"
+            value="processed"
+            checked={!updateAll}
+            onChange={() => setUpdateAll(false)}
+          />
+          <span className="ml-2 text-black">Update processed folios</span>
+        </label>
+        <label className="inline-flex items-center">
+          <input
+            type="radio"
+            className="form-radio"
+            name="updateOption"
+            value="all"
+            checked={updateAll}
+            onChange={() => setUpdateAll(true)}
+          />
+          <span className="ml-2 text-black">Update all</span>
+        </label>
+      </div>
       <div className="flex gap-4">
         <div className="flex gap-4">
           <button onClick={handleExecuteSql} className="btn">
             Execute SQL
           </button>
         </div>
-        <button onClick={handleupdateFolioAndTransaction} className="btn">
+        <button onClick={() => handleupdateFolioAndTransaction(updateAll)} className="btn">
           Update Folio & Transaction
         </button>
         <button onClick={handleTransferToMongo} className="btn">
