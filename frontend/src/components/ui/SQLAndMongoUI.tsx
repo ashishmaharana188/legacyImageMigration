@@ -29,7 +29,9 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
         {/* Folio & Transaction Update Section */}
         <div className="border border-gray-300 rounded-lg p-4 flex flex-col justify-between">
           <div>
-            <h4 className="font-semibold text-lg text-black mb-3">Folio & Transaction Update</h4>
+            <h4 className="font-semibold text-lg text-black mb-3">
+              Folio & Transaction Update
+            </h4>
             <p className="text-sm text-gray-600 mb-4">
               Updates folio and transaction reference IDs in the database.
             </p>
@@ -43,7 +45,9 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
                   checked={!updateAll}
                   onChange={() => setUpdateAll(false)}
                 />
-                <span className="ml-2 text-black">Update from Processed CSV</span>
+                <span className="ml-2 text-black">
+                  Update from Processed CSV
+                </span>
               </label>
               <label className="inline-flex items-center">
                 <input
@@ -69,9 +73,12 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
         {/* Mongo Operations Section */}
         <div className="border border-gray-300 rounded-lg p-4 flex flex-col justify-between">
           <div>
-            <h4 className="font-semibold text-lg text-black mb-3">Mongo Operations</h4>
+            <h4 className="font-semibold text-lg text-black mb-3">
+              Mongo Operations
+            </h4>
             <p className="text-sm text-gray-600 mb-4">
-              Transfers new data or updates existing transaction numbers in MongoDB.
+              Transfers new data or updates existing transaction numbers in
+              MongoDB.
             </p>
             <div className="flex flex-col gap-2 mb-4">
               <label className="inline-flex items-center">
@@ -81,11 +88,14 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
                   checked={updateAllMongo}
                   onChange={() => setUpdateAllMongo(!updateAllMongo)}
                 />
-                <span className="ml-2 text-black">Update All Mongo Transactions</span>
+                <span className="ml-2 text-black">Update All Documents</span>
               </label>
             </div>
           </div>
-          <button onClick={() => handleTransferToMongo(updateAllMongo)} className="btn w-full">
+          <button
+            onClick={() => handleTransferToMongo(updateAllMongo)}
+            className="btn w-full"
+          >
             {updateAllMongo ? "Update Mongo Transactions" : "Transfer to Mongo"}
           </button>
         </div>
