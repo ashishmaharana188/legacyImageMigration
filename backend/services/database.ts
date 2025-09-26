@@ -1509,7 +1509,7 @@ RETURNING d.user_attr1, d.user_attr2;
           user_attr2: ua2,
           reason: "Imperfect Duplicate",
         })),
-        "imperfect_duplicates.txt"
+        "imperfect_duplicates.csv"
       );
 
       return {
