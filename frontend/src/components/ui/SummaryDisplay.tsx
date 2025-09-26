@@ -515,7 +515,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
           <p>Dry Run: {log.dryRun ? "Yes" : "No"}</p>
           <p>Cutoff Timestamp: {log.cutoffTms}</p>
-          <p>Total Duplicates Found: {log.rows.length}</p>
+          <p>Total Duplicates Found: {log.totalDuplicatesFound}</p>
           <button onClick={() => toggleSection(`sanity-check-${logKey}`)}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
@@ -556,7 +556,9 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                               entry.entries[0].creation_date
                             ).toLocaleString()}
                           </td>
-                          <td className="px-2 py-1 font-bold">{entry.count}</td>
+                          <td className="px-2 py-1 font-bold">
+                            {entry.count - 1}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
