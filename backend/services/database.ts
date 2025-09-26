@@ -1331,6 +1331,31 @@ RETURNING d.user_attr1, d.user_attr2;
       if (client) client.release();
     }
   }
+
+  public async getUpdateDetails(): Promise<any[]> {
+    let client: PoolClient | null = null;
+    try {
+      client = await this.getPool().connect();
+      const query = `
+        SELECT
+          cm.client_code,
+          add.user_attr1,
+          add.transaction_reference_id
+        FROM investor.aif_document_details add
+        JOIN fund.client_master cm ON add.client_id = cm.id;
+      `;
+      const res = await client.query(query);
+      this.logger.info(
+        `Fetched ${res.rows.length} rows from aif_document_details for mongo update.`
+      );
+      return res.rows;
+    } catch (error) {
+      this.logger.error(`Error fetching details for mongo update: ${error}`);
+      throw error;
+    } finally {
+      if (client) client.release();
+    }
+  }
 }
 
 // local helpers duplicated at end in original snippet; keeping top-level ones in-scope

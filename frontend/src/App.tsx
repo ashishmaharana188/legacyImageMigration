@@ -287,6 +287,7 @@ const App: React.FC = () => {
             <SummaryDisplay
               taskLogs={taskLogs}
               uploadStatuses={uploadStatuses}
+              onClearLogs={clearTaskLog}
             />
           </div>
         </Panel>

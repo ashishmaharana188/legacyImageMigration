@@ -215,8 +215,9 @@ class FileController {
 
   async updateFolioAndTransaction(req: Request, res: Response) {
     try {
+      const { updateAll } = req.body;
       const processor = new Database();
-      const result = await processor.updateFolioAndTransaction();
+      const result = await processor.updateFolioAndTransaction(updateAll);
       res.status(200).json({
         statusCode: 200,
         message:
@@ -272,6 +273,25 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to transfer data to MongoDB",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async updateMongoTransactions(req: Request, res: Response) {
+    try {
+      const mongoDatabase = new MongoDatabase();
+      const result = await mongoDatabase.updateMongoTransactions();
+      res.status(200).json({
+        statusCode: 200,
+        message: "Mongo transactions updated successfully.",
+        ...result,
+      });
+    } catch (error) {
+      console.error("Mongo transaction update error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to update Mongo transactions",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }

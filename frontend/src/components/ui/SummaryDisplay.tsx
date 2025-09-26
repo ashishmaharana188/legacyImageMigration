@@ -25,11 +25,13 @@ interface UploadStatus {
 interface SummaryDisplayProps {
   taskLogs: { [key: string]: any[] };
   uploadStatuses: UploadStatus[];
+  onClearLogs: (taskKey: string) => void;
 }
 
 const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
   uploadStatuses,
+  onClearLogs,
 }) => {
   const [parsedBadRows, setParsedBadRows] = useState<any[] | null>([]);
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
@@ -76,6 +78,8 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       log.message.includes("Folio and Transaction updated successfully")
     ) {
       return "folio-transaction-update-summary"; // Only one folio/transaction update summary per task
+    } else if (log.updatedDocuments) {
+      return "mongo-update-summary";
     } else if (log.message) {
       return log.message; // Fallback for other logs with a message
     }
@@ -89,6 +93,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
       for (const taskKey in taskLogs) {
         const currentLogs = taskLogs[taskKey];
+        // If the currentLogs for a taskKey are empty, clear the accumulated logs for that taskKey
+        if (currentLogs.length === 0) {
+          if (newAllTaskLogs[taskKey] && newAllTaskLogs[taskKey].length > 0) {
+            newAllTaskLogs[taskKey] = [];
+            hasChanges = true;
+          }
+          continue; // Move to the next taskKey
+        }
+
         const accumulatedLogsForTask = [...(prevAllTaskLogs[taskKey] || [])];
         const updatedLogsForTask: any[] = [];
         const existingLogIdentifiers = new Set<string>();
@@ -121,7 +134,10 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         });
 
         // If the number of logs changed or any log was updated, set the new array
-        if (hasChanges || updatedLogsForTask.length !== accumulatedLogsForTask.length) {
+        if (
+          hasChanges ||
+          updatedLogsForTask.length !== accumulatedLogsForTask.length
+        ) {
           newAllTaskLogs[taskKey] = updatedLogsForTask;
         }
       }
@@ -588,7 +604,9 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           {log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
-                onClick={() => toggleBadRowsDisplay(log.badRowsFilePath, logKey)}
+                onClick={() =>
+                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
+                }
                 className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
@@ -712,7 +730,9 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           {isExpanded && log.badRowsFilePath && log.badRows > 0 && (
             <>
               <button
-                onClick={() => toggleBadRowsDisplay(log.badRowsFilePath, logKey)}
+                onClick={() =>
+                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
+                }
                 className="mt-2 text-black hover:underline focus:outline-none"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
@@ -750,6 +770,66 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           )}
         </div>
       );
+    } else if (log.updatedDocuments) {
+      const isExpanded = expandedSections["mongo-update-summary"];
+      return (
+        <div>
+          <h5 className="font-semibold">Mongo Transactions Update Summary:</h5>
+          <table className="w-full text-sm text-left">
+            <thead className="text-xs uppercase bg-gray-50">
+              <tr>
+                <th scope="col" className="px-2 py-1">
+                  Updated Count
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr className="bg-white border-b">
+                <td className="px-2 py-1">{log.updatedCount}</td>
+              </tr>
+            </tbody>
+          </table>
+          {log.updatedDocuments.length > 0 && (
+            <>
+              <button
+                onClick={() => toggleSection("mongo-update-summary")}
+                className="mt-2 text-black hover:underline focus:outline-none"
+              >
+                {isExpanded ? "Hide Details" : "Show Details"}
+              </button>
+              {isExpanded && (
+                <div className="bg-gray-100 p-2 rounded mt-2">
+                  <h5 className="font-semibold">Updated Documents Details:</h5>
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-50">
+                      <tr>
+                        <th scope="col" className="px-2 py-1">
+                          Client ID
+                        </th>
+                        <th scope="col" className="px-2 py-1">
+                          Old Transaction No
+                        </th>
+                        <th scope="col" className="px-2 py-1">
+                          New Transaction No
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {log.updatedDocuments.map((doc: any, index: number) => (
+                        <tr key={index} className="bg-white border-b">
+                          <td className="px-2 py-1">{doc.clientId}</td>
+                          <td className="px-2 py-1">{doc.oldTransactionNo}</td>
+                          <td className="px-2 py-1">{doc.newTransactionNo}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      );
     }
 
     return (
@@ -768,10 +848,21 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             [task, logsArray] // Use allTaskLogs here
           ) => (
             <div key={task} className="mb-4">
-              <h4 className="font-semibold capitalize mb-2">{task}</h4>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-semibold capitalize">{task}</h4>
+                <button
+                  onClick={() => onClearLogs(task)}
+                  className="ml-2 px-3 py-1 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                >
+                  Clear Logs
+                </button>
+              </div>
               <div className="bg-gray-100 p-2 rounded">
                 {logsArray.map((logItem: any) => (
-                  <div key={getLogIdentifier(logItem)} className="mb-2 last:mb-0">
+                  <div
+                    key={getLogIdentifier(logItem)}
+                    className="mb-2 last:mb-0"
+                  >
                     {typeof logItem === "string" ? (
                       <p>{logItem}</p>
                     ) : (

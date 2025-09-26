@@ -5,10 +5,10 @@ import { Database } from "./database";
 const logger = winston.createLogger({
   level: "info",
   format: winston.format.json(),
-    transports: [
+  transports: [
     new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-    new winston.transports.File({ filename: "logs/combined.log" })
-  ]
+    new winston.transports.File({ filename: "logs/combined.log" }),
+  ],
 });
 
 export class MongoDatabase {
@@ -258,6 +258,72 @@ export class MongoDatabase {
       return { transferredCount: pgData.length, documents: documentsToInsert };
     } catch (error) {
       logger.error(`Data transfer error: ${error}`);
+      throw error;
+    }
+  }
+
+  public async updateMongoTransactions(): Promise<{
+    updatedCount: number;
+    syncedCount: number;
+    updatedDocuments: any[];
+    syncedDocuments: any[];
+  }> {
+    let updatedCount = 0;
+    let syncedCount = 0;
+    const updatedDocuments = [];
+    const syncedDocuments = [];
+
+    try {
+      const database = new Database();
+      await this.connect();
+      const db = this.getDb();
+      if (!db) {
+        logger.error("Database connection is not available.");
+        return {
+          updatedCount: 0,
+          syncedCount: 0,
+          updatedDocuments: [],
+          syncedDocuments: [],
+        };
+      }
+
+      const pgData = await database.getUpdateDetails();
+
+      for (const data of pgData) {
+        const filter = {
+          clientId: data.client_code,
+          transactionNo: data.user_attr1,
+        };
+
+        const mongoDoc = await this.model.findOne(filter);
+
+        if (mongoDoc) {
+          if (mongoDoc.transactionNo !== data.transaction_reference_id) {
+            await this.model.updateOne(filter, {
+              $set: { transactionNo: data.transaction_reference_id },
+            });
+            updatedCount++;
+            updatedDocuments.push({
+              clientId: data.client_code,
+              oldTransactionNo: mongoDoc.transactionNo,
+              newTransactionNo: data.transaction_reference_id,
+              documentType: mongoDoc.documentType,
+              processCode: mongoDoc.processCode,
+            });
+          } else {
+            syncedCount++;
+            syncedDocuments.push({
+              clientId: data.client_code,
+              transactionNo: mongoDoc.transactionNo,
+            });
+          }
+        }
+      }
+
+      await this.disconnect();
+      return { updatedCount, syncedCount, updatedDocuments, syncedDocuments };
+    } catch (error) {
+      logger.error(`Mongo transaction update error: ${error}`);
       throw error;
     }
   }

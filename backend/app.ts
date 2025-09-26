@@ -144,6 +144,7 @@ app.post("/process-sql-mongo", fileController.processSqlMongo);
 
 app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
 app.post("/transfer-to-mongo", fileController.transferDataToMongo);
+app.post("/update-mongo-transactions", fileController.updateMongoTransactions);
 app.post("/upload-to-s3", fileController.uploadToS3);
 app.get("/s3-list-objects", fileController.listS3Files);
 app.post("/s3-delete-object", fileController.deleteS3Files);
