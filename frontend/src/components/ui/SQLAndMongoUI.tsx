@@ -39,7 +39,7 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
               <label className="inline-flex items-center">
                 <input
                   type="radio"
-                  className="form-radio"
+                  className="form-checkbox"
                   name="updateOption"
                   value="processed"
                   checked={!updateAll}
@@ -52,7 +52,7 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
               <label className="inline-flex items-center">
                 <input
                   type="radio"
-                  className="form-radio"
+                  className="form-checkbox"
                   name="updateOption"
                   value="all"
                   checked={updateAll}

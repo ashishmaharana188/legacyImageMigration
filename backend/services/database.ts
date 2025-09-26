@@ -721,7 +721,9 @@ page_count, client_id
       badRowsFilePath: string | null;
     };
   }> {
-    this.logger.info(`Starting updateFolioAndTransaction with updateAll: ${updateAll}`);
+    this.logger.info(
+      `Starting updateFolioAndTransaction with updateAll: ${updateAll}`
+    );
     const { transactions } = await this.generateSql();
 
     let processedFolioNumbers: string[] = [];
@@ -804,14 +806,19 @@ SELECT DISTINCT
   FROM trxn.aif_transaction_summary ts
   JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
   JOIN fund.client_master cm ON cm.id = fo.client_id
-  WHERE ${updateAll ? 'TRUE' : 'fo.folio_number = ANY($1::text[])'}
+  WHERE ${updateAll ? "TRUE" : "fo.folio_number = ANY($1::text[])"}
     AND ts.created_by = 'aifappendersvc'
     AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
       this.logger.info(
-        `updateFolioAndTransaction: inserting temp for ${updateAll ? 'all' : processedFolioNumbers.length} folios`
+        `updateFolioAndTransaction: inserting temp for ${
+          updateAll ? "all" : processedFolioNumbers.length
+        } folios`
       );
-      const insertResult = await client.query(insertTempQuery, updateAll ? [] : [processedFolioNumbers]);
+      const insertResult = await client.query(
+        insertTempQuery,
+        updateAll ? [] : [processedFolioNumbers]
+      );
       logs.push({
         row: 0,
         status: "executed",
@@ -835,11 +842,14 @@ SELECT DISTINCT
       LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
     WHERE (d.user_attr2 = f.folio_number
         OR d.transaction_reference_id = t.ihno)
-      ${updateAll ? '' : 'AND d.user_attr2 = ANY($1::text[])'}
+      ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
     RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
-      const updateFolioResult = await client.query(updateFolioQuery, updateAll ? [] : [processedFolioNumbers]);
+      const updateFolioResult = await client.query(
+        updateFolioQuery,
+        updateAll ? [] : [processedFolioNumbers]
+      );
       updateFolioResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
@@ -864,8 +874,12 @@ WHERE ts.client_id = d.client_id
   AND ts.folio_id = d.folio_id
   AND ts.user_attr5 = d.user_attr1
   AND d.created_by = 'system'
-  ${updateAll ? '' : 'AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))'}
-  ${updateAll ? '' : 'AND d.user_attr2 = ANY($2::text[])'}
+  ${
+    updateAll
+      ? ""
+      : "AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))"
+  }
+  ${updateAll ? "" : "AND d.user_attr2 = ANY($2::text[])"}
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
   AND ts.created_by = 'aifappendersvc'
 RETURNING d.user_attr1, d.user_attr2;
@@ -1104,11 +1118,14 @@ RETURNING d.user_attr1, d.user_attr2;
           WHERE user_attr1 IS NOT NULL
             AND client_id IS NOT NULL
             AND creation_date <= $1::timestamptz
+            AND created_by = 'system'
             ${clientFilter}
+            
         )
         DELETE FROM investor.aif_document_details d
         WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM pre_cutoff_keys)
           AND d.creation_date > $1::timestamptz
+          AND created_by = 'system'
         RETURNING d.id
       `;
 
@@ -1118,6 +1135,7 @@ RETURNING d.user_attr1, d.user_attr2;
             FROM investor.aif_document_details
             WHERE user_attr1 IS NOT NULL
               AND client_id IS NOT NULL
+              AND created_by = 'system'
               ${clientFilter}
             GROUP BY client_id, ${keyExpr}
             HAVING MIN(creation_date) > $1::timestamptz
@@ -1131,6 +1149,7 @@ RETURNING d.user_attr1, d.user_attr2;
                 ) as rn
             FROM investor.aif_document_details d
             JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k
+            WHERE d.created_by = 'system'
         )
         DELETE FROM investor.aif_document_details t
         USING dups_to_delete d
@@ -1146,6 +1165,7 @@ RETURNING d.user_attr1, d.user_attr2;
           FROM investor.aif_document_details
           WHERE user_attr1 IS NOT NULL
             AND client_id IS NOT NULL
+            AND created_by = 'system'
             ${clientFilter}
           GROUP BY client_id, ${keyExpr}
           HAVING MIN(creation_date) > $2::timestamptz
@@ -1155,6 +1175,7 @@ RETURNING d.user_attr1, d.user_attr2;
                  ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
           FROM investor.aif_document_details d
           WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM post_cutoff_only_keys)
+            AND d.created_by = 'system'
         )
         SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
         FROM investor.aif_document_details d
@@ -1164,9 +1185,11 @@ RETURNING d.user_attr1, d.user_attr2;
             WHERE user_attr1 IS NOT NULL
               AND client_id IS NOT NULL
               AND creation_date <= $1::timestamptz
+              AND created_by = 'system'
               ${clientFilter}
         )
         AND d.creation_date > $1::timestamptz
+        AND d.created_by = 'system'
 
         UNION ALL
 

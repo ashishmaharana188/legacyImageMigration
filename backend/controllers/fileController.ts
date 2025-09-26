@@ -247,13 +247,27 @@ class FileController {
         cutoffTms,
         clientCode,
       });
+
+      if (result.result === "failed") {
+        const errorMessage =
+          result.logs.length > 0
+            ? result.logs[0].message
+            : "Sanity check failed with an unspecified error.";
+        console.error("Sanity check failed:", errorMessage);
+        return res.status(500).json({
+          statusCode: 500,
+          error: "Sanity check failed",
+          details: errorMessage,
+        });
+      }
+
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      console.error("Sanity check error:", error);
+      console.error("Sanity check error (exception caught):", error);
       res.status(500).json({
         statusCode: 500,
-        error: "Failed to run sanity check",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to run sanity check due to an unexpected error",
+        details: error instanceof Error ? error.message : "Unknown unexpected error",
       });
     }
   }

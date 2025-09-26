@@ -28,7 +28,9 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
 }) => {
   return (
     <div className="p-4 mt-2 border rounded">
-      <h3 className="text-xl font-bold text-black mb-4">Sanity Check for Duplicates</h3>
+      <h3 className="text-xl font-bold text-black mb-4">
+        Sanity Check for Duplicates
+      </h3>
       <div className="flex flex-col gap-4">
         <input
           type="date"
@@ -48,11 +50,12 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
         <label>
           <input
             type="checkbox"
+            className="form-checkbox"
             checked={normalize}
             onChange={(e) => setNormalize(e.target.checked)}
             disabled={isLoading}
           />
-          <span className="ml-2">Normalize (trim and lowercase) keys for comparison</span>
+          <span className="ml-2">Normalize keys for comparison</span>
         </label>
         <button
           onClick={() => handleSanityCheck(true)}
@@ -64,6 +67,7 @@ const SanityCheckUI: React.FC<SanityCheckUIProps> = ({
         <label>
           <input
             type="checkbox"
+            className="form-checkbox"
             checked={isDeleteEnabled}
             onChange={(e) => setIsDeleteEnabled(e.target.checked)}
             disabled={isLoading}
