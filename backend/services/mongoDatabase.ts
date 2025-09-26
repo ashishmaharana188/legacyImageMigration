@@ -11,6 +11,13 @@ const logger = winston.createLogger({
   ],
 });
 
+interface MongoDuplicateCheckResult {
+  _id: { clientId: string; transactionNo: string };
+  count: number;
+  documentIds: mongoose.Types.ObjectId[];
+  // Potentially add more fields if needed for dry-run details
+}
+
 export class MongoDatabase {
   private uri: string;
   private model: mongoose.Model<any>;
@@ -325,6 +332,82 @@ export class MongoDatabase {
     } catch (error) {
       logger.error(`Mongo transaction update error: ${error}`);
       throw error;
+    }
+  }
+
+  public async sanityCheckMongoDuplicates(params: {
+    dryRun?: boolean;
+  }): Promise<{
+    result: "success" | "failed";
+    dryRun: boolean;
+    duplicates: MongoDuplicateCheckResult[];
+    totalDuplicateGroups: number;
+    totalDuplicateDocuments: number;
+    logs: any[];
+  }> {
+    const logs: any[] = [];
+    const { dryRun = true } = params;
+
+    logger.info(`sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`);
+
+    try {
+      await this.connect();
+
+      const pipeline = [
+        {
+          $group: {
+            _id: { clientId: "$clientId", transactionNo: "$transactionNo" },
+            count: { $sum: 1 },
+            documentIds: { $push: "$_id" },
+            // Add other fields here if you want to see them in the dry run output
+            // e.g., firstDocument: { $first: "$$ROOT" }
+          },
+        },
+        {
+          $match: {
+            count: { $gt: 1 },
+          },
+        },
+      ];
+
+      const duplicates = await this.model.aggregate<MongoDuplicateCheckResult>(pipeline).exec();
+
+      const totalDuplicateGroups = duplicates.length;
+      const totalDuplicateDocuments = duplicates.reduce((sum, dup) => sum + dup.count, 0);
+
+      logger.info(
+        `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`
+      );
+
+      if (!dryRun) {
+        // TODO: Implement actual deletion logic here if dryRun is false
+        // This would involve iterating through 'duplicates' and deleting documents
+        // based on your specific deletion rules (e.g., keep one, delete others).
+        // For now, it just reports.
+        logs.push({ status: "info", message: "Actual deletion logic not yet implemented." });
+      }
+
+      await this.disconnect();
+
+      return {
+        result: "success",
+        dryRun,
+        duplicates,
+        totalDuplicateGroups,
+        totalDuplicateDocuments,
+        logs,
+      };
+    } catch (error) {
+      logger.error(`sanityCheckMongoDuplicates failed: ${error}`);
+      logs.push({ status: "error", message: `sanityCheckMongoDuplicates failed: ${error}` });
+      return {
+        result: "failed",
+        dryRun,
+        duplicates: [],
+        totalDuplicateGroups: 0,
+        totalDuplicateDocuments: 0,
+        logs,
+      };
     }
   }
 }

@@ -237,6 +237,23 @@ class FileController {
     }
   }
 
+
+  async checkMongoDuplicates(req: Request, res: Response) {
+    try {
+      const { dryRun } = req.body;
+      const mongoDatabase = new MongoDatabase();
+      const result = await mongoDatabase.sanityCheckMongoDuplicates({ dryRun });
+      res.status(200).json({ statusCode: 200, ...result });
+    } catch (error) {
+      console.error("Mongo sanity check error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to run Mongo sanity check",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   async sanityCheckDuplicates(req: Request, res: Response) {
     try {
       const { cutoffTms, dryRun, normalize, clientCode } = req.body;
