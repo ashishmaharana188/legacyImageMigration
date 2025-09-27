@@ -13,28 +13,30 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   clearTaskLog,
 }) => {
   const [isDeleteEnabled, setIsDeleteEnabled] = useState(false);
+  const [isMongoDeleteEnabled, setIsMongoDeleteEnabled] = useState(false);
   const [normalize, setNormalize] = useState(false);
   const [cutoffDate, setCutoffDate] = useState<dayjs.Dayjs | null>(
     dayjs("2025-09-05")
   );
   const [clientCode, setClientCode] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingPg, setIsLoadingPg] = useState(false);
+  const [isLoadingMongo, setIsLoadingMongo] = useState(false);
+  const [duplicateMongoCheckResult, setDuplicateMongoCheckResult] = useState<any | null>(null);
 
-  const handleSanityCheck = useCallback(
+  const handlePgSanityCheck = useCallback(
     async (dryRun: boolean) => {
       if (!cutoffDate) {
-        updateTaskLog("sanityCheck", {
+        updateTaskLog("pgSanityCheck", {
           message: "Please select a cutoff date.",
         });
         return;
       }
-      clearTaskLog("sanityCheck");
-      updateTaskLog("sanityCheck", "Duplicate Check in Progress");
-      setIsLoading(true);
+      clearTaskLog("pgSanityCheck");
+      updateTaskLog("pgSanityCheck", "PostgreSQL Duplicate Check in Progress");
+      setIsLoadingPg(true);
 
-      // Format the date to YYYY-MM-DD and append T00:00:00.0000
       const cutoffTms = `${cutoffDate.format("YYYY-MM-DD")}T00:00:00.0000`;
-      console.log("Frontend sending cutoffTms:", cutoffTms);
+      console.log("Frontend sending cutoffTms for PG:", cutoffTms);
 
       try {
         const res = await axios.post(
@@ -46,24 +48,67 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
             clientCode,
           }
         );
-        updateTaskLog("sanityCheck", res.data);
+        updateTaskLog("pgSanityCheck", res.data);
       } catch (error: unknown) {
         const axiosError = error as any;
         const errorMessage =
           axiosError.response?.data?.error || "An unknown error occurred.";
-        updateTaskLog("sanityCheck", {
-          message: `Sanity check failed: ${errorMessage}`,
+        updateTaskLog("pgSanityCheck", {
+          message: `PostgreSQL sanity check failed: ${errorMessage}`,
         });
       } finally {
-        setIsLoading(false);
+        setIsLoadingPg(false);
       }
     },
     [normalize, cutoffDate, clientCode, updateTaskLog, clearTaskLog]
   );
 
+  const handleMongoSanityCheck = useCallback(
+    async (dryRun: boolean) => {
+      if (!cutoffDate) {
+        updateTaskLog("mongoSanityCheck", {
+          message: "Please select a cutoff date.",
+        });
+        return;
+      }
+      clearTaskLog("mongoSanityCheck");
+      updateTaskLog("mongoSanityCheck", "MongoDB Duplicate Check in Progress");
+      setIsLoadingMongo(true);
+      setDuplicateMongoCheckResult(null); // Clear previous result
+
+      const cutoffTms = `${cutoffDate.format("YYYY-MM-DD")}T00:00:00.0000`;
+      console.log("Frontend sending cutoffTms for Mongo:", cutoffTms);
+
+      try {
+        const mongoRes = await axios.post(
+          "http://localhost:3000/sanity-check-duplicate-mongo",
+          {
+            dryRun,
+            cutoffTms,
+            clientCode,
+          }
+        );
+        setDuplicateMongoCheckResult(mongoRes.data);
+        updateTaskLog("mongoSanityCheck", mongoRes.data);
+      } catch (error: unknown) {
+        const axiosError = error as any;
+        const errorMessage =
+          axiosError.response?.data?.error || "An unknown error occurred.";
+        updateTaskLog("mongoSanityCheck", {
+          message: `MongoDB sanity check failed: ${errorMessage}`,
+        });
+        setDuplicateMongoCheckResult({ message: `Mongo check failed: ${errorMessage}` });
+      } finally {
+        setIsLoadingMongo(false);
+      }
+    },
+    [cutoffDate, clientCode, updateTaskLog, clearTaskLog]
+  );
+
   return (
     <SanityCheckUI
-      handleSanityCheck={handleSanityCheck}
+      handlePgSanityCheck={handlePgSanityCheck}
+      handleMongoSanityCheck={handleMongoSanityCheck}
       isDeleteEnabled={isDeleteEnabled}
       setIsDeleteEnabled={setIsDeleteEnabled}
       normalize={normalize}
@@ -72,7 +117,11 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       setCutoffDate={setCutoffDate}
       clientCode={clientCode}
       setClientCode={setClientCode}
-      isLoading={isLoading}
+      isLoadingPg={isLoadingPg}
+      isLoadingMongo={isLoadingMongo}
+      duplicateMongoCheckResult={duplicateMongoCheckResult}
+      isMongoDeleteEnabled={isMongoDeleteEnabled}
+      setIsMongoDeleteEnabled={setIsMongoDeleteEnabled}
     />
   );
 };

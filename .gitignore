@@ -7,6 +7,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 .env
+.gemini
 
 localFiles
 node_modules
@@ -25,6 +26,7 @@ backend/.env.production
 backend/uploads
 keys
 backend/keys
+temp.txt
 
 
 # Editor directories and files

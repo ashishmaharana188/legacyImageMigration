@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { spawn } from "child_process";
 import { PdfProcessing } from "../services/pdfProcessor";
 import { Splitting } from "../services/splitProcessor";
 import { Database } from "../services/database";
@@ -27,13 +28,13 @@ class FileController {
           .status(400)
           .json({ statusCode: 400, error: "No file uploaded" });
       }
-      console.log(`Processing file: ${req.file.originalname}`);
+      console.log(`Processing file: ${req.file!.originalname}`);
       const processor = new PdfProcessing();
       const result = await processor.processExcelFile(req.file.path);
       res.status(200).json({
         statusCode: 200,
         message: "File processed successfully",
-        originalFile: req.file.originalname,
+        originalFile: req.file!.originalname,
         processedFile: result.outputFileName,
         summary: result.summary,
         downloadUrl: `/download/${result.outputFileName}`,
@@ -143,7 +144,7 @@ class FileController {
   }
 
   async processSqlMongo(req: Request, res: Response) {
-    const { action } = req.body;
+    const { action, updateAll } = req.body;
     const database = new Database();
 
     if (action === "executeSql") {
@@ -166,7 +167,7 @@ class FileController {
         });
       }
     } else if (action === "updateFolioAndTransaction") {
-      const { result, summary } = await database.updateFolioAndTransaction();
+      const { result, summary } = await database.updateFolioAndTransaction(updateAll);
       if (result === "success") {
         return res.json({
           message: "Folio and Transaction updated successfully",
@@ -215,8 +216,9 @@ class FileController {
 
   async updateFolioAndTransaction(req: Request, res: Response) {
     try {
+      const { updateAll } = req.body;
       const processor = new Database();
-      const result = await processor.updateFolioAndTransaction();
+      const result = await processor.updateFolioAndTransaction(updateAll);
       res.status(200).json({
         statusCode: 200,
         message:
@@ -236,6 +238,23 @@ class FileController {
     }
   }
 
+
+  async checkMongoDuplicates(req: Request, res: Response) {
+    try {
+      const { dryRun } = req.body;
+      const mongoDatabase = new MongoDatabase();
+      const result = await mongoDatabase.sanityCheckMongoDuplicates({ dryRun });
+      res.status(200).json({ statusCode: 200, ...result });
+    } catch (error) {
+      console.error("Mongo sanity check error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to run Mongo sanity check",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   async sanityCheckDuplicates(req: Request, res: Response) {
     try {
       const { cutoffTms, dryRun, normalize, clientCode } = req.body;
@@ -246,13 +265,27 @@ class FileController {
         cutoffTms,
         clientCode,
       });
+
+      if (result.result === "failed") {
+        const errorMessage =
+          result.logs.length > 0
+            ? result.logs[0].message
+            : "Sanity check failed with an unspecified error.";
+        console.error("Sanity check failed:", errorMessage);
+        return res.status(500).json({
+          statusCode: 500,
+          error: "Sanity check failed",
+          details: errorMessage,
+        });
+      }
+
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      console.error("Sanity check error:", error);
+      console.error("Sanity check error (exception caught):", error);
       res.status(500).json({
         statusCode: 500,
-        error: "Failed to run sanity check",
-        details: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to run sanity check due to an unexpected error",
+        details: error instanceof Error ? error.message : "Unknown unexpected error",
       });
     }
   }
@@ -272,6 +305,25 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to transfer data to MongoDB",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async updateMongoTransactions(req: Request, res: Response) {
+    try {
+      const mongoDatabase = new MongoDatabase();
+      const result = await mongoDatabase.updateMongoTransactions();
+      res.status(200).json({
+        statusCode: 200,
+        message: "Mongo transactions updated successfully.",
+        ...result,
+      });
+    } catch (error) {
+      console.error("Mongo transaction update error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to update Mongo transactions",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }
@@ -723,6 +775,58 @@ class FileController {
       res.status(500).json({
         statusCode: 500,
         error: "Failed to download file",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
+  async runFallback(req: Request, res: Response) {
+    try {
+      if (!req.file) {
+        return res
+          .status(400)
+          .json({ statusCode: 400, error: "No file uploaded" });
+      }
+      console.log(`Running fallback for file: ${req.file!.originalname}`);
+
+      const pythonScriptPath = path.resolve(
+        __dirname,
+        "..",
+        "..",
+        "services",
+        "fallback_processor.py"
+      );
+      const excelFilePath = req.file!.path;
+
+      const childProcess = spawn("python", [pythonScriptPath, excelFilePath]);
+
+      childProcess.stdout.on("data", (data) => {
+        console.log(`Fallback script stdout: ${data}`);
+      });
+
+      childProcess.stderr.on("data", (data) => {
+        console.error(`Fallback script stderr: ${data}`);
+      });
+
+      childProcess.on("close", (code) => {
+        if (code === 0) {
+          res.status(200).json({
+            statusCode: 200,
+            message: "Fallback process completed successfully",
+            originalFile: req.file!.originalname,
+          });
+        } else {
+          res.status(500).json({
+            statusCode: 500,
+            error: `Fallback script exited with code ${code}`,
+          });
+        }
+      });
+    } catch (error) {
+      console.error("Fallback processing error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to process fallback",
         details: error instanceof Error ? error.message : "Unknown error",
       });
     }

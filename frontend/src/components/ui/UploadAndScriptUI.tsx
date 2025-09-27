@@ -16,6 +16,7 @@ interface UploadAndScriptUIProps {
   handleUploadToS3: () => Promise<void>;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleUpload: () => Promise<void>;
+  handleFallback: () => Promise<void>;
   handleSplitFiles: () => Promise<void>;
 }
 
@@ -29,6 +30,7 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
   loading,
   handleFileChange,
   handleUpload,
+  handleFallback,
   handleSplitFiles,
 }) => {
   return (
@@ -42,7 +44,15 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
           disabled={loading || !selectedFile}
           className="btn"
         >
-          {loading ? "Uploading..." : "Upload PDF"}
+          {loading ? "Uploading..." : "Upload and Process"}
+        </button>
+
+        <button
+          onClick={handleFallback}
+          disabled={loading || !selectedFile}
+          className="btn ml-2"
+        >
+          {loading ? "Running..." : "Run Fallback Check"}
         </button>
 
         <button

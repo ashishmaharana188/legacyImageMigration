@@ -13,6 +13,61 @@ interface SqlLog {
   sql?: string;
 }
 
+interface SanityCheckRow {
+  id: number;
+  document_process: string;
+  document_activity: string;
+  document_type: string;
+  document_format: string;
+  document_path: string;
+  folio_id: number | null;
+  transaction_reference_id: string | null;
+  document_status: string;
+  mime_type: string;
+  user_attr0: string | null;
+  user_attr1: string | null;
+  user_attr2: string | null;
+  user_attr3: string | null;
+  user_attr4: string | null;
+  user_attr5: string | null;
+  user_attr6: string | null;
+  user_attr7: string | null;
+  user_attr8: string | null;
+  user_attr9: string | null;
+  approval_status: string | null;
+  approved_by: string | null;
+  approved_on: Date | null;
+  comments: string | null;
+  audit_code: string | null;
+  del_flag: boolean;
+  last_update_tms: Date;
+  last_updated_by: string;
+  creation_date: Date;
+  created_by: string;
+  page_count: number;
+  client_id: number;
+  rn: number | null; // For ranked duplicates
+  reason: string;
+}
+
+interface DryRunResultRow {
+  id: number;
+  client_id: number;
+  user_attr1_normalized: string;
+  user_attr1: string;
+  user_attr2: string;
+  creation_date: string;
+  folio_id: string | null;
+  transaction_reference_id: string | null;
+  isPerfect: boolean;
+  wouldBeDeleted: boolean;
+  reason: string; // To explain why it would be deleted or is imperfect
+}
+
+interface ImperfectDuplicateRow {
+  user_attr2: string;
+}
+
 export class Database {
   private pool: Pool;
 
@@ -711,7 +766,7 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(): Promise<{
+  async updateFolioAndTransaction(updateAll: boolean): Promise<{
     result: string;
     logs: SqlLog[];
     summary: {
@@ -721,10 +776,37 @@ page_count, client_id
       badRowsFilePath: string | null;
     };
   }> {
-    this.logger.info("Starting updateFolioAndTransaction");
+    this.logger.info(
+      `Starting updateFolioAndTransaction with updateAll: ${updateAll}`
+    );
     const { transactions } = await this.generateSql();
 
-    const processedFolioNumbers = await this.getProcessedFolioNumbers();
+    let processedFolioNumbers: string[] = [];
+    if (!updateAll) {
+      processedFolioNumbers = await this.getProcessedFolioNumbers();
+      if (processedFolioNumbers.length === 0) {
+        this.logger.warn(
+          "updateFolioAndTransaction: No processed folio numbers found from processed CSV. Skipping updates."
+        );
+        return {
+          result: "failed",
+          logs: [
+            {
+              row: 0,
+              status: "error",
+              message: "No processed folio numbers found to update.",
+            },
+          ],
+          summary: {
+            updatedFolioRows: 0,
+            updatedTransactionRows: 0,
+            badRows: [],
+            badRowsFilePath: null,
+          },
+        };
+      }
+    }
+
     // Get unique id_fund values
     const uniqueClientCodes = [
       ...new Set(transactions.map((tx) => tx.id_fund)),
@@ -743,11 +825,6 @@ page_count, client_id
     const updatedTransactionIdentifiers = new Set<string>();
 
     try {
-      if (processedFolioNumbers.length === 0) {
-        this.logger.warn(
-          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
-        );
-      }
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
       client = await this.getPool().connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
@@ -784,16 +861,19 @@ SELECT DISTINCT
   FROM trxn.aif_transaction_summary ts
   JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
   JOIN fund.client_master cm ON cm.id = fo.client_id
-  WHERE fo.folio_number = ANY($1::text[])
+  WHERE ${updateAll ? "TRUE" : "fo.folio_number = ANY($1::text[])"}
     AND ts.created_by = 'aifappendersvc'
     AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
       this.logger.info(
-        `updateFolioAndTransaction: inserting temp for ${processedFolioNumbers.length} folios`
+        `updateFolioAndTransaction: inserting temp for ${
+          updateAll ? "all" : processedFolioNumbers.length
+        } folios`
       );
-      const insertResult = await client.query(insertTempQuery, [
-        processedFolioNumbers,
-      ]);
+      const insertResult = await client.query(
+        insertTempQuery,
+        updateAll ? [] : [processedFolioNumbers]
+      );
       logs.push({
         row: 0,
         status: "executed",
@@ -817,13 +897,14 @@ SELECT DISTINCT
       LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
     WHERE (d.user_attr2 = f.folio_number
         OR d.transaction_reference_id = t.ihno)
-      AND d.user_attr2 = ANY($1::text[])
+      ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
     RETURNING d.user_attr1, d.user_attr2;
 `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
-      const updateFolioResult = await client.query(updateFolioQuery, [
-        processedFolioNumbers,
-      ]);
+      const updateFolioResult = await client.query(
+        updateFolioQuery,
+        updateAll ? [] : [processedFolioNumbers]
+      );
       updateFolioResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
@@ -848,8 +929,12 @@ WHERE ts.client_id = d.client_id
   AND ts.folio_id = d.folio_id
   AND ts.user_attr5 = d.user_attr1
   AND d.created_by = 'system'
-  AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))
-  AND d.user_attr2 = ANY($2::text[])
+  ${
+    updateAll
+      ? ""
+      : "AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))"
+  }
+  ${updateAll ? "" : "AND d.user_attr2 = ANY($2::text[])"}
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
   AND ts.created_by = 'aifappendersvc'
 RETURNING d.user_attr1, d.user_attr2;
@@ -859,7 +944,7 @@ RETURNING d.user_attr1, d.user_attr2;
       );
       const updateTransactionResult = await client.query(
         updateTransactionQuery,
-        [uniqueClientCodes, processedFolioNumbers]
+        updateAll ? [] : [uniqueClientCodes, processedFolioNumbers]
       );
       updateTransactionResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(
@@ -1030,6 +1115,9 @@ RETURNING d.user_attr1, d.user_attr2;
     deletedCount?: number;
     rows?: any[]; // In dry-run, this will be an array of rows to be deleted
     logs: SqlLog[];
+    imperfectDuplicates?: string[];
+    imperfectDuplicatesFilePath?: string | null;
+    totalDuplicatesFound?: number; // Added for dry-run output
   }> {
     const logs: SqlLog[] = [];
     const {
@@ -1083,96 +1171,306 @@ RETURNING d.user_attr1, d.user_attr2;
 
       const deleteRule1Sql = `
         WITH pre_cutoff_keys AS (
-          SELECT DISTINCT client_id, ${keyExpr} AS k
+          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
           FROM investor.aif_document_details
           WHERE user_attr1 IS NOT NULL
             AND client_id IS NOT NULL
             AND creation_date <= $1::timestamptz
+            AND created_by = 'system'
+            ${clientFilter}
+        ),
+        perfect_rows AS (
+          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
+          FROM investor.aif_document_details
+          WHERE user_attr1 IS NOT NULL
+            AND client_id IS NOT NULL
+            AND folio_id IS NOT NULL
+            AND transaction_reference_id IS NOT NULL
+            AND created_by = 'system'
             ${clientFilter}
         )
         DELETE FROM investor.aif_document_details d
-        WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM pre_cutoff_keys)
+        WHERE (d.client_id, ${keyExpr}, d.user_attr2) IN (SELECT pck.client_id, pck.k, pck.user_attr2 FROM pre_cutoff_keys pck JOIN perfect_rows pr ON pck.client_id = pr.client_id AND pck.k = pr.k AND pck.user_attr2 = pr.user_attr2)
           AND d.creation_date > $1::timestamptz
-        RETURNING d.id
+          AND created_by = 'system'
+          AND (d.folio_id IS NULL OR d.transaction_reference_id IS NULL) -- Only delete non-perfect duplicates
+        RETURNING d.id, d.user_attr2
       `;
 
       const deleteRule2Sql = `
         WITH post_cutoff_only_keys AS (
-            SELECT client_id, ${keyExpr} AS k
+            SELECT client_id, ${keyExpr} AS k, user_attr2
             FROM investor.aif_document_details
             WHERE user_attr1 IS NOT NULL
               AND client_id IS NOT NULL
+              AND created_by = 'system'
               ${clientFilter}
-            GROUP BY client_id, ${keyExpr}
+            GROUP BY client_id, ${keyExpr}, user_attr2
             HAVING MIN(creation_date) > $1::timestamptz
+        ),
+        perfect_rows AS (
+          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
+          FROM investor.aif_document_details
+          WHERE user_attr1 IS NOT NULL
+            AND client_id IS NOT NULL
+            AND folio_id IS NOT NULL
+            AND transaction_reference_id IS NOT NULL
+            AND created_by = 'system'
+            ${clientFilter}
         ),
         dups_to_delete AS (
             SELECT
-                d.id,
+                d.id, d.user_attr2,
                 ROW_NUMBER() OVER (
-                    PARTITION BY d.client_id, ${keyExpr}
+                    PARTITION BY d.client_id, ${keyExpr}, d.user_attr2
                     ORDER BY d.creation_date ASC, d.id ASC
                 ) as rn
             FROM investor.aif_document_details d
-            JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k
+            JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k AND d.user_attr2 = p.user_attr2
+            WHERE d.created_by = 'system'
         )
         DELETE FROM investor.aif_document_details t
         USING dups_to_delete d
         WHERE t.id = d.id
           AND d.rn > 1
-        RETURNING t.id
-      `;
+          AND (t.folio_id IS NULL OR t.transaction_reference_id IS NULL) -- Only delete non-perfect duplicates
+          AND (t.client_id, ${keyExpr}, t.user_attr2) IN (SELECT pr.client_id, pr.k, pr.user_attr2 FROM perfect_rows pr)
+        `;
 
-      const previewSql = `
-        WITH
-        post_cutoff_only_keys AS (
-          SELECT client_id, ${keyExpr} AS k
-          FROM investor.aif_document_details
-          WHERE user_attr1 IS NOT NULL
-            AND client_id IS NOT NULL
-            ${clientFilter}
-          GROUP BY client_id, ${keyExpr}
-          HAVING MIN(creation_date) > $2::timestamptz
-        ),
-        post_cutoff_dups_ranked AS (
-          SELECT d.*,
-                 ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr} ORDER BY d.creation_date ASC, d.id ASC) AS rn
-          FROM investor.aif_document_details d
-          WHERE (d.client_id, ${keyExpr}) IN (SELECT client_id, k FROM post_cutoff_only_keys)
-        )
-        SELECT d.*, NULL::integer AS rn, 'Rule 1' as reason
-        FROM investor.aif_document_details d
-        WHERE (d.client_id, ${keyExpr}) IN (
-            SELECT DISTINCT client_id, ${keyExpr}
+      const allPotentialDuplicatesSql = `
+        WITH duplicate_groups AS (
+            SELECT
+                client_id,
+                ${keyExpr} AS k
             FROM investor.aif_document_details
             WHERE user_attr1 IS NOT NULL
               AND client_id IS NOT NULL
-              AND creation_date <= $1::timestamptz
+              AND created_by = 'system'
               ${clientFilter}
+            GROUP BY client_id, ${keyExpr}
+            HAVING COUNT(*) > 1
         )
-        AND d.creation_date > $1::timestamptz
-
-        UNION ALL
-
-        SELECT r2.*, 'Rule 2' as reason
-        FROM post_cutoff_dups_ranked r2
-        WHERE r2.rn > 1;
+        SELECT
+            d.id,
+            d.client_id,
+            ${keyExpr} AS user_attr1_normalized,
+            d.user_attr1,
+            d.user_attr2,
+            d.creation_date,
+            d.folio_id,
+            d.transaction_reference_id
+        FROM investor.aif_document_details d
+        JOIN duplicate_groups dg ON d.client_id = dg.client_id AND ${keyExpr} = dg.k
+        WHERE d.created_by = 'system'
+          ${clientFilter}
+        ORDER BY d.client_id, ${keyExpr}, d.user_attr2, d.creation_date;
       `;
 
+      const imperfectDuplicatesSql = `
+        WITH
+        pre_cutoff_keys AS (
+          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
+          FROM investor.aif_document_details
+          WHERE user_attr1 IS NOT NULL
+            AND client_id IS NOT NULL
+            AND created_by = 'system'
+            AND creation_date <= $1::timestamptz
+            ${clientFilter}
+        ),
+        post_cutoff_only_keys AS (
+            SELECT client_id, ${keyExpr} AS k, user_attr2
+            FROM investor.aif_document_details
+            WHERE user_attr1 IS NOT NULL
+              AND client_id IS NOT NULL
+              AND created_by = 'system'
+              ${clientFilter}
+            GROUP BY client_id, ${keyExpr}, user_attr2
+            HAVING MIN(creation_date) > $2::timestamptz
+        ),
+        perfect_rows AS (
+          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
+          FROM investor.aif_document_details
+          WHERE user_attr1 IS NOT NULL
+            AND client_id IS NOT NULL
+            AND folio_id IS NOT NULL
+            AND transaction_reference_id IS NOT NULL
+            AND created_by = 'system'
+            ${clientFilter}
+        ),
+        post_cutoff_dups_ranked AS (
+            SELECT d.*,
+                   ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr}, d.user_attr2 ORDER BY d.creation_date ASC, d.id ASC) AS rn
+            FROM investor.aif_document_details d
+            JOIN post_cutoff_only_keys pco ON d.client_id = pco.client_id AND ${keyExpr} = pco.k AND d.user_attr2 = pco.user_attr2
+            WHERE d.created_by = 'system'
+              ${clientFilter}
+        )
+        SELECT DISTINCT d.user_attr2, 'Imperfect Duplicate' as reason
+        FROM investor.aif_document_details d
+        WHERE d.created_by = 'system'
+          AND d.user_attr1 IS NOT NULL
+          AND d.client_id IS NOT NULL
+          ${clientFilter}
+          AND (d.folio_id IS NULL OR d.transaction_reference_id IS NULL) -- Is an imperfect row
+          AND NOT EXISTS (
+            SELECT 1 FROM perfect_rows pr
+            WHERE pr.client_id = d.client_id
+              AND pr.k = ${keyExpr}
+              AND pr.user_attr2 = d.user_attr2
+          )
+          AND (
+            -- Matches Rule 1 criteria (would be deleted if a perfect row existed)
+            EXISTS (
+                SELECT 1 FROM (
+                    SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
+                    FROM investor.aif_document_details
+                    WHERE user_attr1 IS NOT NULL
+                      AND client_id IS NOT NULL
+                      AND creation_date <= $1::timestamptz
+                      AND created_by = 'system'
+                      ${clientFilter}
+                ) AS pre_cutoff_pck
+                WHERE pre_cutoff_pck.client_id = d.client_id
+                  AND pre_cutoff_pck.k = ${keyExpr}
+                  AND pre_cutoff_pck.user_attr2 = d.user_attr2
+            )
+            AND d.creation_date > $1::timestamptz
+            OR
+            -- Matches Rule 2 criteria (would be deleted if a perfect row existed)
+            EXISTS (
+                SELECT 1 FROM post_cutoff_dups_ranked pcdr
+                WHERE pcdr.id = d.id AND pcdr.rn > 1
+            )
+          );
+      `;
       if (dryRun) {
-        const previewRes = await client.query(previewSql, [
-          cutoffTms,
-          cutoffTms,
-        ]);
+        const allDupsRes = await client.query<DryRunResultRow>(allPotentialDuplicatesSql, []);
         await client.query("ROLLBACK");
+
+        const processedRows: DryRunResultRow[] = [];
+        const imperfectDuplicatesSet = new Set<string>();
+
+        // Re-evaluate perfect_rows, pre_cutoff_keys, post_cutoff_only_keys, post_cutoff_dups_ranked in-memory
+        // This is a simplified in-memory representation for dry-run logic.
+        // For a truly accurate dry-run, the SQL queries themselves would need to be run with specific flags.
+        // This approach aims to simulate the deletion logic to provide a 'wouldBeDeleted' flag.
+
+        const perfectRowsInMemory = new Set<string>(); // Stores 'client_id|keyExpr|user_attr2' for perfect rows
+        const preCutoffKeysInMemory = new Set<string>(); // Stores 'client_id|keyExpr|user_attr2' for pre-cutoff keys
+        const postCutoffOnlyKeysInMemory = new Set<string>(); // Stores 'client_id|keyExpr|user_attr2' for post-cutoff only keys
+
+        // Populate in-memory sets
+        for (const row of allDupsRes.rows) {
+          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
+          if (row.folio_id !== null && row.transaction_reference_id !== null) {
+            perfectRowsInMemory.add(key);
+          }
+          if (new Date(row.creation_date) <= new Date(cutoffTms)) {
+            preCutoffKeysInMemory.add(key);
+          }
+        }
+
+        // Determine post_cutoff_only_keys
+        const groupMinCreationDate = new Map<string, Date>();
+        for (const row of allDupsRes.rows) {
+          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
+          const currentMin = groupMinCreationDate.get(key);
+          const rowDate = new Date(row.creation_date);
+          if (!currentMin || rowDate < currentMin) {
+            groupMinCreationDate.set(key, rowDate);
+          }
+        }
+        for (const [key, minDate] of groupMinCreationDate.entries()) {
+          if (minDate > new Date(cutoffTms)) {
+            postCutoffOnlyKeysInMemory.add(key);
+          }
+        }
+
+        // Simulate post_cutoff_dups_ranked
+        const postCutoffDupsRanked: { [key: string]: DryRunResultRow[] } = {};
+        for (const row of allDupsRes.rows) {
+          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
+          if (postCutoffOnlyKeysInMemory.has(key)) {
+            if (!postCutoffDupsRanked[key]) {
+              postCutoffDupsRanked[key] = [];
+            }
+            postCutoffDupsRanked[key].push(row);
+          }
+        }
+        for (const key in postCutoffDupsRanked) {
+          postCutoffDupsRanked[key].sort((a, b) => {
+            const dateA = new Date(a.creation_date).getTime();
+            const dateB = new Date(b.creation_date).getTime();
+            if (dateA !== dateB) return dateA - dateB;
+            return a.id - b.id;
+          });
+        }
+
+
+        for (const row of allDupsRes.rows) {
+          const isPerfect = row.folio_id !== null && row.transaction_reference_id !== null;
+          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
+          let wouldBeDeleted = false;
+          let reason = isPerfect ? "Perfect Row" : "Imperfect Row";
+
+          // Check Rule 1 deletion criteria
+          const matchesRule1Criteria =
+            preCutoffKeysInMemory.has(key) &&
+            perfectRowsInMemory.has(key) &&
+            new Date(row.creation_date) > new Date(cutoffTms) &&
+            !isPerfect;
+
+          if (matchesRule1Criteria) {
+            wouldBeDeleted = true;
+            reason = "Would be deleted by Rule 1 (pre-existing perfect row)";
+          }
+
+          // Check Rule 2 deletion criteria
+          if (!wouldBeDeleted) { // Only check Rule 2 if not already marked for deletion by Rule 1
+            if (postCutoffOnlyKeysInMemory.has(key) && perfectRowsInMemory.has(key) && !isPerfect) {
+              const rankedGroup = postCutoffDupsRanked[key];
+              if (rankedGroup) {
+                const rowRank = rankedGroup.findIndex(r => r.id === row.id) + 1;
+                if (rowRank > 1) {
+                  wouldBeDeleted = true;
+                  reason = "Would be deleted by Rule 2 (post-cutoff duplicate with perfect row)";
+                }
+              }
+            }
+          }
+
+          processedRows.push({
+            ...row,
+            isPerfect,
+            wouldBeDeleted,
+            reason,
+          });
+
+          if (!isPerfect && !perfectRowsInMemory.has(key)) {
+            imperfectDuplicatesSet.add(row.user_attr2);
+          }
+        }
+
+        const imperfectDuplicates = Array.from(imperfectDuplicatesSet);
+
+        const uniqueDuplicateGroups = new Set<string>();
+        for (const row of allDupsRes.rows) {
+          uniqueDuplicateGroups.add(`${row.client_id}|${row.user_attr1_normalized}`);
+        }
+        const numberOfUniqueGroups = uniqueDuplicateGroups.size;
+        const totalDuplicatesFound = processedRows.length - numberOfUniqueGroups;
+
         this.logger.info(
-          `sanityCheckDuplicates: dry-run complete, ${previewRes.rows.length} rows would be deleted`
+          `sanityCheckDuplicates: dry-run complete. Found ${totalDuplicatesFound} extra duplicates across ${numberOfUniqueGroups} groups.`
         );
+
         return {
           result: "success",
           dryRun: true,
           cutoffTms,
-          rows: previewRes.rows,
+          rows: processedRows,
+          imperfectDuplicates,
+          totalDuplicatesFound,
           logs,
         };
       }
@@ -1198,11 +1496,28 @@ RETURNING d.user_attr1, d.user_attr2;
         `sanityCheckDuplicates: committed. Total deleted: ${totalDeleted} rows.`
       );
 
+      // Identify imperfect duplicates for logging/output
+      const imperfectRes = await client.query<ImperfectDuplicateRow>(
+        imperfectDuplicatesSql,
+        [cutoffTms, cutoffTms]
+      );
+      const imperfectDuplicates = imperfectRes.rows
+        .map((row) => row.user_attr2)
+        .filter((value) => value !== null) as string[];
+      const imperfectDuplicatesFilePath = await this.writeBadRowsToFile(
+        imperfectDuplicates.map((ua2) => ({
+          user_attr2: ua2,
+          reason: "Imperfect Duplicate",
+        })),
+        "imperfect_duplicates.csv"
+      );
+
       return {
         result: "success",
         dryRun: false,
         cutoffTms,
         deletedCount: totalDeleted,
+        imperfectDuplicatesFilePath,
         logs,
       };
     } catch (err) {
@@ -1310,6 +1625,31 @@ RETURNING d.user_attr1, d.user_attr2;
       return res.rows;
     } catch (error) {
       this.logger.error(`Error fetching aif_document_details: ${error}`);
+      throw error;
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  public async getUpdateDetails(): Promise<any[]> {
+    let client: PoolClient | null = null;
+    try {
+      client = await this.getPool().connect();
+      const query = `
+        SELECT
+          cm.client_code,
+          add.user_attr1,
+          add.transaction_reference_id
+        FROM investor.aif_document_details add
+        JOIN fund.client_master cm ON add.client_id = cm.id;
+      `;
+      const res = await client.query(query);
+      this.logger.info(
+        `Fetched ${res.rows.length} rows from aif_document_details for mongo update.`
+      );
+      return res.rows;
+    } catch (error) {
+      this.logger.error(`Error fetching details for mongo update: ${error}`);
       throw error;
     } finally {
       if (client) client.release();

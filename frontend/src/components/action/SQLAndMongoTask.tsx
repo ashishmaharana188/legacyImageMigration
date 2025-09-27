@@ -63,14 +63,17 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
 
-  const handleTransferToMongo = useCallback(async () => {
+  const handleTransferToMongo = useCallback(async (updateAll: boolean) => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Transferring data to MongoDB");
+    const taskMessage = updateAll ? "Updating Mongo transactions" : "Transferring data to MongoDB";
+    updateTaskLog("sqlAndMongo", taskMessage);
+    
     try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/transfer-to-mongo"
-      );
+      const url = updateAll 
+        ? "http://localhost:3000/update-mongo-transactions" 
+        : "http://localhost:3000/transfer-to-mongo";
+      const res = await axios.post<FileResponse>(url);
       updateTaskLog("sqlAndMongo", res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -133,14 +136,14 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     }
   }, [updateTaskLog, clearTaskLog]);
 
-  const handleupdateFolioAndTransaction = useCallback(async () => {
+  const handleupdateFolioAndTransaction = useCallback(async (updateAll: boolean) => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
     updateTaskLog("sqlAndMongo", "Updating folio and transaction");
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/process-sql-mongo",
-        { action: "updateFolioAndTransaction" }
+        { action: "updateFolioAndTransaction", updateAll }
       );
       updateTaskLog("sqlAndMongo", res.data);
     } catch (error: unknown) {
