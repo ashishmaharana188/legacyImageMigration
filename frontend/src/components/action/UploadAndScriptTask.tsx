@@ -324,6 +324,41 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     }
   }, [updateTaskLog, clearTaskLog, setUploadStatuses]);
 
+  const handleFallback = useCallback(async () => {
+    if (!selectedFile) {
+      setUploadMessage("Please select a file first.");
+      return;
+    }
+    clearTaskLog("uploadAndScript");
+    setLoading(true);
+    setUploadMessage("Running fallback...");
+    updateTaskLog("uploadAndScript", "Running fallback...");
+    const formData = new FormData();
+    formData.append("excel", selectedFile);
+
+    try {
+      const res = await axios.post<FileResponse>(
+        "http://localhost:3000/run-fallback",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
+      setUploadMessage(res.data.message || "Fallback successful");
+      updateTaskLog("uploadAndScript", res.data);
+    } catch (error: any) {
+      const errorMessage = `Fallback failed: ${
+        error.response?.data?.message || error.message
+      }`;
+      setUploadMessage(errorMessage);
+      updateTaskLog("uploadAndScript", { message: errorMessage });
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedFile, updateTaskLog, clearTaskLog]);
+
   return (
     <UploadAndScriptUI
       selectedFile={selectedFile}
@@ -333,6 +368,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       loading={loading}
       handleFileChange={handleFileChange}
       handleUpload={handleUpload}
+      handleFallback={handleFallback}
       handleSplitFiles={handleSplitFiles}
       handleUploadToS3={handleUploadToS3}
       handleUploadSplitFilesToS3={handleUploadSplitFilesToS3}

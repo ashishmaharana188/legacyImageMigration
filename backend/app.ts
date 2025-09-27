@@ -130,6 +130,12 @@ app.post(
   fileController.processExcelFile
 );
 
+app.post(
+  "/run-fallback",
+  upload.single("excel"),
+  fileController.runFallback
+);
+
 app.get("/download/:filename", fileController.downloadFile);
 
 app.get("/download-file/:filePath", fileController.downloadReferencedFile);
