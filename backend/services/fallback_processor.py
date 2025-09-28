@@ -16,7 +16,7 @@ def get_page_count(file_path):
                 return len(reader.pages)
         elif ext in ['.tif', '.tiff']:
             with Image.open(file_path) as img:
-                return img.n_frames
+                return getattr(img, 'n_frames', 1)
         else:
             return "Unsupported File"
     except Exception as e:
