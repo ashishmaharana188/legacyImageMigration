@@ -797,8 +797,9 @@ class FileController {
         "fallback_processor.py"
       );
       const excelFilePath = req.file!.path;
+      const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
 
-      const childProcess = spawn("python", [pythonScriptPath, excelFilePath]);
+      const childProcess = spawn(pythonExecutable, [pythonScriptPath, excelFilePath]);
 
       childProcess.stdout.on("data", (data) => {
         console.log(`Fallback script stdout: ${data}`);
