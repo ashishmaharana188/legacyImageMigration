@@ -182,36 +182,46 @@ const App: React.FC = () => {
               }
             });
           } else if (message.type === "progress" || message.type === "complete") {
-            // Existing S3 upload progress handling
-            setUploadStatuses((prevStatuses) => {
-              const existingFileIndex = prevStatuses.findIndex(
-                (s) => s.fileName === message.fileName
-              );
-              if (existingFileIndex > -1) {
+            setTimeout(() => {
+              setUploadStatuses((prevStatuses) => {
+                const { fileName, progress, status, isDirectory, totalFiles } = message;
                 const newStatuses = [...prevStatuses];
-                newStatuses[existingFileIndex] = {
-                  ...newStatuses[existingFileIndex],
-                  progress: message.progress,
-                  status: message.status,
-                  isDirectory: message.isDirectory,
-                  totalFiles:
-                    message.totalFiles ??
-                    newStatuses[existingFileIndex].totalFiles,
-                };
+
+                // Find or create the status entry for the current file or directory
+                let itemIndex = newStatuses.findIndex((s) => s.fileName === fileName);
+                if (itemIndex === -1) {
+                  newStatuses.push({ fileName, progress, status, isDirectory, totalFiles });
+                  itemIndex = newStatuses.length - 1;
+                } else {
+                  newStatuses[itemIndex] = {
+                    ...newStatuses[itemIndex],
+                    progress,
+                    status,
+                    isDirectory,
+                    totalFiles: totalFiles ?? newStatuses[itemIndex].totalFiles,
+                  };
+                }
+
+                // If it's a file, update its parent directory's progress
+                if (!isDirectory) {
+                  const pathParts = fileName.split('/');
+                  if (pathParts.length > 1) {
+                    const parentDirName = pathParts.slice(0, -1).join('/');
+                    const parentDirIndex = newStatuses.findIndex((s) => s.fileName === parentDirName);
+
+                    if (parentDirIndex !== -1) {
+                      // Calculate the aggregate progress of the directory
+                      const children = newStatuses.filter(s => s.fileName.startsWith(parentDirName + '/') && !s.isDirectory);
+                      const totalProgress = children.reduce((acc, child) => acc + (child.progress || 0), 0);
+                      const averageProgress = children.length > 0 ? Math.round(totalProgress / children.length) : 0;
+                      newStatuses[parentDirIndex].progress = averageProgress;
+                    }
+                  }
+                }
+                
                 return newStatuses;
-              } else {
-                return [
-                  ...prevStatuses,
-                  {
-                    fileName: message.fileName,
-                    progress: message.progress,
-                    status: message.status,
-                    isDirectory: message.isDirectory,
-                    totalFiles: message.totalFiles,
-                  },
-                ];
-              }
-            });
+              });
+            }, 100); // 100ms delay
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -261,8 +271,8 @@ const App: React.FC = () => {
 
   const updateTaskLog = useCallback((task: string, log: TaskLog) => {
     setTaskLogs((prev) => {
-      // Overwrite the existing log for the task with the new log
-      return { ...prev, [task]: [log] };
+      const existingLogs = prev[task] || [];
+      return { ...prev, [task]: [...existingLogs, log] };
     });
   }, []);
 

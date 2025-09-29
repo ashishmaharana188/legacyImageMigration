@@ -285,8 +285,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     clearTaskLog("uploadAndScript");
     setLoading(true);
     setUploadMessage("Uploading to S3");
+    updateTaskLog("uploadAndScript", "Initiating S3 upload...");
     setSummaryData([]); // Clear previous summary data
-    setUploadStatuses([]); // Clear previous upload progress
+    setUploadStatuses([{"fileName": "Data/APPLICATION_FORMS", "status": "Starting", "isDirectory": true, "progress": 0}]); // Initialize with a starting status
 
     try {
       const res = await axios.post<FileResponse>(
@@ -307,7 +308,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     clearTaskLog("uploadAndScript");
     setLoading(true);
     setSplitMessage("Uploading split files to S3");
-    setUploadStatuses([]); // Clear previous upload progress
+    updateTaskLog("uploadAndScript", "Initiating split file S3 upload...");
+    setUploadStatuses([{"fileName": "Data/SPLIT_APPLICATION_FORMS", "status": "Starting", "isDirectory": true, "progress": 0}]); // Initialize with a starting status
     try {
       const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-split-to-s3",

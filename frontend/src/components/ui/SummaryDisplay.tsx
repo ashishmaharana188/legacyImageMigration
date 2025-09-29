@@ -179,26 +179,74 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   };
 
   const renderS3Uploads = () => {
-    const directoryStatuses = s3UploadStatuses.filter((s) => s.isDirectory);
-    const fileStatuses = s3UploadStatuses.filter((s) => !s.isDirectory);
+    const renderItems = (items: UploadStatus[], level = 0) => {
+      return items.map((item) => {
+        const children = item.isDirectory
+          ? s3UploadStatuses.filter(
+              (child) =>
+                child.fileName.startsWith(item.fileName + "/") &&
+                child.fileName.split("/").length ===
+                  item.fileName.split("/").length + 1
+            )
+          : [];
 
-    // Robustly find top-level directories (those that aren't a sub-directory of another)
-    const topLevelDirs = directoryStatuses.filter(
-      (dir) =>
-        !directoryStatuses.some(
-          (otherDir) =>
-            dir.fileName !== otherDir.fileName &&
-            dir.fileName.startsWith(otherDir.fileName + "/")
-        )
-    );
+        const isExpanded = expandedDirectories[item.fileName];
+        const displayName = item.fileName.split("/").pop();
 
-    // Find top-level files (those not inside any directory)
-    const topLevelFiles = fileStatuses.filter(
-      (file) =>
-        !directoryStatuses.some((dir) =>
-          file.fileName.startsWith(dir.fileName + "/")
-        )
-    );
+        return (
+          <React.Fragment key={item.fileName}>
+            <tr
+              className={`${
+                level > 0 ? "bg-white" : "bg-gray-100"
+              } border-b`}
+            >
+              <td
+                className="px-2 py-1"
+                style={{ paddingLeft: `${level * 20 + 4}px` }}
+              >
+                {item.isDirectory ? (
+                  <button
+                    onClick={() => toggleDirectory(item.fileName)}
+                    className="font-semibold text-black hover:underline focus:outline-none"
+                  >
+                    {displayName} ({item.totalFiles ?? children.length} files)
+                  </button>
+                ) : (
+                  displayName
+                )}
+              </td>
+              <td className="px-2 py-1">
+                {item.status === "Done" ? (
+                  <span className="text-black">Done</span>
+                ) : item.progress !== undefined ? (
+                  <div className="w-full bg-gray-300 rounded-full h-4">
+                    <div
+                      className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                      style={{ width: `${item.progress}%` }}
+                    >
+                      {item.progress}%
+                    </div>
+                  </div>
+                ) : (
+                  "Starting..."
+                )}
+              </td>
+            </tr>
+            {isExpanded &&
+              children.length > 0 &&
+              renderItems(children, level + 1)}
+          </React.Fragment>
+        );
+      });
+    };
+
+    const allFileNames = new Set(s3UploadStatuses.map((s) => s.fileName));
+    const topLevelItems = s3UploadStatuses.filter((item) => {
+      const parts = item.fileName.split("/");
+      if (parts.length <= 1) return true;
+      const parentName = parts.slice(0, -1).join("/");
+      return !allFileNames.has(parentName);
+    });
 
     return (
       <table className="w-full text-sm text-left">
@@ -212,105 +260,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             </th>
           </tr>
         </thead>
-        <tbody>
-          {/* Render Top-Level Directories */}
-          {topLevelDirs.map((dirStatus) => {
-            // Find direct children (files and subdirs) for this dir
-            const children = s3UploadStatuses.filter(
-              (child) =>
-                child.fileName.startsWith(dirStatus.fileName + "/") &&
-                child.fileName.split("/").length ===
-                  dirStatus.fileName.split("/").length + 1
-            );
-
-            return (
-              <React.Fragment key={dirStatus.fileName}>
-                <tr className="bg-gray-100 border-b font-semibold">
-                  <td className="px-2 py-1">
-                    <button
-                      onClick={() => toggleDirectory(dirStatus.fileName)}
-                      className="font-semibold text-black hover:underline focus:outline-none"
-                    >
-                      {dirStatus.fileName} ({dirStatus.totalFiles ?? 0} files)
-                    </button>
-                  </td>
-                  <td className="px-2 py-1">
-                    {dirStatus.status === "Done" ? (
-                      <span className="text-black">Done</span>
-                    ) : dirStatus.progress !== undefined ? (
-                      <div className="w-full bg-gray-300 rounded-full h-4">
-                        <div
-                          className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                          style={{ width: `${dirStatus.progress}%` }}
-                        >
-                          {dirStatus.progress}%
-                        </div>
-                      </div>
-                    ) : (
-                      "Starting..."
-                    )}
-                  </td>
-                </tr>
-                {/* Render Children if expanded */}
-                {expandedDirectories[dirStatus.fileName] &&
-                  children.map((childStatus) => (
-                    <tr
-                      key={childStatus.fileName}
-                      className="bg-white border-b"
-                    >
-                      <td className="px-2 py-1 pl-8">
-                        {childStatus.fileName.substring(
-                          childStatus.fileName.lastIndexOf("/") + 1
-                        )}
-                        {childStatus.isDirectory &&
-                          ` (${childStatus.totalFiles ?? 0} files)`}
-                      </td>
-                      <td className="px-2 py-1">
-                        {childStatus.status === "Done" ? (
-                          <span className="text-black">Done</span>
-                        ) : childStatus.progress !== undefined ? (
-                          <div className="w-full bg-gray-300 rounded-full h-4">
-                            <div
-                              className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                              style={{
-                                width: `${childStatus.progress}%`,
-                              }}
-                            >
-                              {childStatus.progress}%
-                            </div>
-                          </div>
-                        ) : (
-                          "Starting..."
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-              </React.Fragment>
-            );
-          })}
-          {/* Render Top-Level Files */}
-          {topLevelFiles.map((fileStatus) => (
-            <tr key={fileStatus.fileName} className="bg-white border-b">
-              <td className="px-2 py-1">{fileStatus.fileName}</td>
-              <td className="px-2 py-1">
-                {fileStatus.status === "Done" ? (
-                  <span className="text-black">Done</span>
-                ) : fileStatus.progress !== undefined ? (
-                  <div className="w-full bg-gray-300 rounded-full h-4">
-                    <div
-                      className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                      style={{ width: `${fileStatus.progress}%` }}
-                    >
-                      {fileStatus.progress}%
-                    </div>
-                  </div>
-                ) : (
-                  "Starting..."
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
+        <tbody>{renderItems(topLevelItems)}</tbody>
       </table>
     );
   };
