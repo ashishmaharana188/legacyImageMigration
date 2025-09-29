@@ -167,41 +167,50 @@ async function performRecursiveUpload(
 
   try {
     const entries = fs.readdirSync(localDir, { withFileTypes: true });
-    const uploadPromises: Promise<void>[] = [];
+    const batchSize = 50; // Set the batch size to 50
 
-    for (const entry of entries) {
-      const entryPath = path.join(localDir, entry.name);
-      const entryKey = `${prefix}/${entry.name}`;
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize);
+      const uploadPromises: Promise<void>[] = [];
 
-      if (entry.isDirectory()) {
-        const subDirPromise = (async () => {
-          const subDirResults = await uploadFunction(entryPath, bucket, entryKey);
-          results.successful.push(...subDirResults.successful);
-          results.failed.push(...subDirResults.failed);
-          const filesInSubDir = countFilesRecursive(entryPath);
-          uploadedFiles += filesInSubDir;
-          updateProgress();
-        })();
-        uploadPromises.push(subDirPromise);
-      } else {
-        const fileUploadPromise = (async () => {
-          try {
-            await uploadFile(entryPath, bucket, entryKey, entry.name);
-            results.successful.push(entry.name);
-            uploadedFiles++;
+      for (const entry of batch) {
+        const entryPath = path.join(localDir, entry.name);
+        const entryKey = `${prefix}/${entry.name}`;
+
+        if (entry.isDirectory()) {
+          const subDirPromise = (async () => {
+            const subDirResults = await uploadFunction(
+              entryPath,
+              bucket,
+              entryKey
+            );
+            results.successful.push(...subDirResults.successful);
+            results.failed.push(...subDirResults.failed);
+            const filesInSubDir = countFilesRecursive(entryPath);
+            uploadedFiles += filesInSubDir;
             updateProgress();
-          } catch (uploadError: any) {
-            results.failed.push({
-              name: entry.name,
-              error: uploadError.message,
-            });
-          }
-        })();
-        uploadPromises.push(fileUploadPromise);
+          })();
+          uploadPromises.push(subDirPromise);
+        } else {
+          const fileUploadPromise = (async () => {
+            try {
+              await uploadFile(entryPath, bucket, entryKey, entry.name);
+              results.successful.push(entry.name);
+              uploadedFiles++;
+              updateProgress();
+            } catch (uploadError: any) {
+              results.failed.push({
+                name: entry.name,
+                error: uploadError.message,
+              });
+            }
+          })();
+          uploadPromises.push(fileUploadPromise);
+        }
       }
-    }
 
-    await Promise.all(uploadPromises);
+      await Promise.all(uploadPromises);
+    }
 
     broadcast(
       JSON.stringify({
@@ -217,7 +226,9 @@ async function performRecursiveUpload(
       console.error(
         `S3 recursive upload failed for ${localDir}: Authentication token expired or invalid. Please refresh your credentials.`
       );
-      throw new Error("S3 upload failed due to expired or invalid credentials.");
+      throw new Error(
+        "S3 upload failed due to expired or invalid credentials."
+      );
     } else {
       console.error(`S3 recursive upload error for ${localDir}:`, err);
       throw err;

@@ -4,13 +4,9 @@ import * as path from "path";
 import * as os from "os";
 
 export const startSshTunnel = async () => {
-  if (process.env.USE_SSH_TUNNEL !== "true") {
-    console.log("SSH tunnel is disabled. Skipping tunnel creation.");
-    return null; // Or handle as appropriate for your application
-  }
   const tunnelOptions: any = {
-    autoClose: true,
-    reconnectOnError: false,
+    autoClose: false,
+    reconnectOnError: true,
   };
 
   const serverOptions: any = {
@@ -57,8 +53,8 @@ export const startMongoSshTunnel = async () => {
   }
 
   const tunnelOptions: any = {
-    autoClose: true,
-    reconnectOnError: false,
+    autoClose: false,
+    reconnectOnError: true,
   };
 
   const localPort = parseInt(process.env.MONGO_SSH_LOCAL_PORT || "27017", 10);
