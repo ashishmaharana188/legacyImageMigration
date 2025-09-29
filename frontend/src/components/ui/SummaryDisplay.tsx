@@ -193,6 +193,18 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         const isExpanded = expandedDirectories[item.fileName];
         const displayName = item.fileName.split("/").pop();
 
+        let isExpandable = item.isDirectory;
+        const parts = item.fileName.split('/');
+        if (parts.length === 3 && parts[0] === 'Data' && parts[1] === 'APPLICATION_FORMS') {
+            const clientCode = parts[2];
+            if (clientCode.startsWith('CLIENT_CODE_')) {
+                const clientCodeNumber = parseInt(clientCode.replace('CLIENT_CODE_', ''), 10);
+                if (!isNaN(clientCodeNumber) && clientCodeNumber >= 142) {
+                    isExpandable = false;
+                }
+            }
+        }
+
         return (
           <React.Fragment key={item.fileName}>
             <tr
@@ -205,12 +217,18 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 style={{ paddingLeft: `${level * 20 + 4}px` }}
               >
                 {item.isDirectory ? (
+                  isExpandable ? (
                   <button
                     onClick={() => toggleDirectory(item.fileName)}
                     className="font-semibold text-black hover:underline focus:outline-none"
                   >
                     {displayName} ({item.totalFiles ?? children.length} files)
                   </button>
+                  ) : (
+                  <span className="font-semibold text-black">
+                    {displayName} ({item.totalFiles ?? children.length} files)
+                  </span>
+                  )
                 ) : (
                   displayName
                 )}
@@ -233,6 +251,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               </td>
             </tr>
             {isExpanded &&
+              isExpandable &&
               children.length > 0 &&
               renderItems(children, level + 1)}
           </React.Fragment>
