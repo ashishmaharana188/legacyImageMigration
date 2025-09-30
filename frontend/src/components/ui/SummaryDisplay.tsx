@@ -484,12 +484,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           <p>Cutoff Timestamp: {log.cutoffTms}</p>
           <p>
             Total Duplicates Found:{" "}
-            {
-              duplicateEntries.reduce(
-                (acc, entry) => acc + entry.count - 1,
-                0
-              )
-            }
+            {duplicateEntries.reduce((acc, entry) => acc + entry.count - 1, 0)}
           </p>
           <button onClick={() => toggleSection(`sanity-check-${logKey}`)}>
             {isExpanded ? "Hide Details" : "Show Details"}
@@ -788,7 +783,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                     <tr key={index} className="bg-white border-b">
                       <td className="px-2 py-1">{dup._id.clientId}</td>
                       <td className="px-2 py-1">{dup._id.transactionNo}</td>
-                      <td className="px-2 py-1 font-bold">{dup.count}</td>
+                      <td className="px-2 py-1 font-bold">{dup.count - 1}</td>
                     </tr>
                   ))}
                 </tbody>

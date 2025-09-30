@@ -14,7 +14,7 @@ const logger = winston.createLogger({
 interface MongoDuplicateCheckResult {
   _id: { clientId: string; transactionNo: string };
   count: number;
-  documentIds: mongoose.Types.ObjectId[];
+  documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
   // Potentially add more fields if needed for dry-run details
 }
 
@@ -399,15 +399,19 @@ export class MongoDatabase {
     logs: any[];
   }> {
     const logs: any[] = [];
-    const { dryRun = true, cutoffTms: cutoffTmsString } = params;
+    const { dryRun = true, cutoffTms: cutoffDateString } = params;
     let cutoffDate: Date | null = null;
 
-    if (cutoffTmsString) {
-      cutoffDate = this.convertCutoffTmsToDate(cutoffTmsString);
-      if (!cutoffDate) {
+    if (cutoffDateString) {
+      // Parse cutoffDateString (e.g., "9/5/2025") into a Date object at 00:00:00 AM
+      const [month, day, year] = cutoffDateString.split('/').map(Number);
+      // Month is 0-indexed in JavaScript Date objects
+      cutoffDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+      if (isNaN(cutoffDate.getTime())) {
         logs.push({
           status: "error",
-          message: `Invalid cutoffTms provided: ${cutoffTmsString}`,
+          message: `Invalid cutoffDateString provided: ${cutoffDateString}`,
         });
         await this.disconnect();
         return {
@@ -420,7 +424,7 @@ export class MongoDatabase {
         };
       }
       logger.info(
-        `sanityCheckMongoDuplicates: Using cutoffDate: ${cutoffDate.toISOString()}`
+        `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`
       );
     }
 
@@ -431,54 +435,46 @@ export class MongoDatabase {
 
       const pipeline: any[] = [
         {
-          $project: {
-            _id: 1,
-            clientId: 1,
-            transactionNo: 1,
-            createdOn: 1, // Include createdOn to inspect its format
+          $addFields: {
+            // Split by comma and space to get date and time parts
+            parts: { $split: ["$createdOn", ", "] },
           },
         },
         {
           $addFields: {
-            // Split by comma and space to get date and time parts
-            parts: { $split: ["$createdOn", ", "] }
-          }
-        },
-        {
-          $addFields: {
             datePart: { $arrayElemAt: ["$parts", 0] }, // e.g., "8/3/2024"
-            timePart: { $arrayElemAt: ["$parts", 1] }  // e.g., "10:49:51 AM"
-          }
+            timePart: { $arrayElemAt: ["$parts", 1] }, // e.g., "10:49:51 AM"
+          },
         },
         {
           $addFields: {
             // Split datePart by '/' to get day, month, year
             dateComponents: { $split: ["$datePart", "/"] },
             // Split timePart by ' ' to separate time and AM/PM
-            timeComponents: { $split: ["$timePart", " "] }
-          }
+            timeComponents: { $split: ["$timePart", " "] },
+          },
         },
         {
           $addFields: {
-            day: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } },
-            month: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } },
+            day: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is first in M/D/YYYY
+            month: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is second in M/D/YYYY
             year: { $toInt: { $arrayElemAt: ["$dateComponents", 2] } },
             timeOnly: { $arrayElemAt: ["$timeComponents", 0] }, // e.g., "10:49:51"
-            ampm: { $arrayElemAt: ["$timeComponents", 1] }      // e.g., "AM"
-          }
+            ampm: { $arrayElemAt: ["$timeComponents", 1] }, // e.g., "AM"
+          },
         },
         {
           $addFields: {
             // Split timeOnly by ':' to get hour, minute, second
-            hmsComponents: { $split: ["$timeOnly", ":"] }
-          }
+            hmsComponents: { $split: ["$timeOnly", ":"] },
+          },
         },
         {
           $addFields: {
             hour12: { $toInt: { $arrayElemAt: ["$hmsComponents", 0] } },
             minute: { $toInt: { $arrayElemAt: ["$hmsComponents", 1] } },
-            second: { $toInt: { $arrayElemAt: ["$hmsComponents", 2] } }
-          }
+            second: { $toInt: { $arrayElemAt: ["$hmsComponents", 2] } },
+          },
         },
         {
           $addFields: {
@@ -486,11 +482,23 @@ export class MongoDatabase {
             hour24: {
               $cond: {
                 if: { $eq: ["$ampm", "PM"] },
-                then: { $cond: { if: { $eq: ["$hour12", 12] }, then: 12, else: { $add: ["$hour12", 12] } } },
-                else: { $cond: { if: { $eq: ["$hour12", 12] }, then: 0, else: "$hour12" } }
-              }
-            }
-          }
+                then: {
+                  $cond: {
+                    if: { $eq: ["$hour12", 12] },
+                    then: 12,
+                    else: { $add: ["$hour12", 12] },
+                  },
+                },
+                else: {
+                  $cond: {
+                    if: { $eq: ["$hour12", 12] },
+                    then: 0,
+                    else: "$hour12",
+                  },
+                },
+              },
+            },
+          },
         },
         {
           $addFields: {
@@ -502,20 +510,42 @@ export class MongoDatabase {
                 day: "$day",
                 hour: "$hour24",
                 minute: "$minute",
-                second: "$second"
-              }
-            }
-          }
+                second: "$second",
+              },
+            },
+          },
         },
-        // Log a sample of documents to verify date conversion and cutoff
-
         // Match documents created on or after the cutoff date
         ...(cutoffDate
           ? [{ $match: { createdOnDate: { $gte: cutoffDate } } }]
           : []),
         {
+          $addFields: {
+            modifiedDocumentPathNo: {
+              $let: {
+                vars: {
+                  regexMatch: {
+                    $regexFind: {
+                      input: "$documentPath",
+                      regex: "_TRANSACTION_NUMBER_(\\d+)",
+                    },
+                  },
+                },
+                in: {
+                  $arrayElemAt: ["$$regexMatch.captures", 0],
+                },
+              },
+            },
+          },
+        },
+        {
           $group: {
-            _id: { clientId: "$clientId", transactionNo: "$transactionNo" },
+            _id: {
+              clientId: "$clientId",
+              transactionNo: "$transactionNo",
+              modifiedDocumentPathNo: "$modifiedDocumentPathNo",
+              sourceUser: "$sourceUser",
+            },
             count: { $sum: 1 },
             documentIds: { $push: "$_id" },
             // Add other fields here if you want to see them in the dry run output
@@ -544,13 +574,40 @@ export class MongoDatabase {
       );
 
       if (!dryRun) {
-        // TODO: Implement actual deletion logic here if dryRun is false
-        // This would involve iterating through 'duplicates' and deleting documents
-        // based on your specific deletion rules (e.g., keep one, delete others).
-        // For now, it just reports.
+        logger.info(
+          "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates."
+        );
+        for (const dupGroup of duplicates) {
+          if (dupGroup.documents.length > 1) {
+            // Sort documents by createdOnDate in ascending order (oldest first)
+            dupGroup.documents.sort(
+              (a, b) => a.createdOnDate.getTime() - b.createdOnDate.getTime()
+            );
+
+            // Keep the newest document, delete all others
+            const documentsToDeleteIds = dupGroup.documents
+              .slice(0, -1)
+              .map((doc) => doc._id);
+
+            if (documentsToDeleteIds.length > 0) {
+              const deleteResult = await this.model.deleteMany({
+                _id: { $in: documentsToDeleteIds },
+                clientId: dupGroup._id.clientId,
+                transactionNo: dupGroup._id.transactionNo,
+              });
+              logs.push({
+                status: "info",
+                message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
+              });
+              logger.info(
+                `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`
+              );
+            }
+          }
+        }
         logs.push({
           status: "info",
-          message: "Actual deletion logic not yet implemented.",
+          message: "Oldest duplicate deletion process completed.",
         });
       }
 
