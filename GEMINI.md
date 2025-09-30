@@ -1,62 +1,4 @@
-## Building and running
-
-Before submitting any changes, it is crucial to validate them by running the full preflight check. This command will build the repository, run all tests, check for type errors, and lint the code.
-
-To run the full suite of checks, execute the following command:
-
-```bash
-npm run preflight
-```
-
-This single command ensures that your changes meet all the quality gates of the project. While you can run the individual steps (`build`, `test`, `typecheck`, `lint`) separately, it is highly recommended to use `npm run preflight` to ensure a comprehensive validation.
-
-## Writing Tests
-
-This project uses **Vitest** as its primary testing framework. When writing tests, aim to follow existing patterns. Key conventions include:
-
-### Test Structure and Framework
-
-- **Framework**: All tests are written using Vitest (`describe`, `it`, `expect`, `vi`).
-- **File Location**: Test files (`*.test.ts` for logic, `*.test.tsx` for React components) are co-located with the source files they test.
-- **Configuration**: Test environments are defined in `vitest.config.ts` files.
-- **Setup/Teardown**: Use `beforeEach` and `afterEach`. Commonly, `vi.resetAllMocks()` is called in `beforeEach` and `vi.restoreAllMocks()` in `afterEach`.
-
-### Mocking (`vi` from Vitest)
-
-- **ES Modules**: Mock with `vi.mock('module-name', async (importOriginal) => { ... })`. Use `importOriginal` for selective mocking.
-  - _Example_: `vi.mock('os', async (importOriginal) => { const actual = await importOriginal(); return { ...actual, homedir: vi.fn() }; });`
-- **Mocking Order**: For critical dependencies (e.g., `os`, `fs`) that affect module-level constants, place `vi.mock` at the _very top_ of the test file, before other imports.
-- **Hoisting**: Use `const myMock = vi.hoisted(() => vi.fn());` if a mock function needs to be defined before its use in a `vi.mock` factory.
-- **Mock Functions**: Create with `vi.fn()`. Define behavior with `mockImplementation()`, `mockResolvedValue()`, or `mockRejectedValue()`.
-- **Spying**: Use `vi.spyOn(object, 'methodName')`. Restore spies with `mockRestore()` in `afterEach`.
-
-### Commonly Mocked Modules
-
-- **Node.js built-ins**: `fs`, `fs/promises`, `os` (especially `os.homedir()`), `path`, `child_process` (`execSync`, `spawn`).
-- **External SDKs**: `@google/genai`, `@modelcontextprotocol/sdk`.
-- **Internal Project Modules**: Dependencies from other project packages are often mocked.
-
-### React Component Testing (CLI UI - Ink)
-
-- Use `render()` from `ink-testing-library`.
-- Assert output with `lastFrame()`.
-- Wrap components in necessary `Context.Provider`s.
-- Mock custom React hooks and complex child components using `vi.mock()`.
-
-### Asynchronous Testing
-
-- Use `async/await`.
-- For timers, use `vi.useFakeTimers()`, `vi.advanceTimersByTimeAsync()`, `vi.runAllTimersAsync()`.
-- Test promise rejections with `await expect(promise).rejects.toThrow(...)`.
-
-### General Guidance
-
-- When adding tests, first examine existing tests to understand and conform to established conventions.
-- Pay close attention to the mocks at the top of existing test files; they reveal critical dependencies and how they are managed in a test environment.
-
-## Git Repo
-
-The main branch for this project is called "main"
+Always access the latest version of the file and read it when ever you are facing "No edits made. The exact text in old_string was not found. Ensure you're not escaping content incorrectly and check whitespace, indentation, and context. Use read_file tool to verify."
 
 ## JavaScript/TypeScript
 
@@ -91,6 +33,7 @@ Rather than relying on Java-esque private or public class members, which can be 
 TypeScript's power lies in its ability to provide static type checking, catching potential errors before your code runs. To fully leverage this, it's crucial to avoid the `any` type and be judicious with type assertions.
 
 - **The Dangers of `any`**: Using any effectively opts out of TypeScript's type checking for that particular variable or expression. While it might seem convenient in the short term, it introduces significant risks:
+
   - **Loss of Type Safety**: You lose all the benefits of type checking, making it easy to introduce runtime errors that TypeScript would otherwise have caught.
   - **Reduced Readability and Maintainability**: Code with `any` types is harder to understand and maintain, as the expected type of data is no longer explicitly defined.
   - **Masking Underlying Issues**: Often, the need for any indicates a deeper problem in the design of your code or the way you're interacting with external libraries. It's a sign that you might need to refine your types or refactor your code.
@@ -99,10 +42,10 @@ TypeScript's power lies in its ability to provide static type checking, catching
 
   ```ts
   function processValue(value: unknown) {
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
       // value is now safely a string
       console.log(value.toUpperCase());
-    } else if (typeof value === 'number') {
+    } else if (typeof value === "number") {
       // value is now safely a number
       console.log(value * 2);
     }
@@ -170,6 +113,7 @@ Design for a good user experience - Provide clear, minimal, and non-blocking UI 
 ### Process
 
 1. Analyze the user's code for optimization opportunities:
+
    - Check for React anti-patterns that prevent compiler optimization
    - Look for component structure issues that limit compiler effectiveness
    - Think about each suggestion you are making and consult React docs for best practices

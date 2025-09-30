@@ -18,6 +18,7 @@ interface UploadAndScriptUIProps {
   handleUpload: () => Promise<void>;
   handleFallback: () => Promise<void>;
   handleSplitFiles: () => Promise<void>;
+  handleSplitFilesWithMuPDF: () => Promise<void>;
 }
 
 const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
@@ -32,6 +33,7 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
   handleUpload,
   handleFallback,
   handleSplitFiles,
+  handleSplitFilesWithMuPDF,
 }) => {
   return (
     <div>
@@ -61,6 +63,13 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
           className="btn ml-29.5"
         >
           {loading ? "Splitting..." : "Split PDF"}
+        </button>
+        <button
+          onClick={handleSplitFilesWithMuPDF}
+          disabled={loading}
+          className="btn ml-2"
+        >
+          {loading ? "Splitting..." : "Split with MuPDF"}
         </button>
         {splitMessage && <p>{splitMessage}</p>}
       </div>

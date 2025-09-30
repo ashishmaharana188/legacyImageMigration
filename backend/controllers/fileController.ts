@@ -124,6 +124,26 @@ class FileController {
     }
   }
 
+  async splitFilesWithMuPDF(req: Request, res: Response) {
+    try {
+      const processor = new Splitting();
+      const result = await processor.splitFilesWithMuPDF();
+      res.status(200).json({
+        statusCode: 200,
+        message: "Files split successfully with MuPDF",
+        splitSummary: result.summary,
+        splitFiles: result.splitFiles,
+      });
+    } catch (error) {
+      console.error("Split error:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to split files with MuPDF",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   async generateSql(req: Request, res: Response) {
     try {
       const processor = new Database();
