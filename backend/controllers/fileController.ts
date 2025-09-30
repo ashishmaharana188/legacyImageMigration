@@ -241,9 +241,9 @@ class FileController {
 
   async checkMongoDuplicates(req: Request, res: Response) {
     try {
-      const { dryRun } = req.body;
+      const { dryRun, cutoffTms } = req.body;
       const mongoDatabase = new MongoDatabase();
-      const result = await mongoDatabase.sanityCheckMongoDuplicates({ dryRun });
+      const result = await mongoDatabase.sanityCheckMongoDuplicates({ dryRun, cutoffTms });
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
       console.error("Mongo sanity check error:", error);
@@ -726,6 +726,39 @@ class FileController {
       });
     }
   }
+  async getMongoDocumentsByDate(req: Request, res: Response) {
+    try {
+      const dateString = req.query.date as string;
+
+      if (!dateString) {
+        return res.status(400).json({ statusCode: 400, error: "Date query parameter is required." });
+      }
+
+      const filterDate = new Date(dateString);
+
+      if (isNaN(filterDate.getTime())) {
+        return res.status(400).json({ statusCode: 400, error: "Invalid date format provided. Please use ISO 8601 format (e.g., 'YYYY-MM-DDTHH:mm:ss.SSSZ')." });
+      }
+
+      const mongoDatabase = new MongoDatabase();
+      const documents = await mongoDatabase.getDocumentsCreatedAfterDate(filterDate);
+
+      res.status(200).json({
+        statusCode: 200,
+        message: `Successfully fetched documents created after ${filterDate.toISOString()}`,
+        count: documents.length,
+        documents,
+      });
+    } catch (error) {
+      console.error("Error fetching Mongo documents by date:", error);
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to fetch Mongo documents by date",
+        details: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  }
+
   async reconnect(req: Request, res: Response) {
     try {
       const database = new Database();

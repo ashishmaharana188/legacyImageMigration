@@ -335,8 +335,61 @@ export class MongoDatabase {
     }
   }
 
+  private convertCutoffTmsToDate(cutoffTms: string): Date | null {
+    try {
+      // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
+      const date = new Date(cutoffTms);
+      if (isNaN(date.getTime())) {
+        logger.error(`Invalid cutoffTms date string: ${cutoffTms}`);
+        return null;
+      }
+      return date;
+    } catch (error) {
+      logger.error(`Error converting cutoffTms to Date: ${error}`);
+      return null;
+    }
+  }
+
+  public async getDocumentsCreatedAfterDate(date: Date): Promise<any[]> {
+    try {
+      await this.connect();
+      const pipeline: any[] = [
+        {
+          $addFields: {
+            createdOnDate: {
+              $dateFromString: {
+                dateString: "$createdOn",
+                format: "%d/%m/%Y, %I:%M:%S %p", // Matches "8/3/2024, 10:49:51 AM"
+                onError: new Date(0), // Default to epoch if conversion fails
+                onNull: new Date(0), // Default to epoch if createdOn is null
+              },
+            },
+          },
+        },
+        {
+          $match: {
+            createdOnDate: { $gt: date }, // Filter for documents created after the provided date
+          },
+        },
+        {
+          $project: {
+            createdOnDate: 0, // Exclude the temporary createdOnDate field from the final output
+          },
+        },
+      ];
+
+      const documents = await this.model.aggregate(pipeline).exec();
+      await this.disconnect();
+      return documents;
+    } catch (error) {
+      logger.error(`Error fetching documents by date: ${error}`);
+      throw error;
+    }
+  }
+
   public async sanityCheckMongoDuplicates(params: {
     dryRun?: boolean;
+    cutoffTms?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
@@ -346,14 +399,120 @@ export class MongoDatabase {
     logs: any[];
   }> {
     const logs: any[] = [];
-    const { dryRun = true } = params;
+    const { dryRun = true, cutoffTms: cutoffTmsString } = params;
+    let cutoffDate: Date | null = null;
+
+    if (cutoffTmsString) {
+      cutoffDate = this.convertCutoffTmsToDate(cutoffTmsString);
+      if (!cutoffDate) {
+        logs.push({
+          status: "error",
+          message: `Invalid cutoffTms provided: ${cutoffTmsString}`,
+        });
+        await this.disconnect();
+        return {
+          result: "failed",
+          dryRun,
+          duplicates: [],
+          totalDuplicateGroups: 0,
+          totalDuplicateDocuments: 0,
+          logs,
+        };
+      }
+      logger.info(
+        `sanityCheckMongoDuplicates: Using cutoffDate: ${cutoffDate.toISOString()}`
+      );
+    }
 
     logger.info(`sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`);
 
     try {
       await this.connect();
 
-      const pipeline = [
+      const pipeline: any[] = [
+        {
+          $project: {
+            _id: 1,
+            clientId: 1,
+            transactionNo: 1,
+            createdOn: 1, // Include createdOn to inspect its format
+          },
+        },
+        {
+          $addFields: {
+            // Split by comma and space to get date and time parts
+            parts: { $split: ["$createdOn", ", "] }
+          }
+        },
+        {
+          $addFields: {
+            datePart: { $arrayElemAt: ["$parts", 0] }, // e.g., "8/3/2024"
+            timePart: { $arrayElemAt: ["$parts", 1] }  // e.g., "10:49:51 AM"
+          }
+        },
+        {
+          $addFields: {
+            // Split datePart by '/' to get day, month, year
+            dateComponents: { $split: ["$datePart", "/"] },
+            // Split timePart by ' ' to separate time and AM/PM
+            timeComponents: { $split: ["$timePart", " "] }
+          }
+        },
+        {
+          $addFields: {
+            day: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } },
+            month: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } },
+            year: { $toInt: { $arrayElemAt: ["$dateComponents", 2] } },
+            timeOnly: { $arrayElemAt: ["$timeComponents", 0] }, // e.g., "10:49:51"
+            ampm: { $arrayElemAt: ["$timeComponents", 1] }      // e.g., "AM"
+          }
+        },
+        {
+          $addFields: {
+            // Split timeOnly by ':' to get hour, minute, second
+            hmsComponents: { $split: ["$timeOnly", ":"] }
+          }
+        },
+        {
+          $addFields: {
+            hour12: { $toInt: { $arrayElemAt: ["$hmsComponents", 0] } },
+            minute: { $toInt: { $arrayElemAt: ["$hmsComponents", 1] } },
+            second: { $toInt: { $arrayElemAt: ["$hmsComponents", 2] } }
+          }
+        },
+        {
+          $addFields: {
+            // Convert 12-hour to 24-hour format
+            hour24: {
+              $cond: {
+                if: { $eq: ["$ampm", "PM"] },
+                then: { $cond: { if: { $eq: ["$hour12", 12] }, then: 12, else: { $add: ["$hour12", 12] } } },
+                else: { $cond: { if: { $eq: ["$hour12", 12] }, then: 0, else: "$hour12" } }
+              }
+            }
+          }
+        },
+        {
+          $addFields: {
+            // Construct the final Date object using $dateFromParts
+            createdOnDate: {
+              $dateFromParts: {
+                year: "$year",
+                month: "$month",
+                day: "$day",
+                hour: "$hour24",
+                minute: "$minute",
+                second: "$second"
+              }
+            }
+          }
+        },
+        // Log a sample of documents to verify date conversion and cutoff
+
+        // Match documents created on or after the cutoff date
+        ...(cutoffDate
+          ? [{ $match: { createdOnDate: { $gte: cutoffDate } } }]
+          : []),
         {
           $group: {
             _id: { clientId: "$clientId", transactionNo: "$transactionNo" },
@@ -370,10 +529,15 @@ export class MongoDatabase {
         },
       ];
 
-      const duplicates = await this.model.aggregate<MongoDuplicateCheckResult>(pipeline).exec();
+      const duplicates = await this.model
+        .aggregate<MongoDuplicateCheckResult>(pipeline)
+        .exec();
 
       const totalDuplicateGroups = duplicates.length;
-      const totalDuplicateDocuments = duplicates.reduce((sum, dup) => sum + dup.count, 0);
+      const totalDuplicateDocuments = duplicates.reduce(
+        (sum, dup) => sum + dup.count,
+        0
+      );
 
       logger.info(
         `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`
@@ -384,7 +548,10 @@ export class MongoDatabase {
         // This would involve iterating through 'duplicates' and deleting documents
         // based on your specific deletion rules (e.g., keep one, delete others).
         // For now, it just reports.
-        logs.push({ status: "info", message: "Actual deletion logic not yet implemented." });
+        logs.push({
+          status: "info",
+          message: "Actual deletion logic not yet implemented.",
+        });
       }
 
       await this.disconnect();
@@ -399,7 +566,10 @@ export class MongoDatabase {
       };
     } catch (error) {
       logger.error(`sanityCheckMongoDuplicates failed: ${error}`);
-      logs.push({ status: "error", message: `sanityCheckMongoDuplicates failed: ${error}` });
+      logs.push({
+        status: "error",
+        message: `sanityCheckMongoDuplicates failed: ${error}`,
+      });
       return {
         result: "failed",
         dryRun,

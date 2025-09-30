@@ -482,7 +482,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
           <p>Dry Run: {log.dryRun ? "Yes" : "No"}</p>
           <p>Cutoff Timestamp: {log.cutoffTms}</p>
-          <p>Total Duplicates Found: {log.totalDuplicatesFound}</p>
+          <p>
+            Total Duplicates Found:{" "}
+            {
+              duplicateEntries.reduce(
+                (acc, entry) => acc + entry.count - 1,
+                0
+              )
+            }
+          </p>
           <button onClick={() => toggleSection(`sanity-check-${logKey}`)}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
