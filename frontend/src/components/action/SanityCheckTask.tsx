@@ -76,7 +76,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       setIsLoadingMongo(true);
       setDuplicateMongoCheckResult(null); // Clear previous result
 
-      const cutoffTms = `${cutoffDate.format("YYYY-MM-DD")}T00:00:00.0000`;
+      const cutoffTms = cutoffDate.format("M/D/YYYY"); // Format as M/D/YYYY for regex matching
       console.log("Frontend sending cutoffTms for Mongo:", cutoffTms);
 
       try {

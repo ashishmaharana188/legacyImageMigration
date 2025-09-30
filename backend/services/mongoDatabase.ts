@@ -14,7 +14,7 @@ const logger = winston.createLogger({
 interface MongoDuplicateCheckResult {
   _id: { clientId: string; transactionNo: string };
   count: number;
-  documentIds: mongoose.Types.ObjectId[];
+  documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
   // Potentially add more fields if needed for dry-run details
 }
 
@@ -335,8 +335,61 @@ export class MongoDatabase {
     }
   }
 
+  private convertCutoffTmsToDate(cutoffTms: string): Date | null {
+    try {
+      // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
+      const date = new Date(cutoffTms);
+      if (isNaN(date.getTime())) {
+        logger.error(`Invalid cutoffTms date string: ${cutoffTms}`);
+        return null;
+      }
+      return date;
+    } catch (error) {
+      logger.error(`Error converting cutoffTms to Date: ${error}`);
+      return null;
+    }
+  }
+
+  public async getDocumentsCreatedAfterDate(date: Date): Promise<any[]> {
+    try {
+      await this.connect();
+      const pipeline: any[] = [
+        {
+          $addFields: {
+            createdOnDate: {
+              $dateFromString: {
+                dateString: "$createdOn",
+                format: "%d/%m/%Y, %I:%M:%S %p", // Matches "8/3/2024, 10:49:51 AM"
+                onError: new Date(0), // Default to epoch if conversion fails
+                onNull: new Date(0), // Default to epoch if createdOn is null
+              },
+            },
+          },
+        },
+        {
+          $match: {
+            createdOnDate: { $gt: date }, // Filter for documents created after the provided date
+          },
+        },
+        {
+          $project: {
+            createdOnDate: 0, // Exclude the temporary createdOnDate field from the final output
+          },
+        },
+      ];
+
+      const documents = await this.model.aggregate(pipeline).exec();
+      await this.disconnect();
+      return documents;
+    } catch (error) {
+      logger.error(`Error fetching documents by date: ${error}`);
+      throw error;
+    }
+  }
+
   public async sanityCheckMongoDuplicates(params: {
     dryRun?: boolean;
+    cutoffTms?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
@@ -346,17 +399,153 @@ export class MongoDatabase {
     logs: any[];
   }> {
     const logs: any[] = [];
-    const { dryRun = true } = params;
+    const { dryRun = true, cutoffTms: cutoffDateString } = params;
+    let cutoffDate: Date | null = null;
+
+    if (cutoffDateString) {
+      // Parse cutoffDateString (e.g., "9/5/2025") into a Date object at 00:00:00 AM
+      const [month, day, year] = cutoffDateString.split('/').map(Number);
+      // Month is 0-indexed in JavaScript Date objects
+      cutoffDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+
+      if (isNaN(cutoffDate.getTime())) {
+        logs.push({
+          status: "error",
+          message: `Invalid cutoffDateString provided: ${cutoffDateString}`,
+        });
+        await this.disconnect();
+        return {
+          result: "failed",
+          dryRun,
+          duplicates: [],
+          totalDuplicateGroups: 0,
+          totalDuplicateDocuments: 0,
+          logs,
+        };
+      }
+      logger.info(
+        `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`
+      );
+    }
 
     logger.info(`sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`);
 
     try {
       await this.connect();
 
-      const pipeline = [
+      const pipeline: any[] = [
+        {
+          $addFields: {
+            // Split by comma and space to get date and time parts
+            parts: { $split: ["$createdOn", ", "] },
+          },
+        },
+        {
+          $addFields: {
+            datePart: { $arrayElemAt: ["$parts", 0] }, // e.g., "8/3/2024"
+            timePart: { $arrayElemAt: ["$parts", 1] }, // e.g., "10:49:51 AM"
+          },
+        },
+        {
+          $addFields: {
+            // Split datePart by '/' to get day, month, year
+            dateComponents: { $split: ["$datePart", "/"] },
+            // Split timePart by ' ' to separate time and AM/PM
+            timeComponents: { $split: ["$timePart", " "] },
+          },
+        },
+        {
+          $addFields: {
+            day: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is first in M/D/YYYY
+            month: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is second in M/D/YYYY
+            year: { $toInt: { $arrayElemAt: ["$dateComponents", 2] } },
+            timeOnly: { $arrayElemAt: ["$timeComponents", 0] }, // e.g., "10:49:51"
+            ampm: { $arrayElemAt: ["$timeComponents", 1] }, // e.g., "AM"
+          },
+        },
+        {
+          $addFields: {
+            // Split timeOnly by ':' to get hour, minute, second
+            hmsComponents: { $split: ["$timeOnly", ":"] },
+          },
+        },
+        {
+          $addFields: {
+            hour12: { $toInt: { $arrayElemAt: ["$hmsComponents", 0] } },
+            minute: { $toInt: { $arrayElemAt: ["$hmsComponents", 1] } },
+            second: { $toInt: { $arrayElemAt: ["$hmsComponents", 2] } },
+          },
+        },
+        {
+          $addFields: {
+            // Convert 12-hour to 24-hour format
+            hour24: {
+              $cond: {
+                if: { $eq: ["$ampm", "PM"] },
+                then: {
+                  $cond: {
+                    if: { $eq: ["$hour12", 12] },
+                    then: 12,
+                    else: { $add: ["$hour12", 12] },
+                  },
+                },
+                else: {
+                  $cond: {
+                    if: { $eq: ["$hour12", 12] },
+                    then: 0,
+                    else: "$hour12",
+                  },
+                },
+              },
+            },
+          },
+        },
+        {
+          $addFields: {
+            // Construct the final Date object using $dateFromParts
+            createdOnDate: {
+              $dateFromParts: {
+                year: "$year",
+                month: "$month",
+                day: "$day",
+                hour: "$hour24",
+                minute: "$minute",
+                second: "$second",
+              },
+            },
+          },
+        },
+        // Match documents created on or after the cutoff date
+        ...(cutoffDate
+          ? [{ $match: { createdOnDate: { $gte: cutoffDate } } }]
+          : []),
+        {
+          $addFields: {
+            modifiedDocumentPathNo: {
+              $let: {
+                vars: {
+                  regexMatch: {
+                    $regexFind: {
+                      input: "$documentPath",
+                      regex: "_TRANSACTION_NUMBER_(\\d+)",
+                    },
+                  },
+                },
+                in: {
+                  $arrayElemAt: ["$$regexMatch.captures", 0],
+                },
+              },
+            },
+          },
+        },
         {
           $group: {
-            _id: { clientId: "$clientId", transactionNo: "$transactionNo" },
+            _id: {
+              clientId: "$clientId",
+              transactionNo: "$transactionNo",
+              modifiedDocumentPathNo: "$modifiedDocumentPathNo",
+              sourceUser: "$sourceUser",
+            },
             count: { $sum: 1 },
             documentIds: { $push: "$_id" },
             // Add other fields here if you want to see them in the dry run output
@@ -370,21 +559,56 @@ export class MongoDatabase {
         },
       ];
 
-      const duplicates = await this.model.aggregate<MongoDuplicateCheckResult>(pipeline).exec();
+      const duplicates = await this.model
+        .aggregate<MongoDuplicateCheckResult>(pipeline)
+        .exec();
 
       const totalDuplicateGroups = duplicates.length;
-      const totalDuplicateDocuments = duplicates.reduce((sum, dup) => sum + dup.count, 0);
+      const totalDuplicateDocuments = duplicates.reduce(
+        (sum, dup) => sum + dup.count,
+        0
+      );
 
       logger.info(
         `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`
       );
 
       if (!dryRun) {
-        // TODO: Implement actual deletion logic here if dryRun is false
-        // This would involve iterating through 'duplicates' and deleting documents
-        // based on your specific deletion rules (e.g., keep one, delete others).
-        // For now, it just reports.
-        logs.push({ status: "info", message: "Actual deletion logic not yet implemented." });
+        logger.info(
+          "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates."
+        );
+        for (const dupGroup of duplicates) {
+          if (dupGroup.documents.length > 1) {
+            // Sort documents by createdOnDate in ascending order (oldest first)
+            dupGroup.documents.sort(
+              (a, b) => a.createdOnDate.getTime() - b.createdOnDate.getTime()
+            );
+
+            // Keep the newest document, delete all others
+            const documentsToDeleteIds = dupGroup.documents
+              .slice(0, -1)
+              .map((doc) => doc._id);
+
+            if (documentsToDeleteIds.length > 0) {
+              const deleteResult = await this.model.deleteMany({
+                _id: { $in: documentsToDeleteIds },
+                clientId: dupGroup._id.clientId,
+                transactionNo: dupGroup._id.transactionNo,
+              });
+              logs.push({
+                status: "info",
+                message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
+              });
+              logger.info(
+                `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`
+              );
+            }
+          }
+        }
+        logs.push({
+          status: "info",
+          message: "Oldest duplicate deletion process completed.",
+        });
       }
 
       await this.disconnect();
@@ -399,7 +623,10 @@ export class MongoDatabase {
       };
     } catch (error) {
       logger.error(`sanityCheckMongoDuplicates failed: ${error}`);
-      logs.push({ status: "error", message: `sanityCheckMongoDuplicates failed: ${error}` });
+      logs.push({
+        status: "error",
+        message: `sanityCheckMongoDuplicates failed: ${error}`,
+      });
       return {
         result: "failed",
         dryRun,

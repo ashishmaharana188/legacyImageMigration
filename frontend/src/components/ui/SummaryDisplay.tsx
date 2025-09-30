@@ -193,24 +193,20 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         const isExpanded = expandedDirectories[item.fileName];
         const displayName = item.fileName.split("/").pop();
 
-        let isExpandable = item.isDirectory;
-        const parts = item.fileName.split('/');
-        if (parts.length === 3 && parts[0] === 'Data' && parts[1] === 'APPLICATION_FORMS') {
-            const clientCode = parts[2];
-            if (clientCode.startsWith('CLIENT_CODE_')) {
-                const clientCodeNumber = parseInt(clientCode.replace('CLIENT_CODE_', ''), 10);
-                if (!isNaN(clientCodeNumber) && clientCodeNumber >= 142) {
-                    isExpandable = false;
-                }
-            }
-        }
+        const parts = item.fileName.split("/");
+        const isExpandable = !(
+          item.isDirectory &&
+          level > 0 &&
+          (item.fileName.startsWith("SPLIT_APPLICATION_FORMS/") ||
+            item.fileName.startsWith("Data/SPLIT_APPLICATION_FORMS/") ||
+            item.fileName.startsWith("Data/APPLICATION_FORMS/") ||
+            item.fileName.startsWith("APPLICATION_FORMS/"))
+        );
 
         return (
           <React.Fragment key={item.fileName}>
             <tr
-              className={`${
-                level > 0 ? "bg-white" : "bg-gray-100"
-              } border-b`}
+              className={`${level > 0 ? "bg-white" : "bg-gray-100"} border-b`}
             >
               <td
                 className="px-2 py-1"
@@ -218,16 +214,16 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               >
                 {item.isDirectory ? (
                   isExpandable ? (
-                  <button
-                    onClick={() => toggleDirectory(item.fileName)}
-                    className="font-semibold text-black hover:underline focus:outline-none"
-                  >
-                    {displayName} ({item.totalFiles ?? children.length} files)
-                  </button>
+                    <button
+                      onClick={() => toggleDirectory(item.fileName)}
+                      className="font-semibold text-black hover:underline focus:outline-none"
+                    >
+                      {displayName} ({item.totalFiles ?? children.length} files)
+                    </button>
                   ) : (
-                  <span className="font-semibold text-black">
-                    {displayName} ({item.totalFiles ?? children.length} files)
-                  </span>
+                    <span className="font-semibold text-black">
+                      {displayName} ({item.totalFiles ?? children.length} files)
+                    </span>
                   )
                 ) : (
                   displayName
@@ -486,7 +482,10 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
           <p>Dry Run: {log.dryRun ? "Yes" : "No"}</p>
           <p>Cutoff Timestamp: {log.cutoffTms}</p>
-          <p>Total Duplicates Found: {log.totalDuplicatesFound}</p>
+          <p>
+            Total Duplicates Found:{" "}
+            {duplicateEntries.reduce((acc, entry) => acc + entry.count - 1, 0)}
+          </p>
           <button onClick={() => toggleSection(`sanity-check-${logKey}`)}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
@@ -755,7 +754,9 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             <p>No MongoDB duplicates found.</p>
           )}
           {log.duplicates.length > 0 && (
-            <button onClick={() => toggleSection(`mongo-duplicate-check-${logKey}`)}>
+            <button
+              onClick={() => toggleSection(`mongo-duplicate-check-${logKey}`)}
+            >
               {isExpanded ? "Hide Details" : "Show Details"}
             </button>
           )}
@@ -766,9 +767,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <table className="w-full text-sm text-left">
                 <thead className="text-xs uppercase bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-2 py-1">Client ID</th>
-                    <th scope="col" className="px-2 py-1">Transaction No</th>
-                    <th scope="col" className="px-2 py-1">Duplicate Count</th>
+                    <th scope="col" className="px-2 py-1">
+                      Client ID
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Transaction No
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Duplicate Count
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -776,7 +783,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                     <tr key={index} className="bg-white border-b">
                       <td className="px-2 py-1">{dup._id.clientId}</td>
                       <td className="px-2 py-1">{dup._id.transactionNo}</td>
-                      <td className="px-2 py-1 font-bold">{dup.count}</td>
+                      <td className="px-2 py-1 font-bold">{dup.count - 1}</td>
                     </tr>
                   ))}
                 </tbody>

@@ -1166,302 +1166,237 @@ RETURNING d.user_attr1, d.user_attr2;
         }
       }
 
-      const keyExpr = normalize ? "TRIM(LOWER(user_attr1))" : "user_attr1";
-      const clientFilter = clientId ? `AND client_id = ${clientId}` : "";
+      const keyExpr = (alias?: string) => {
+        const prefix = alias ? `${alias}.` : "";
+        return normalize
+          ? `TRIM(LOWER(${prefix}user_attr1))`
+          : `${prefix}user_attr1`;
+      };
+      const clientFilter = (alias?: string) => {
+        const prefix = alias ? `${alias}.` : "";
+        return clientId ? `AND ${prefix}client_id = ${clientId}` : "";
+      };
 
-      const deleteRule1Sql = `
-        WITH pre_cutoff_keys AS (
-          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
-          FROM investor.aif_document_details
-          WHERE user_attr1 IS NOT NULL
-            AND client_id IS NOT NULL
-            AND creation_date <= $1::timestamptz
-            AND created_by = 'system'
-            ${clientFilter}
-        ),
-        perfect_rows AS (
-          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
-          FROM investor.aif_document_details
-          WHERE user_attr1 IS NOT NULL
-            AND client_id IS NOT NULL
-            AND folio_id IS NOT NULL
-            AND transaction_reference_id IS NOT NULL
-            AND created_by = 'system'
-            ${clientFilter}
-        )
-        DELETE FROM investor.aif_document_details d
-        WHERE (d.client_id, ${keyExpr}, d.user_attr2) IN (SELECT pck.client_id, pck.k, pck.user_attr2 FROM pre_cutoff_keys pck JOIN perfect_rows pr ON pck.client_id = pr.client_id AND pck.k = pr.k AND pck.user_attr2 = pr.user_attr2)
-          AND d.creation_date > $1::timestamptz
-          AND created_by = 'system'
-          AND (d.folio_id IS NULL OR d.transaction_reference_id IS NULL) -- Only delete non-perfect duplicates
-        RETURNING d.id, d.user_attr2
-      `;
-
-      const deleteRule2Sql = `
-        WITH post_cutoff_only_keys AS (
-            SELECT client_id, ${keyExpr} AS k, user_attr2
-            FROM investor.aif_document_details
-            WHERE user_attr1 IS NOT NULL
-              AND client_id IS NOT NULL
-              AND created_by = 'system'
-              ${clientFilter}
-            GROUP BY client_id, ${keyExpr}, user_attr2
-            HAVING MIN(creation_date) > $1::timestamptz
-        ),
-        perfect_rows AS (
-          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
-          FROM investor.aif_document_details
-          WHERE user_attr1 IS NOT NULL
-            AND client_id IS NOT NULL
-            AND folio_id IS NOT NULL
-            AND transaction_reference_id IS NOT NULL
-            AND created_by = 'system'
-            ${clientFilter}
-        ),
-        dups_to_delete AS (
-            SELECT
-                d.id, d.user_attr2,
-                ROW_NUMBER() OVER (
-                    PARTITION BY d.client_id, ${keyExpr}, d.user_attr2
-                    ORDER BY d.creation_date ASC, d.id ASC
-                ) as rn
-            FROM investor.aif_document_details d
-            JOIN post_cutoff_only_keys p ON d.client_id = p.client_id AND ${keyExpr} = p.k AND d.user_attr2 = p.user_attr2
-            WHERE d.created_by = 'system'
-        )
-        DELETE FROM investor.aif_document_details t
-        USING dups_to_delete d
-        WHERE t.id = d.id
-          AND d.rn > 1
-          AND (t.folio_id IS NULL OR t.transaction_reference_id IS NULL) -- Only delete non-perfect duplicates
-          AND (t.client_id, ${keyExpr}, t.user_attr2) IN (SELECT pr.client_id, pr.k, pr.user_attr2 FROM perfect_rows pr)
-        `;
-
-      const allPotentialDuplicatesSql = `
-        WITH duplicate_groups AS (
-            SELECT
+      // Dry Run Query: Gathers all necessary info to simulate the logic in the backend.
+      const dryRunSql = `
+        WITH keys_after_cutoff AS (
+            SELECT DISTINCT
                 client_id,
-                ${keyExpr} AS k
+                ${keyExpr()} AS k
             FROM investor.aif_document_details
-            WHERE user_attr1 IS NOT NULL
+            WHERE creation_date > $1::timestamptz
+              AND user_attr1 IS NOT NULL
               AND client_id IS NOT NULL
               AND created_by = 'system'
-              ${clientFilter}
-            GROUP BY client_id, ${keyExpr}
-            HAVING COUNT(*) > 1
+              ${clientFilter()}
+        ),
+        all_matching_rows AS (
+            SELECT d.*
+            FROM investor.aif_document_details d
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
+              "d"
+            )} = kac.k
+            WHERE d.user_attr1 IS NOT NULL
+              AND d.client_id IS NOT NULL
+              AND d.created_by = 'system'
+              ${clientFilter("d")}
+        ),
+        ranked_rows AS (
+            SELECT
+                id,
+                client_id,
+                ${keyExpr()} AS user_attr1_normalized,
+                user_attr1,
+                user_attr2,
+                creation_date,
+                folio_id,
+                transaction_reference_id,
+                (folio_id IS NOT NULL AND transaction_reference_id IS NOT NULL) as is_perfect,
+                COUNT(CASE WHEN folio_id IS NOT NULL AND transaction_reference_id IS NOT NULL THEN 1 END) OVER (PARTITION BY client_id, ${keyExpr()}) as perfect_rows_in_group,
+                ROW_NUMBER() OVER (PARTITION BY client_id, ${keyExpr()} ORDER BY creation_date DESC, id DESC) as rn_desc,
+                COUNT(*) OVER (PARTITION BY client_id, ${keyExpr()}) as total_rows_in_group
+            FROM all_matching_rows
         )
-        SELECT
-            d.id,
-            d.client_id,
-            ${keyExpr} AS user_attr1_normalized,
-            d.user_attr1,
-            d.user_attr2,
-            d.creation_date,
-            d.folio_id,
-            d.transaction_reference_id
-        FROM investor.aif_document_details d
-        JOIN duplicate_groups dg ON d.client_id = dg.client_id AND ${keyExpr} = dg.k
-        WHERE d.created_by = 'system'
-          ${clientFilter}
-        ORDER BY d.client_id, ${keyExpr}, d.user_attr2, d.creation_date;
+        SELECT *
+        FROM ranked_rows
+        WHERE total_rows_in_group > 1
+        ORDER BY client_id, user_attr1_normalized, creation_date;
       `;
 
-      const imperfectDuplicatesSql = `
-        WITH
-        pre_cutoff_keys AS (
-          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
-          FROM investor.aif_document_details
-          WHERE user_attr1 IS NOT NULL
-            AND client_id IS NOT NULL
-            AND created_by = 'system'
-            AND creation_date <= $1::timestamptz
-            ${clientFilter}
-        ),
-        post_cutoff_only_keys AS (
-            SELECT client_id, ${keyExpr} AS k, user_attr2
+      // Deletion Rule 1: Delete imperfect rows if a perfect row exists in the group.
+      const deleteImperfectSql = `
+        WITH keys_after_cutoff AS (
+            SELECT DISTINCT client_id, ${keyExpr()} AS k
             FROM investor.aif_document_details
-            WHERE user_attr1 IS NOT NULL
-              AND client_id IS NOT NULL
-              AND created_by = 'system'
-              ${clientFilter}
-            GROUP BY client_id, ${keyExpr}, user_attr2
-            HAVING MIN(creation_date) > $2::timestamptz
+            WHERE creation_date > $1::timestamptz
+              AND user_attr1 IS NOT NULL AND client_id IS NOT NULL AND created_by = 'system'
+              ${clientFilter()}
         ),
-        perfect_rows AS (
-          SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
-          FROM investor.aif_document_details
-          WHERE user_attr1 IS NOT NULL
-            AND client_id IS NOT NULL
-            AND folio_id IS NOT NULL
-            AND transaction_reference_id IS NOT NULL
-            AND created_by = 'system'
-            ${clientFilter}
-        ),
-        post_cutoff_dups_ranked AS (
-            SELECT d.*,
-                   ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr}, d.user_attr2 ORDER BY d.creation_date ASC, d.id ASC) AS rn
+        groups_with_perfect_row AS (
+            SELECT DISTINCT d.client_id, ${keyExpr("d")} AS k
             FROM investor.aif_document_details d
-            JOIN post_cutoff_only_keys pco ON d.client_id = pco.client_id AND ${keyExpr} = pco.k AND d.user_attr2 = pco.user_attr2
-            WHERE d.created_by = 'system'
-              ${clientFilter}
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
+              "d"
+            )} = kac.k
+            WHERE d.folio_id IS NOT NULL AND d.transaction_reference_id IS NOT NULL
+              AND d.created_by = 'system'
+              ${clientFilter("d")}
+        ),
+        ids_to_delete AS (
+            SELECT d.id
+            FROM investor.aif_document_details d
+            JOIN groups_with_perfect_row gwpr ON d.client_id = gwpr.client_id AND ${keyExpr(
+              "d"
+            )} = gwpr.k
+            WHERE (d.folio_id IS NULL OR d.transaction_reference_id IS NULL)
+              AND d.created_by = 'system'
+              ${clientFilter("d")}
         )
-        SELECT DISTINCT d.user_attr2, 'Imperfect Duplicate' as reason
-        FROM investor.aif_document_details d
-        WHERE d.created_by = 'system'
-          AND d.user_attr1 IS NOT NULL
-          AND d.client_id IS NOT NULL
-          ${clientFilter}
-          AND (d.folio_id IS NULL OR d.transaction_reference_id IS NULL) -- Is an imperfect row
-          AND NOT EXISTS (
-            SELECT 1 FROM perfect_rows pr
-            WHERE pr.client_id = d.client_id
-              AND pr.k = ${keyExpr}
-              AND pr.user_attr2 = d.user_attr2
-          )
-          AND (
-            -- Matches Rule 1 criteria (would be deleted if a perfect row existed)
-            EXISTS (
-                SELECT 1 FROM (
-                    SELECT DISTINCT client_id, ${keyExpr} AS k, user_attr2
-                    FROM investor.aif_document_details
-                    WHERE user_attr1 IS NOT NULL
-                      AND client_id IS NOT NULL
-                      AND creation_date <= $1::timestamptz
-                      AND created_by = 'system'
-                      ${clientFilter}
-                ) AS pre_cutoff_pck
-                WHERE pre_cutoff_pck.client_id = d.client_id
-                  AND pre_cutoff_pck.k = ${keyExpr}
-                  AND pre_cutoff_pck.user_attr2 = d.user_attr2
-            )
-            AND d.creation_date > $1::timestamptz
-            OR
-            -- Matches Rule 2 criteria (would be deleted if a perfect row existed)
-            EXISTS (
-                SELECT 1 FROM post_cutoff_dups_ranked pcdr
-                WHERE pcdr.id = d.id AND pcdr.rn > 1
-            )
-          );
+        DELETE FROM investor.aif_document_details
+        WHERE id IN (SELECT id FROM ids_to_delete)
+        RETURNING id;
       `;
+
+      // Deletion Rule 2: If all rows in a group are perfect, keep only the latest one.
+      const deleteOlderPerfectSql = `
+        WITH keys_after_cutoff AS (
+            SELECT DISTINCT client_id, ${keyExpr()} AS k
+            FROM investor.aif_document_details
+            WHERE creation_date > $1::timestamptz
+              AND user_attr1 IS NOT NULL AND client_id IS NOT NULL AND created_by = 'system'
+              ${clientFilter()}
+        ),
+        groups_where_all_are_perfect AS (
+            SELECT d.client_id, ${keyExpr("d")} AS k
+            FROM investor.aif_document_details d
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
+              "d"
+            )} = kac.k
+            WHERE d.created_by = 'system' ${clientFilter("d")}
+            GROUP BY d.client_id, ${keyExpr("d")}
+            HAVING COUNT(*) > 1 AND COUNT(CASE WHEN d.folio_id IS NULL OR d.transaction_reference_id IS NULL THEN 1 END) = 0
+        ),
+        ids_to_delete AS (
+            SELECT id
+            FROM (
+                SELECT
+                    d.id,
+                    ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr(
+                      "d"
+                    )} ORDER BY d.creation_date DESC, d.id DESC) as rn
+                FROM investor.aif_document_details d
+                JOIN groups_where_all_are_perfect gwaap ON d.client_id = gwaap.client_id AND ${keyExpr(
+                  "d"
+                )} = gwaap.k
+                WHERE d.created_by = 'system' ${clientFilter("d")}
+            ) ranked
+            WHERE rn > 1
+        )
+        DELETE FROM investor.aif_document_details
+        WHERE id IN (SELECT id FROM ids_to_delete)
+        RETURNING id;
+      `;
+
+      // Query to find groups of duplicates where no perfect row exists.
+      const imperfectDuplicatesSql = `
+        WITH keys_after_cutoff AS (
+            SELECT DISTINCT client_id, ${keyExpr()} AS k
+            FROM investor.aif_document_details
+            WHERE creation_date > $1::timestamptz
+              AND user_attr1 IS NOT NULL AND client_id IS NOT NULL AND created_by = 'system'
+              ${clientFilter()}
+        ),
+        duplicate_groups AS (
+            SELECT d.client_id, ${keyExpr("d")} AS k, COUNT(*) as total_rows
+            FROM investor.aif_document_details d
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
+              "d"
+            )} = kac.k
+            WHERE d.created_by = 'system' ${clientFilter("d")}
+            GROUP BY d.client_id, ${keyExpr("d")}
+            HAVING COUNT(*) > 1
+        ),
+        groups_with_no_perfect_row AS (
+            SELECT dg.client_id, dg.k
+            FROM duplicate_groups dg
+            WHERE NOT EXISTS (
+                SELECT 1
+                FROM investor.aif_document_details p
+                WHERE p.client_id = dg.client_id
+                  AND ${keyExpr("p")} = dg.k
+                  AND p.folio_id IS NOT NULL
+                  AND p.transaction_reference_id IS NOT NULL
+            )
+        )
+        SELECT DISTINCT d.user_attr2, 'Imperfect Duplicate Group (No Action Taken)' as reason
+        FROM investor.aif_document_details d
+        JOIN groups_with_no_perfect_row gwnpr ON d.client_id = gwnpr.client_id AND ${keyExpr(
+          "d"
+        )} = gwnpr.k
+        WHERE d.created_by = 'system' ${clientFilter("d")};
+      `;
+
       if (dryRun) {
-        const allDupsRes = await client.query<DryRunResultRow>(allPotentialDuplicatesSql, []);
+        const dryRunRes = await client.query(dryRunSql, [cutoffTms]);
         await client.query("ROLLBACK");
 
-        const processedRows: DryRunResultRow[] = [];
-        const imperfectDuplicatesSet = new Set<string>();
-
-        // Re-evaluate perfect_rows, pre_cutoff_keys, post_cutoff_only_keys, post_cutoff_dups_ranked in-memory
-        // This is a simplified in-memory representation for dry-run logic.
-        // For a truly accurate dry-run, the SQL queries themselves would need to be run with specific flags.
-        // This approach aims to simulate the deletion logic to provide a 'wouldBeDeleted' flag.
-
-        const perfectRowsInMemory = new Set<string>(); // Stores 'client_id|keyExpr|user_attr2' for perfect rows
-        const preCutoffKeysInMemory = new Set<string>(); // Stores 'client_id|keyExpr|user_attr2' for pre-cutoff keys
-        const postCutoffOnlyKeysInMemory = new Set<string>(); // Stores 'client_id|keyExpr|user_attr2' for post-cutoff only keys
-
-        // Populate in-memory sets
-        for (const row of allDupsRes.rows) {
-          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
-          if (row.folio_id !== null && row.transaction_reference_id !== null) {
-            perfectRowsInMemory.add(key);
-          }
-          if (new Date(row.creation_date) <= new Date(cutoffTms)) {
-            preCutoffKeysInMemory.add(key);
-          }
-        }
-
-        // Determine post_cutoff_only_keys
-        const groupMinCreationDate = new Map<string, Date>();
-        for (const row of allDupsRes.rows) {
-          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
-          const currentMin = groupMinCreationDate.get(key);
-          const rowDate = new Date(row.creation_date);
-          if (!currentMin || rowDate < currentMin) {
-            groupMinCreationDate.set(key, rowDate);
-          }
-        }
-        for (const [key, minDate] of groupMinCreationDate.entries()) {
-          if (minDate > new Date(cutoffTms)) {
-            postCutoffOnlyKeysInMemory.add(key);
-          }
-        }
-
-        // Simulate post_cutoff_dups_ranked
-        const postCutoffDupsRanked: { [key: string]: DryRunResultRow[] } = {};
-        for (const row of allDupsRes.rows) {
-          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
-          if (postCutoffOnlyKeysInMemory.has(key)) {
-            if (!postCutoffDupsRanked[key]) {
-              postCutoffDupsRanked[key] = [];
-            }
-            postCutoffDupsRanked[key].push(row);
-          }
-        }
-        for (const key in postCutoffDupsRanked) {
-          postCutoffDupsRanked[key].sort((a, b) => {
-            const dateA = new Date(a.creation_date).getTime();
-            const dateB = new Date(b.creation_date).getTime();
-            if (dateA !== dateB) return dateA - dateB;
-            return a.id - b.id;
-          });
-        }
-
-
-        for (const row of allDupsRes.rows) {
-          const isPerfect = row.folio_id !== null && row.transaction_reference_id !== null;
-          const key = `${row.client_id}|${row.user_attr1_normalized}|${row.user_attr2}`;
+        const processedRows: DryRunResultRow[] = dryRunRes.rows.map((row) => {
           let wouldBeDeleted = false;
-          let reason = isPerfect ? "Perfect Row" : "Imperfect Row";
+          let reason = "";
 
-          // Check Rule 1 deletion criteria
-          const matchesRule1Criteria =
-            preCutoffKeysInMemory.has(key) &&
-            perfectRowsInMemory.has(key) &&
-            new Date(row.creation_date) > new Date(cutoffTms) &&
-            !isPerfect;
-
-          if (matchesRule1Criteria) {
-            wouldBeDeleted = true;
-            reason = "Would be deleted by Rule 1 (pre-existing perfect row)";
+          if (row.perfect_rows_in_group > 0) {
+            if (!row.is_perfect) {
+              wouldBeDeleted = true;
+              reason =
+                "Would be deleted: Imperfect row in a group with a perfect row.";
+            } else {
+              reason = "Perfect row, kept.";
+            }
+          } else {
+            reason = "No action: Group contains no perfect rows.";
           }
 
-          // Check Rule 2 deletion criteria
-          if (!wouldBeDeleted) { // Only check Rule 2 if not already marked for deletion by Rule 1
-            if (postCutoffOnlyKeysInMemory.has(key) && perfectRowsInMemory.has(key) && !isPerfect) {
-              const rankedGroup = postCutoffDupsRanked[key];
-              if (rankedGroup) {
-                const rowRank = rankedGroup.findIndex(r => r.id === row.id) + 1;
-                if (rowRank > 1) {
-                  wouldBeDeleted = true;
-                  reason = "Would be deleted by Rule 2 (post-cutoff duplicate with perfect row)";
-                }
-              }
+          // This covers the case where a group might have perfect rows, but also multiple perfect rows.
+          if (
+            row.perfect_rows_in_group === row.total_rows_in_group &&
+            row.total_rows_in_group > 1
+          ) {
+            if (row.rn_desc > 1) {
+              wouldBeDeleted = true;
+              reason =
+                "Would be deleted: Older perfect row in an all-perfect group.";
+            } else {
+              reason = "Kept: Newest perfect row in an all-perfect group.";
             }
           }
 
-          processedRows.push({
-            ...row,
-            isPerfect,
+          return {
+            id: row.id,
+            client_id: row.client_id,
+            user_attr1_normalized: row.user_attr1_normalized,
+            user_attr1: row.user_attr1,
+            user_attr2: row.user_attr2,
+            creation_date: row.creation_date,
+            folio_id: row.folio_id,
+            transaction_reference_id: row.transaction_reference_id,
+            isPerfect: row.is_perfect,
             wouldBeDeleted,
             reason,
-          });
+          };
+        });
 
-          if (!isPerfect && !perfectRowsInMemory.has(key)) {
-            imperfectDuplicatesSet.add(row.user_attr2);
-          }
-        }
+        const imperfectRes = await client.query<ImperfectDuplicateRow>(
+          imperfectDuplicatesSql,
+          [cutoffTms]
+        );
+        const imperfectDuplicates = imperfectRes.rows.map((r) => r.user_attr2);
 
-        const imperfectDuplicates = Array.from(imperfectDuplicatesSet);
-
-        const uniqueDuplicateGroups = new Set<string>();
-        for (const row of allDupsRes.rows) {
-          uniqueDuplicateGroups.add(`${row.client_id}|${row.user_attr1_normalized}`);
-        }
-        const numberOfUniqueGroups = uniqueDuplicateGroups.size;
-        const totalDuplicatesFound = processedRows.length - numberOfUniqueGroups;
+        const totalDuplicatesFound = processedRows.filter(
+          (p) => p.wouldBeDeleted
+        ).length;
 
         this.logger.info(
-          `sanityCheckDuplicates: dry-run complete. Found ${totalDuplicatesFound} extra duplicates across ${numberOfUniqueGroups} groups.`
+          `sanityCheckDuplicates: dry-run complete. Found ${totalDuplicatesFound} rows that would be deleted.`
         );
 
         return {
@@ -1475,31 +1410,37 @@ RETURNING d.user_attr1, d.user_attr2;
         };
       }
 
-      const delRes1 = await client.query(deleteRule1Sql, [cutoffTms]);
+      // Live Deletion
+      const delImperfectRes = await client.query(deleteImperfectSql, [
+        cutoffTms,
+      ]);
       logs.push({
         row: 0,
         status: "updated",
-        message: `Rule 1 (pre-existing keys) deleted ${delRes1.rowCount} rows.`,
+        message: `Rule 1 (Imperfects with Perfect) deleted ${delImperfectRes.rowCount} rows.`,
       });
 
-      const delRes2 = await client.query(deleteRule2Sql, [cutoffTms]);
+      const delOlderPerfectRes = await client.query(deleteOlderPerfectSql, [
+        cutoffTms,
+      ]);
       logs.push({
         row: 0,
         status: "updated",
-        message: `Rule 2 (post-only keys) deleted ${delRes2.rowCount} rows.`,
+        message: `Rule 2 (Older Perfects) deleted ${delOlderPerfectRes.rowCount} rows.`,
       });
 
       await client.query("COMMIT");
 
-      const totalDeleted = (delRes1.rowCount ?? 0) + (delRes2.rowCount ?? 0);
+      const totalDeleted =
+        (delImperfectRes.rowCount ?? 0) + (delOlderPerfectRes.rowCount ?? 0);
       this.logger.info(
         `sanityCheckDuplicates: committed. Total deleted: ${totalDeleted} rows.`
       );
 
-      // Identify imperfect duplicates for logging/output
+      // Identify and log groups with only imperfect duplicates for reporting
       const imperfectRes = await client.query<ImperfectDuplicateRow>(
         imperfectDuplicatesSql,
-        [cutoffTms, cutoffTms]
+        [cutoffTms]
       );
       const imperfectDuplicates = imperfectRes.rows
         .map((row) => row.user_attr2)
@@ -1507,7 +1448,7 @@ RETURNING d.user_attr1, d.user_attr2;
       const imperfectDuplicatesFilePath = await this.writeBadRowsToFile(
         imperfectDuplicates.map((ua2) => ({
           user_attr2: ua2,
-          reason: "Imperfect Duplicate",
+          reason: "Imperfect Duplicate Group (No Action Taken)",
         })),
         "imperfect_duplicates.csv"
       );
