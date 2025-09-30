@@ -193,18 +193,20 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         const isExpanded = expandedDirectories[item.fileName];
         const displayName = item.fileName.split("/").pop();
 
-        const parts = item.fileName.split('/');
+        const parts = item.fileName.split("/");
         const isExpandable = !(
-          item.fileName.startsWith('SPLIT_APPLICATION_FORMS/') ||
-          item.fileName.startsWith('Data/APPLICATION_FORMS/')
+          item.isDirectory &&
+          level > 0 &&
+          (item.fileName.startsWith("SPLIT_APPLICATION_FORMS/") ||
+            item.fileName.startsWith("Data/SPLIT_APPLICATION_FORMS/") ||
+            item.fileName.startsWith("Data/APPLICATION_FORMS/") ||
+            item.fileName.startsWith("APPLICATION_FORMS/"))
         );
 
         return (
           <React.Fragment key={item.fileName}>
             <tr
-              className={`${
-                level > 0 ? "bg-white" : "bg-gray-100"
-              } border-b`}
+              className={`${level > 0 ? "bg-white" : "bg-gray-100"} border-b`}
             >
               <td
                 className="px-2 py-1"
@@ -212,16 +214,16 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               >
                 {item.isDirectory ? (
                   isExpandable ? (
-                  <button
-                    onClick={() => toggleDirectory(item.fileName)}
-                    className="font-semibold text-black hover:underline focus:outline-none"
-                  >
-                    {displayName} ({item.totalFiles ?? children.length} files)
-                  </button>
+                    <button
+                      onClick={() => toggleDirectory(item.fileName)}
+                      className="font-semibold text-black hover:underline focus:outline-none"
+                    >
+                      {displayName} ({item.totalFiles ?? children.length} files)
+                    </button>
                   ) : (
-                  <span className="font-semibold text-black">
-                    {displayName} ({item.totalFiles ?? children.length} files)
-                  </span>
+                    <span className="font-semibold text-black">
+                      {displayName} ({item.totalFiles ?? children.length} files)
+                    </span>
                   )
                 ) : (
                   displayName
@@ -749,7 +751,9 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             <p>No MongoDB duplicates found.</p>
           )}
           {log.duplicates.length > 0 && (
-            <button onClick={() => toggleSection(`mongo-duplicate-check-${logKey}`)}>
+            <button
+              onClick={() => toggleSection(`mongo-duplicate-check-${logKey}`)}
+            >
               {isExpanded ? "Hide Details" : "Show Details"}
             </button>
           )}
@@ -760,9 +764,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <table className="w-full text-sm text-left">
                 <thead className="text-xs uppercase bg-gray-50">
                   <tr>
-                    <th scope="col" className="px-2 py-1">Client ID</th>
-                    <th scope="col" className="px-2 py-1">Transaction No</th>
-                    <th scope="col" className="px-2 py-1">Duplicate Count</th>
+                    <th scope="col" className="px-2 py-1">
+                      Client ID
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Transaction No
+                    </th>
+                    <th scope="col" className="px-2 py-1">
+                      Duplicate Count
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
