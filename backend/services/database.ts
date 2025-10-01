@@ -580,18 +580,6 @@ page_count, client_id
       }
       // --- End of new logic for client_id lookup ---
 
-      const queryText = `
-INSERT INTO investor.aif_document_details(
-document_process, document_activity, document_type, document_format, document_path,
-folio_id, transaction_reference_id, document_status, mime_type,
-user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,
-user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
-approval_status, approved_by, approved_on, comments, audit_code,
-del_flag, last_update_tms, last_updated_by, creation_date, created_by,
-page_count, client_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
-`;
-
       const trxnNameMap: Record<string, string> = {
         IC: "Initial Contribution Form",
         NCT: "Non Commercial Transactions Form",
@@ -611,90 +599,99 @@ page_count, client_id
 
       let insertedRows = 0;
       const badRows: any[] = [];
-      for (const [index, data] of transactions.entries()) {
-        const ext = this.getFileExtension(data.id_path);
-        if (!ext) {
-          this.logger.warn(
-            `executeSql: row ${index + 2} has invalid file extension`
-          );
-          logs.push({
-            row: index + 2,
-            status: "error",
-            message: "Invalid file extension",
-          });
-          badRows.push({
-            id_ihno: data.id_ihno,
-            reason: "Invalid file extension",
-          });
-          continue;
+      const chunkSize = 500; // Process 500 rows at a time
+
+      for (let i = 0; i < transactions.length; i += chunkSize) {
+        const chunk = transactions.slice(i, i + chunkSize);
+        const valueParams: any[] = [];
+        const valueStrings: string[] = [];
+        let paramIndex = 1;
+
+        for (const [indexInChunk, data] of chunk.entries()) {
+          const originalIndex = i + indexInChunk;
+          const ext = this.getFileExtension(data.id_path);
+          if (!ext) {
+            this.logger.warn(
+              `executeSql: row ${originalIndex + 2} has invalid file extension`
+            );
+            logs.push({
+              row: originalIndex + 2,
+              status: "error",
+              message: "Invalid file extension",
+            });
+            badRows.push({
+              id_ihno: data.id_ihno,
+              reason: "Invalid file extension",
+            });
+            continue;
+          }
+
+          const format = ext.replace(".", "").toUpperCase();
+          const actualClientId = clientIdMap.get(String(data.id_fund));
+          if (actualClientId === undefined) {
+            this.logger.warn(
+              `executeSql: client_id not found for id_fund: ${
+                data.id_fund
+              } at row ${originalIndex + 2}`
+            );
+            logs.push({
+              row: originalIndex + 2,
+              status: "error",
+              message: `Client ID not found for id_fund: ${data.id_fund}`,
+            });
+            badRows.push({
+              id_ihno: data.id_ihno,
+              reason: `Client ID not found for id_fund: ${data.id_fund}`,
+            });
+            continue;
+          }
+
+          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
+          const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+          const mime = mimeType[ext.replace(".", "")] || "Unknown";
+
+          const rowValues = [
+            this.trxnMap[data.id_trtype] || "Unknown",
+            "Image Upload",
+            trxnNameMap[data.id_trtype] || "Unknown",
+            format,
+            docPath,
+            null,
+            data.id_ihno.toString(),
+            "A",
+            mime,
+            null,
+            data.id_ihno.toString(),
+            data.id_acno,
+            null, null, null, null, null, null, null, null, null, null, null, null,
+            false, new Date(), "system", new Date(), "system",
+            data.page_count,
+            actualClientId,
+          ];
+
+          const paramsForQuery = rowValues.map(() => `$${paramIndex++}`);
+          valueStrings.push(`(${paramsForQuery.join(", ")})`);
+          valueParams.push(...rowValues);
         }
 
-        const format = ext.replace(".", "").toUpperCase();
-        const actualClientId = clientIdMap.get(String(data.id_fund));
-        const finalClientId =
-          actualClientId !== undefined ? actualClientId : null; // Use null if not found
-        if (finalClientId === null) {
-          this.logger.warn(
-            `executeSql: client_id not found for id_fund: ${
-              data.id_fund
-            } at row ${index + 2}`
-          );
-          logs.push({
-            row: index + 2,
-            status: "error",
-            message: `Client ID not found for id_fund: ${data.id_fund}`,
-          });
-          badRows.push({
-            id_ihno: data.id_ihno,
-            reason: `Client ID not found for id_fund: ${data.id_fund}`,
-          });
-          continue; // Skip this row if client_id is not found
+        if (valueStrings.length > 0) {
+          const queryText = `
+            INSERT INTO investor.aif_document_details(
+              document_process, document_activity, document_type, document_format, document_path,
+              folio_id, transaction_reference_id, document_status, mime_type,
+              user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,
+              user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
+              approval_status, approved_by, approved_on, comments, audit_code,
+              del_flag, last_update_tms, last_updated_by, creation_date, created_by,
+              page_count, client_id
+            ) VALUES ${valueStrings.join(", ")}
+          `;
+          this.logger.info(`executeSql: executing batch of ${valueStrings.length} rows.`);
+          const result = await client.query(queryText, valueParams);
+          insertedRows += result.rowCount || 0;
         }
-        const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-        const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
-
-        const mime = mimeType[ext.replace(".", "")] || "Unknown";
-        this.logger.info(`ext: ${ext}, mime: ${mime}`);
-
-        const values = [
-          this.trxnMap[data.id_trtype] || "Unknown",
-          "Image Upload",
-          trxnNameMap[data.id_trtype] || "Unknown",
-          format,
-          docPath,
-          null,
-          data.id_ihno.toString(),
-          "A",
-          mimeType[ext.replace(".", "")] || "Unknown",
-          null,
-          data.id_ihno.toString(),
-          data.id_acno,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          false,
-          new Date(),
-          "system",
-          new Date(),
-          "system",
-          data.page_count,
-          finalClientId,
-        ];
-
-        await client.query(queryText, values);
-        insertedRows++;
       }
-      this.logger.debug(`executeSql: preparing row ${insertedRows}`);
-      this.logger.info(`executeSql: inserted ${insertedRows} rows`);
+      this.logger.info(`executeSql: inserted a total of ${insertedRows} rows`);
 
       await client.query("COMMIT");
       this.logger.info("executeSql: COMMIT successful");
