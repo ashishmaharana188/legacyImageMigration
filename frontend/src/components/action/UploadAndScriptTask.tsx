@@ -361,6 +361,56 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     }
   }, [selectedFile, updateTaskLog, clearTaskLog]);
 
+  const handleSplitFilesWithMuPDF = useCallback(async () => {
+    if (!selectedFile) {
+      setSplitMessage("Please upload a file first.");
+      return;
+    }
+    clearTaskLog("uploadAndScript");
+    setUploadStatuses([]); // Clear previous upload progress
+    setLoading(true);
+    setSplitMessage("Splitting files with MuPDF");
+    updateTaskLog("uploadAndScript", "Splitting files with MuPDF");
+
+    // Initialize splitting progress status
+    setUploadStatuses((prevStatuses) => {
+      const splittingStatus: UploadStatus = {
+        fileName: "splitting_progress",
+        status: "Starting",
+        totalOriginalFilesProcessed: 0,
+        totalSplitFilesGenerated: 0,
+        splitErrors: 0,
+        currentlySplittingFiles: "",
+        progress: 0,
+      };
+      return [...prevStatuses, splittingStatus];
+    });
+
+    try {
+      const res = await axios.post<FileResponse>(
+        "http://localhost:3000/split-mupdf"
+      );
+      setSplitFiles(res.data.splitFiles || []);
+      setSplitMessage(res.data.message || "Splitting successful");
+      updateTaskLog("uploadAndScript", res.data);
+    } catch (error: any) {
+      const errorMessage = `Splitting failed: ${
+        error.response?.data?.message || error.message
+      }`;
+      setSplitMessage(errorMessage);
+      updateTaskLog("uploadAndScript", { message: errorMessage });
+      setUploadStatuses((prevStatuses) =>
+        prevStatuses.map((s) =>
+          s.fileName === "splitting_progress"
+            ? { ...s, status: "Failed", progress: 0 }
+            : s
+        )
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedFile, updateTaskLog, clearTaskLog, setUploadStatuses]);
+
   return (
     <UploadAndScriptUI
       selectedFile={selectedFile}
@@ -372,6 +422,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       handleUpload={handleUpload}
       handleFallback={handleFallback}
       handleSplitFiles={handleSplitFiles}
+      handleSplitFilesWithMuPDF={handleSplitFilesWithMuPDF}
       handleUploadToS3={handleUploadToS3}
       handleUploadSplitFilesToS3={handleUploadSplitFilesToS3}
     />

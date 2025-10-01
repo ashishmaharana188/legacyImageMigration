@@ -510,4 +510,190 @@ export class Splitting {
       },
     };
   }
+
+  async splitFilesWithMuPDF(): Promise<SplitResult> {
+    const createdSplitFiles: {
+      originalPath: string;
+      splitPath: string;
+      page: number;
+    }[] = [];
+    let totalOriginalFilesProcessed = 0;
+    let totalSplitFilesGenerated = 0;
+    let splitErrors = 0;
+
+    this.logger.info("Starting file splitting with MuPDF");
+
+    const scanAndProcessDirectory = async (
+      inputDir: string,
+      outputDir: string
+    ) => {
+      let folders: string[];
+      try {
+        folders = await fs.readdir(inputDir);
+      } catch (err) {
+        this.logger.error(`Failed to read directory ${inputDir}`, {
+          error: err,
+        });
+        return;
+      }
+
+      for (const folder of folders) {
+        const inputFolderPath = path.join(inputDir, folder);
+        const outputFolderPath = path.join(outputDir, folder);
+        const stats = await fs.stat(inputFolderPath);
+        if (stats.isDirectory()) {
+          await fs.mkdir(outputFolderPath, { recursive: true });
+          const files = await fs.readdir(inputFolderPath);
+          const fileTasks = files.map((file) =>
+            this.limit(async () => {
+              const filePath = path.join(inputFolderPath, file);
+              const fileStats = await fs.stat(filePath);
+              if (fileStats.isFile()) {
+                totalOriginalFilesProcessed++;
+                const fileName = path.basename(filePath);
+                broadcast(
+                  JSON.stringify({
+                    type: "splitProgressUpdate",
+                    totalOriginalFilesProcessed,
+                    totalSplitFilesGenerated,
+                    splitErrors,
+                    currentlySplittingFiles: fileName,
+                    status: `Processing original file: ${fileName}`,
+                  })
+                );
+
+                try {
+                  const splitFilePaths = await runPythonMuPDF(
+                    filePath,
+                    outputFolderPath,
+                    fileName,
+                    this.logger
+                  );
+                  
+                  splitFilePaths.forEach((splitPath) => {
+                    createdSplitFiles.push({
+                      originalPath: filePath,
+                      splitPath: splitPath,
+                      page: 0, // Page number is not critical here as we get it from the script output
+                    });
+                    totalSplitFilesGenerated++;
+                  });
+
+                  broadcast(
+                    JSON.stringify({
+                      type: "splitProgressUpdate",
+                      totalOriginalFilesProcessed,
+                      totalSplitFilesGenerated,
+                      splitErrors,
+                      currentlySplittingFiles: fileName,
+                      status: `Split file: ${fileName}`,
+                    })
+                  );
+                } catch (err) {
+                  this.logger.error(`Error processing ${fileName} with MuPDF`, {
+                    error: err,
+                  });
+                  splitErrors++;
+                  broadcast(
+                    JSON.stringify({
+                      type: "splitProgressUpdate",
+                      totalOriginalFilesProcessed,
+                      totalSplitFilesGenerated,
+                      splitErrors,
+                      currentlySplittingFiles: fileName,
+                      status: `Error splitting file: ${fileName}`,
+                    })
+                  );
+                }
+              }
+            })
+          );
+          await Promise.all(fileTasks);
+          await scanAndProcessDirectory(inputFolderPath, outputFolderPath);
+        }
+      }
+    };
+
+    await fs.mkdir(this.splitFolder, { recursive: true });
+    await scanAndProcessDirectory(this.baseFolder, this.splitFolder);
+    this.logger.info("File splitting with MuPDF complete");
+
+    const totalExpectedPagesFromCsv = await this.getTotalExpectedPagesFromCsv();
+
+    broadcast(
+      JSON.stringify({
+        type: "splitProgressComplete",
+        totalOriginalFilesProcessed,
+        totalSplitFilesGenerated,
+        splitErrors,
+        totalExpectedPagesFromCsv,
+        status: "File splitting with MuPDF complete",
+      })
+    );
+    
+    // Simplified result for now, can be enhanced with CSV verification like in splitFiles
+    return {
+      splitFiles: createdSplitFiles,
+      summary: {
+        totalOriginalFilesProcessed,
+        totalExpectedSplits: 0, // Not calculated in this flow
+        totalSplitFilesGenerated,
+        splitErrors,
+        totalExpectedPagesFromCsv,
+      },
+    };
+  }
+}
+
+async function runPythonMuPDF(
+  filePath: string,
+  outputFolderPath: string,
+  fileName: string,
+  logger: winston.Logger
+): Promise<string[]> {
+  const projectRoot = path.resolve(__dirname, "../../..");
+  const pythonScript = path.join(
+    projectRoot,
+    "backend",
+    "services",
+    "mupdf_splitter.py"
+  );
+  const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
+  try {
+    logger.info(
+      `Attempting Python split for ${fileName} using script: ${pythonScript} and executable: ${pythonExecutable}`
+    );
+    const { stdout, stderr } = await execPromise(
+      `${pythonExecutable} "${pythonScript}" "${filePath}" "${outputFolderPath}"`
+    );
+    logger.info(`Python split succeeded for ${fileName}`, { stdout });
+    if (stderr)
+      logger.warn(`Python split stderr for ${fileName}`, { stderr });
+
+    const match = stdout.match(/Split (\d+) pages successfully/);
+    if (match && match[1]) {
+      const splitCount = parseInt(match[1], 10);
+      logger.info(`Extracted split count from Python script: ${splitCount}`);
+      const splitFilePaths: string[] = [];
+      const fileExt = path.extname(fileName);
+      const baseName = path.basename(fileName, fileExt);
+      for (let i = 0; i < splitCount; i++) {
+        const splitFileName = `${baseName}_${i + 1}${fileExt}`;
+        splitFilePaths.push(path.join(outputFolderPath, splitFileName));
+      }
+      return splitFilePaths;
+    } else {
+      logger.warn(
+        "Could not extract split count from Python script stdout.",
+        { stdout }
+      );
+      return [];
+    }
+  } catch (error) {
+    logger.error(`Python split failed for ${fileName}`, {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
+    throw error;
+  }
 }

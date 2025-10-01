@@ -141,6 +141,7 @@ app.get(
 );
 
 app.post("/split-files", fileController.splitFiles);
+app.post("/split-mupdf", fileController.splitFilesWithMuPDF);
 app.post("/upload-split-to-s3", fileController.uploadSplitFilesToS3);
 app.post("/process-sql-mongo", fileController.processSqlMongo);
 

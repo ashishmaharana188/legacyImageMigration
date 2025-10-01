@@ -6,6 +6,7 @@ import SanityCheckTask from "./components/action/SanityCheckTask";
 import Sidebar from "./components/ui/Sidebar";
 import SummaryDisplay from "./components/ui/SummaryDisplay";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
+import AggregateProgressDisplay from "./components/ui/AggregateProgressDisplay";
 
 interface SummaryItem {
   fileName: string;
@@ -104,13 +105,49 @@ type TaskLog =
   | MongoTransferLog
   | FolioTransactionUpdateLog;
 
+interface S3UploadProgress {
+  processed: number;
+  total: number;
+}
+
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<string | null>(null);
   const [summaryData, setSummaryData] = useState<SummaryItem[]>([]);
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: TaskLog[] }>({});
+
+  // State for the high-level S3 progress
+  const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({
+    processed: 0,
+    total: 0,
+  });
+
+  // Ref to accumulate progress updates without triggering re-renders
+  const progressAccumulator = useRef<S3UploadProgress>({
+    processed: 0,
+    total: 0,
+  });
+
   const reconnectAttempts = useRef(0);
+
+  // This effect sets up an interval to batch updates from the ref to the state
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Only update state if the accumulated value has changed
+      setS3UploadProgress((prevProgress) => {
+        if (
+          prevProgress.processed !== progressAccumulator.current.processed ||
+          prevProgress.total !== progressAccumulator.current.total
+        ) {
+          return { ...progressAccumulator.current };
+        }
+        return prevProgress;
+      });
+    }, 200); // Update the UI every 200ms
+
+    return () => clearInterval(interval); // Cleanup on unmount
+  }, []);
 
   useEffect(() => {
     let ws: WebSocket | null = null;
@@ -131,7 +168,19 @@ const App: React.FC = () => {
       ws.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          console.log("WebSocket message received:", message);
+          // console.log("WebSocket message received:", message); // Too noisy for 200k files
+
+          // --- START of S3 Progress Handling Logic ---
+          if (message.type === "s3-upload-total") {
+            progressAccumulator.current.total = message.totalFiles;
+          }
+
+          if (message.type === "s3-upload-progress") {
+            // This is the only thing that happens on each message: a cheap ref update.
+            // No state change, no re-render.
+            progressAccumulator.current.processed += 1;
+          }
+          // --- END of S3 Progress Handling Logic ---
 
           if (
             message.type === "progressUpdate" ||
@@ -210,6 +259,8 @@ const App: React.FC = () => {
             message.type === "progress" ||
             message.type === "complete"
           ) {
+            // This logic is for the detailed, per-file view which we are avoiding for the 200k scenario
+            // It can remain for other smaller uploads if needed, but won't be triggered by the new message types
             setTimeout(() => {
               setUploadStatuses((prevStatuses) => {
                 const { fileName, progress, status, isDirectory, totalFiles } =
@@ -332,6 +383,14 @@ const App: React.FC = () => {
     setTaskLogs((prev) => ({ ...prev, [task]: [] }));
   }, []);
 
+  // Reset progress when a new task is selected
+  const handleSelectTaskAndReset = (task: string) => {
+    progressAccumulator.current = { processed: 0, total: 0 };
+    setS3UploadProgress({ processed: 0, total: 0 });
+    setUploadStatuses([]); // Also clear the detailed statuses
+    handleSelectTask(task);
+  };
+
   return (
     <div
       className="flex min-h-screen"
@@ -341,11 +400,18 @@ const App: React.FC = () => {
         open={open}
         handleDrawerOpen={handleDrawerOpen}
         handleDrawerClose={handleDrawerClose}
-        onSelectTask={handleSelectTask} // Pass the new handler
+        onSelectTask={handleSelectTaskAndReset} // Use the resetting handler
       />
       <PanelGroup direction="horizontal" className="flex-grow">
         <Panel defaultSize={67} minSize={10}>
           <div className="p-4 border-r border-gray-300 h-full overflow-y-auto">
+            {/* Render the new aggregate progress display */}
+            {s3UploadProgress.total > 0 && (
+              <AggregateProgressDisplay
+                processedFiles={s3UploadProgress.processed}
+                totalFiles={s3UploadProgress.total}
+              />
+            )}
             <SummaryDisplay
               taskLogs={taskLogs}
               uploadStatuses={uploadStatuses}

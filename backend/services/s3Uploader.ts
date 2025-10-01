@@ -82,29 +82,15 @@ export async function uploadFile(
       },
     });
 
-    upload.on("httpUploadProgress", (progress) => {
-      if (progress.loaded !== undefined && progress.total !== undefined) {
-        const percentage = Math.round((progress.loaded / progress.total) * 100);
-        broadcast(
-          JSON.stringify({
-            type: "progress",
-            fileName: key,
-            progress: percentage,
-            isDirectory: false,
-          })
-        );
-      }
-    });
+    // The httpUploadProgress event is too noisy for 200k files.
+    // We will only send a single message when the upload is done.
+    // upload.on("httpUploadProgress", (progress) => { ... });
 
     await upload.done();
-    broadcast(
-      JSON.stringify({
-        type: "complete",
-        fileName: key,
-        status: "Done",
-        isDirectory: false,
-      })
-    );
+
+    // Send a simple, lightweight message for each successful upload.
+    broadcast(JSON.stringify({ type: "s3-upload-progress" }));
+
     console.log(`[UPLOADED] ${key}`);
   } catch (err: any) {
     if (isAuthError(err)) {
@@ -138,6 +124,14 @@ async function performIterativeUpload(
     return { successful: [], failed: [] };
   }
 
+  // Send the total number of files to the client at the very beginning.
+  broadcast(
+    JSON.stringify({
+      type: "s3-upload-total",
+      totalFiles: totalFiles,
+    })
+  );
+
   let uploadedFiles = 0;
   const results = {
     successful: [] as string[],
@@ -147,30 +141,20 @@ async function performIterativeUpload(
     { localPath: localDir, s3Prefix: prefix },
   ];
 
-  broadcast(
-    JSON.stringify({
-      type: "progress",
-      fileName: prefix,
-      progress: 0,
-      status: "In progress",
-      isDirectory: true,
-      totalFiles: totalFiles,
-    })
-  );
+  // The detailed, per-directory progress is no longer needed with the aggregate counter.
+  // broadcast(
+  //   JSON.stringify({
+  //     type: "progress",
+  //     fileName: prefix,
+  //     progress: 0,
+  //     status: "In progress",
+  //     isDirectory: true,
+  //     totalFiles: totalFiles,
+  //   })
+  // );
 
-  const updateProgress = () => {
-    const progress =
-      totalFiles > 0 ? Math.round((uploadedFiles / totalFiles) * 100) : 100;
-    broadcast(
-      JSON.stringify({
-        type: "progress",
-        fileName: prefix,
-        progress: progress,
-        status: "In progress",
-        isDirectory: true,
-      })
-    );
-  };
+  // The updateProgress function is no longer needed as we send incremental updates.
+  // const updateProgress = () => { ... };
 
   while (directoryQueue.length > 0) {
     const { localPath, s3Prefix } = directoryQueue.shift()!; // Using as a queue
@@ -187,15 +171,15 @@ async function performIterativeUpload(
           const entryKey = `${s3Prefix}/${entry.name}`;
 
           if (entry.isDirectory()) {
-            // Announce the directory before adding it to the queue
-            broadcast(
-              JSON.stringify({
-                type: "progress",
-                fileName: entryKey,
-                status: "Starting...",
-                isDirectory: true,
-              })
-            );
+            // Announcing individual directories is too noisy.
+            // broadcast(
+            //   JSON.stringify({
+            //     type: "progress",
+            //     fileName: entryKey,
+            //     status: "Starting...",
+            //     isDirectory: true,
+            //   })
+            // );
             directoryQueue.push({ localPath: entryPath, s3Prefix: entryKey });
           } else {
             const fileUploadPromise = (async () => {
@@ -203,7 +187,7 @@ async function performIterativeUpload(
                 await uploadFile(entryPath, bucket, entryKey, entry.name);
                 results.successful.push(entry.name);
                 uploadedFiles++;
-                updateProgress();
+                // updateProgress(); // No longer needed
               } catch (uploadError: any) {
                 results.failed.push({
                   name: entry.name,
@@ -228,6 +212,7 @@ async function performIterativeUpload(
     }
   }
 
+  // Send a final message to signify the overall completion of the directory upload.
   broadcast(
     JSON.stringify({
       type: "complete",
