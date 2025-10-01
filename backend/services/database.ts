@@ -1347,7 +1347,8 @@ RETURNING d.user_attr1, d.user_attr2;
           if (row.perfect_rows_in_group > 0) {
             if (!row.is_perfect) {
               wouldBeDeleted = true;
-              reason = "Would be deleted: Imperfect row in a group with a perfect row.";
+              reason =
+                "Would be deleted: Imperfect row in a group with a perfect row.";
             } else {
               reason = "Perfect row, kept.";
             }
@@ -1356,15 +1357,18 @@ RETURNING d.user_attr1, d.user_attr2;
           }
 
           // This covers the case where a group might have perfect rows, but also multiple perfect rows.
-          if (row.perfect_rows_in_group === row.total_rows_in_group && row.total_rows_in_group > 1) {
-             if (row.rn_desc > 1) {
-                wouldBeDeleted = true;
-                reason = "Would be deleted: Older perfect row in an all-perfect group.";
-             } else {
-                reason = "Kept: Newest perfect row in an all-perfect group.";
-             }
+          if (
+            row.perfect_rows_in_group === row.total_rows_in_group &&
+            row.total_rows_in_group > 1
+          ) {
+            if (row.rn_desc > 1) {
+              wouldBeDeleted = true;
+              reason =
+                "Would be deleted: Older perfect row in an all-perfect group.";
+            } else {
+              reason = "Kept: Newest perfect row in an all-perfect group.";
+            }
           }
-
 
           return {
             id: row.id,
@@ -1387,7 +1391,9 @@ RETURNING d.user_attr1, d.user_attr2;
         );
         const imperfectDuplicates = imperfectRes.rows.map((r) => r.user_attr2);
 
-        const totalDuplicatesFound = processedRows.filter(p => p.wouldBeDeleted).length;
+        const totalDuplicatesFound = processedRows.filter(
+          (p) => p.wouldBeDeleted
+        ).length;
 
         this.logger.info(
           `sanityCheckDuplicates: dry-run complete. Found ${totalDuplicatesFound} rows that would be deleted.`
@@ -1405,14 +1411,18 @@ RETURNING d.user_attr1, d.user_attr2;
       }
 
       // Live Deletion
-      const delImperfectRes = await client.query(deleteImperfectSql, [cutoffTms]);
+      const delImperfectRes = await client.query(deleteImperfectSql, [
+        cutoffTms,
+      ]);
       logs.push({
         row: 0,
         status: "updated",
         message: `Rule 1 (Imperfects with Perfect) deleted ${delImperfectRes.rowCount} rows.`,
       });
 
-      const delOlderPerfectRes = await client.query(deleteOlderPerfectSql, [cutoffTms]);
+      const delOlderPerfectRes = await client.query(deleteOlderPerfectSql, [
+        cutoffTms,
+      ]);
       logs.push({
         row: 0,
         status: "updated",
@@ -1421,7 +1431,8 @@ RETURNING d.user_attr1, d.user_attr2;
 
       await client.query("COMMIT");
 
-      const totalDeleted = (delImperfectRes.rowCount ?? 0) + (delOlderPerfectRes.rowCount ?? 0);
+      const totalDeleted =
+        (delImperfectRes.rowCount ?? 0) + (delOlderPerfectRes.rowCount ?? 0);
       this.logger.info(
         `sanityCheckDuplicates: committed. Total deleted: ${totalDeleted} rows.`
       );

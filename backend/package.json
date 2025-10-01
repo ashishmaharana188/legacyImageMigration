@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "build": "npm run clean && tsc -b",
-    "start:prod": "set NODE_ENV=production&&node dist/app.js",
+    "start:prod": "cross-env NODE_ENV=production concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
     "start": "node dist/app.js",
     "dev": "cross-env NODE_ENV=development concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
     "clean": "rm -rf dist",

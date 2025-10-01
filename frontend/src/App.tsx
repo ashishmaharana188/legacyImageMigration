@@ -133,7 +133,10 @@ const App: React.FC = () => {
           const message = JSON.parse(event.data);
           console.log("WebSocket message received:", message);
 
-          if (message.type === "progressUpdate" || message.type === "progressComplete") {
+          if (
+            message.type === "progressUpdate" ||
+            message.type === "progressComplete"
+          ) {
             setUploadStatuses((prevStatuses) => {
               const fileName = "excel_processing"; // A fixed identifier for this task
               const existingFileIndex = prevStatuses.findIndex(
@@ -142,31 +145,53 @@ const App: React.FC = () => {
 
               const totalRows = message.totalRows || 0;
               const processedRows = message.processedRows || 0;
-              const progressPercentage = totalRows > 0 ? Math.round((processedRows / totalRows) * 100) : 0;
+              const progressPercentage =
+                totalRows > 0
+                  ? Math.round((processedRows / totalRows) * 100)
+                  : 0;
 
               let newStatus: UploadStatus = {
                 fileName: fileName,
                 progress: progressPercentage,
-                status: message.type === "progressComplete" ? "Complete" : "Processing",
+                status:
+                  message.type === "progressComplete"
+                    ? "Complete"
+                    : "Processing",
                 totalFiles: totalRows,
                 processedFiles: processedRows,
                 successfulFiles: message.successfulRows || 0,
                 errorFiles: message.errors || 0,
                 notFoundFiles: message.notFound || 0,
-                badRowsDetails: prevStatuses[existingFileIndex]?.badRowsDetails || [],
+                badRowsDetails:
+                  prevStatuses[existingFileIndex]?.badRowsDetails || [],
               };
 
-              if (message.currentRow && (message.currentRow.page_count_status === "Error" || message.currentRow.page_count_status === "Not Found" || message.currentRow.page_count_status === "Path Error" || message.currentRow.page_count_status === "Missing serverId" || message.currentRow.page_count_status === "Missing drivePath" || message.currentRow.page_count_status === "Missing pathVal" || message.currentRow.page_count_status === "Unsupported" || message.currentRow.page_count_status === "PDF Error")) {
+              if (
+                message.currentRow &&
+                (message.currentRow.page_count_status === "Error" ||
+                  message.currentRow.page_count_status === "Not Found" ||
+                  message.currentRow.page_count_status === "Path Error" ||
+                  message.currentRow.page_count_status === "Missing serverId" ||
+                  message.currentRow.page_count_status ===
+                    "Missing drivePath" ||
+                  message.currentRow.page_count_status === "Missing pathVal" ||
+                  message.currentRow.page_count_status === "Unsupported" ||
+                  message.currentRow.page_count_status === "PDF Error")
+              ) {
                 const currentBadRows = newStatus.badRowsDetails || [];
                 const isDuplicate = currentBadRows.some(
                   (detail) =>
                     detail.id_ihno === message.currentRow.id_ihno &&
                     detail.id_acno === message.currentRow.id_acno &&
-                    detail.page_count_status === message.currentRow.page_count_status
+                    detail.page_count_status ===
+                      message.currentRow.page_count_status
                 );
 
                 if (!isDuplicate) {
-                  newStatus.badRowsDetails = [...currentBadRows, message.currentRow];
+                  newStatus.badRowsDetails = [
+                    ...currentBadRows,
+                    message.currentRow,
+                  ];
                 }
               }
 
@@ -181,16 +206,28 @@ const App: React.FC = () => {
                 return [...prevStatuses, newStatus];
               }
             });
-          } else if (message.type === "progress" || message.type === "complete") {
+          } else if (
+            message.type === "progress" ||
+            message.type === "complete"
+          ) {
             setTimeout(() => {
               setUploadStatuses((prevStatuses) => {
-                const { fileName, progress, status, isDirectory, totalFiles } = message;
+                const { fileName, progress, status, isDirectory, totalFiles } =
+                  message;
                 const newStatuses = [...prevStatuses];
 
                 // Find or create the status entry for the current file or directory
-                let itemIndex = newStatuses.findIndex((s) => s.fileName === fileName);
+                let itemIndex = newStatuses.findIndex(
+                  (s) => s.fileName === fileName
+                );
                 if (itemIndex === -1) {
-                  newStatuses.push({ fileName, progress, status, isDirectory, totalFiles });
+                  newStatuses.push({
+                    fileName,
+                    progress,
+                    status,
+                    isDirectory,
+                    totalFiles,
+                  });
                   itemIndex = newStatuses.length - 1;
                 } else {
                   newStatuses[itemIndex] = {
@@ -204,21 +241,33 @@ const App: React.FC = () => {
 
                 // If it's a file, update its parent directory's progress
                 if (!isDirectory) {
-                  const pathParts = fileName.split('/');
+                  const pathParts = fileName.split("/");
                   if (pathParts.length > 1) {
-                    const parentDirName = pathParts.slice(0, -1).join('/');
-                    const parentDirIndex = newStatuses.findIndex((s) => s.fileName === parentDirName);
+                    const parentDirName = pathParts.slice(0, -1).join("/");
+                    const parentDirIndex = newStatuses.findIndex(
+                      (s) => s.fileName === parentDirName
+                    );
 
                     if (parentDirIndex !== -1) {
                       // Calculate the aggregate progress of the directory
-                      const children = newStatuses.filter(s => s.fileName.startsWith(parentDirName + '/') && !s.isDirectory);
-                      const totalProgress = children.reduce((acc, child) => acc + (child.progress || 0), 0);
-                      const averageProgress = children.length > 0 ? Math.round(totalProgress / children.length) : 0;
+                      const children = newStatuses.filter(
+                        (s) =>
+                          s.fileName.startsWith(parentDirName + "/") &&
+                          !s.isDirectory
+                      );
+                      const totalProgress = children.reduce(
+                        (acc, child) => acc + (child.progress || 0),
+                        0
+                      );
+                      const averageProgress =
+                        children.length > 0
+                          ? Math.round(totalProgress / children.length)
+                          : 0;
                       newStatuses[parentDirIndex].progress = averageProgress;
                     }
                   }
                 }
-                
+
                 return newStatuses;
               });
             }, 100); // 100ms delay
@@ -233,7 +282,10 @@ const App: React.FC = () => {
         if (reconnectTimeout) {
           clearTimeout(reconnectTimeout);
         }
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000); // Max 30 seconds
+        const delay = Math.min(
+          1000 * Math.pow(2, reconnectAttempts.current),
+          30000
+        ); // Max 30 seconds
         reconnectTimeout = setTimeout(() => {
           reconnectAttempts.current++;
           connectWebSocket();
@@ -343,16 +395,15 @@ const App: React.FC = () => {
               {taskLogs.sqlAndMongo &&
                 taskLogs.sqlAndMongo.length > 0 &&
                 (() => {
-                  const lastLog = taskLogs.sqlAndMongo[taskLogs.sqlAndMongo.length - 1];
+                  const lastLog =
+                    taskLogs.sqlAndMongo[taskLogs.sqlAndMongo.length - 1];
                   if (
-                    typeof lastLog !== 'string' &&
-                    ('message' in lastLog) &&
+                    typeof lastLog !== "string" &&
+                    "message" in lastLog &&
                     lastLog.message.includes("failed")
                   ) {
                     return (
-                      <p className="mt-4 text-red-600">
-                        {lastLog.message}
-                      </p>
+                      <p className="mt-4 text-red-600">{lastLog.message}</p>
                     );
                   }
                   return null;
