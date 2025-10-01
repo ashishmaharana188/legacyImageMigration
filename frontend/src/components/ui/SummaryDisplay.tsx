@@ -150,10 +150,6 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   const excelProcessingStatus = uploadStatuses.find(
     (s) => s.fileName === "excel_processing"
   );
-  const s3UploadStatuses = uploadStatuses.filter(
-    (s) =>
-      s.fileName !== "excel_processing" && s.fileName !== "splitting_progress"
-  );
 
   useEffect(() => {
     // This effect can be used to react to changes in props, if necessary.
@@ -176,108 +172,6 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
   const toggleSplitLog = (logId: string) => {
     setExpandedSplitLog((prev) => (prev === logId ? null : logId));
-  };
-
-  const renderS3Uploads = () => {
-    const renderItems = (items: UploadStatus[], level = 0) => {
-      return items.map((item) => {
-        const children = item.isDirectory
-          ? s3UploadStatuses.filter(
-              (child) =>
-                child.fileName.startsWith(item.fileName + "/") &&
-                child.fileName.split("/").length ===
-                  item.fileName.split("/").length + 1
-            )
-          : [];
-
-        const isExpanded = expandedDirectories[item.fileName];
-        const displayName = item.fileName.split("/").pop();
-
-        const parts = item.fileName.split("/");
-        const isExpandable = !(
-          item.isDirectory &&
-          level > 0 &&
-          (item.fileName.startsWith("SPLIT_APPLICATION_FORMS/") ||
-            item.fileName.startsWith("Data/SPLIT_APPLICATION_FORMS/") ||
-            item.fileName.startsWith("Data/APPLICATION_FORMS/") ||
-            item.fileName.startsWith("APPLICATION_FORMS/"))
-        );
-
-        return (
-          <React.Fragment key={item.fileName}>
-            <tr
-              className={`${level > 0 ? "bg-white" : "bg-gray-100"} border-b`}
-            >
-              <td
-                className="px-2 py-1"
-                style={{ paddingLeft: `${level * 20 + 4}px` }}
-              >
-                {item.isDirectory ? (
-                  isExpandable ? (
-                    <button
-                      onClick={() => toggleDirectory(item.fileName)}
-                      className="font-semibold text-black hover:underline focus:outline-none"
-                    >
-                      {displayName} ({item.totalFiles ?? children.length} files)
-                    </button>
-                  ) : (
-                    <span className="font-semibold text-black">
-                      {displayName} ({item.totalFiles ?? children.length} files)
-                    </span>
-                  )
-                ) : (
-                  displayName
-                )}
-              </td>
-              <td className="px-2 py-1">
-                {item.status === "Done" ? (
-                  <span className="text-black">Done</span>
-                ) : item.progress !== undefined ? (
-                  <div className="w-full bg-gray-300 rounded-full h-4">
-                    <div
-                      className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-                      style={{ width: `${item.progress}%` }}
-                    >
-                      {item.progress}%
-                    </div>
-                  </div>
-                ) : (
-                  "Starting..."
-                )}
-              </td>
-            </tr>
-            {isExpanded &&
-              isExpandable &&
-              children.length > 0 &&
-              renderItems(children, level + 1)}
-          </React.Fragment>
-        );
-      });
-    };
-
-    const allFileNames = new Set(s3UploadStatuses.map((s) => s.fileName));
-    const topLevelItems = s3UploadStatuses.filter((item) => {
-      const parts = item.fileName.split("/");
-      if (parts.length <= 1) return true;
-      const parentName = parts.slice(0, -1).join("/");
-      return !allFileNames.has(parentName);
-    });
-
-    return (
-      <table className="w-full text-sm text-left">
-        <thead className="text-xs uppercase bg-gray-50">
-          <tr>
-            <th scope="col" className="px-2 py-1">
-              Directory/File Name
-            </th>
-            <th scope="col" className="px-2 py-1">
-              Status
-            </th>
-          </tr>
-        </thead>
-        <tbody>{renderItems(topLevelItems)}</tbody>
-      </table>
-    );
   };
 
   const parseCsvContent = (csvString: string) => {
@@ -1008,23 +902,6 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                                   )}
                                 </div>
                               )}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    {s3UploadStatuses.length > 0 && (
-                      <div className="mt-4">
-                        <h5 className="font-semibold">S3 Upload Progress</h5>
-                        <button
-                          onClick={() => toggleSection("s3-upload-progress")}
-                        >
-                          {expandedSections["s3-upload-progress"]
-                            ? "Hide Details"
-                            : "Show Details"}
-                        </button>
-                        {expandedSections["s3-upload-progress"] && (
-                          <div className="bg-gray-100 p-2 rounded">
-                            {renderS3Uploads()}
                           </div>
                         )}
                       </div>
