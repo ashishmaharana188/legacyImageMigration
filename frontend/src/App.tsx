@@ -6,7 +6,6 @@ import SanityCheckTask from "./components/action/SanityCheckTask";
 import Sidebar from "./components/ui/Sidebar";
 import SummaryDisplay from "./components/ui/SummaryDisplay";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import AggregateProgressDisplay from "./components/ui/AggregateProgressDisplay";
 
 interface SummaryItem {
   fileName: string;
@@ -405,13 +404,6 @@ const App: React.FC = () => {
       <PanelGroup direction="horizontal" className="flex-grow">
         <Panel defaultSize={67} minSize={10}>
           <div className="p-4 border-r border-gray-300 h-full overflow-y-auto">
-            {/* Render the new aggregate progress display */}
-            {s3UploadProgress.total > 0 && (
-              <AggregateProgressDisplay
-                processedFiles={s3UploadProgress.processed}
-                totalFiles={s3UploadProgress.total}
-              />
-            )}
             <SummaryDisplay
               taskLogs={taskLogs}
               uploadStatuses={uploadStatuses}
