@@ -97,31 +97,76 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const [totalFilesToUpload, setTotalFilesToUpload] = useState(0);
   const [uploadedCount, setUploadedCount] = useState(0);
 
+  // Refs for throttling
+  const s3ProgressQueueRef = useRef(0);
+  const splitProgressLatestRef = useRef<any | null>(null);
+  const throttleTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const THROTTLE_INTERVAL = 3000; // Update UI every 200ms
+
+  const applyThrottledUpdates = useCallback(() => {
+    // Apply batched S3 progress
+    if (s3ProgressQueueRef.current > 0) {
+      setUploadedCount((prev) => prev + s3ProgressQueueRef.current);
+      s3ProgressQueueRef.current = 0;
+    }
+
+    // Apply latest split progress
+    const latestSplitMessage = splitProgressLatestRef.current;
+    if (latestSplitMessage) {
+      setUploadStatuses((prev) => {
+        const newStatuses = prev.filter(
+          (s) => s.fileName !== "splitting_progress"
+        );
+        const isComplete = latestSplitMessage.type === "splitProgressComplete";
+        const progress = isComplete
+          ? 100
+          : latestSplitMessage.totalExpectedSplits > 0
+          ? (latestSplitMessage.totalSplitFilesGenerated /
+              latestSplitMessage.totalExpectedSplits) *
+            100
+          : 0;
+
+        newStatuses.push({
+          fileName: "splitting_progress",
+          status: isComplete
+            ? "Done"
+            : latestSplitMessage.status || "In Progress",
+          progress: progress,
+          ...latestSplitMessage,
+        });
+        return newStatuses;
+      });
+      updateTaskLog("uploadAndScript", { splitSummary: latestSplitMessage });
+      splitProgressLatestRef.current = null;
+    }
+
+    throttleTimerRef.current = null;
+  }, [setUploadStatuses, updateTaskLog]);
+
   useEffect(() => {
     const handleMessage = (message: any) => {
-      console.log("WebSocket message received via service:", message);
+      let needsUpdate = false;
 
       if (message.type === "s3-upload-total") {
         setTotalFilesToUpload(message.totalFiles || 0);
         setUploadedCount(0);
+        s3ProgressQueueRef.current = 0;
       } else if (message.type === "s3-upload-progress") {
-        setUploadedCount((prev) => prev + 1);
-      } else if (message.type === "splitProgressUpdate" || message.type === "splitProgressComplete") {
-        setUploadStatuses((prev) => {
-          const newStatuses = prev.filter((s) => s.fileName !== "splitting_progress");
-          const progress =
-            message.totalExpectedSplits > 0
-              ? (message.totalSplitFilesGenerated / message.totalExpectedSplits) * 100
-              : 0;
-          newStatuses.push({
-            fileName: "splitting_progress",
-            status: message.type === "splitProgressComplete" ? "Done" : message.status || "In Progress",
-            progress: message.type === "splitProgressComplete" ? 100 : progress,
-            ...message,
-          });
-          return newStatuses;
-        });
-        updateTaskLog("uploadAndScript", { splitSummary: message });
+        s3ProgressQueueRef.current += 1;
+        needsUpdate = true;
+      } else if (
+        message.type === "splitProgressUpdate" ||
+        message.type === "splitProgressComplete"
+      ) {
+        splitProgressLatestRef.current = message;
+        needsUpdate = true;
+      }
+
+      if (needsUpdate && !throttleTimerRef.current) {
+        throttleTimerRef.current = setTimeout(
+          applyThrottledUpdates,
+          THROTTLE_INTERVAL
+        );
       }
     };
 
@@ -129,8 +174,11 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
 
     return () => {
       webSocketService.removeListener(handleMessage);
+      if (throttleTimerRef.current) {
+        clearTimeout(throttleTimerRef.current);
+      }
     };
-  }, [setUploadStatuses, updateTaskLog]);
+  }, [applyThrottledUpdates]);
 
   useEffect(() => {
     if (totalFilesToUpload > 0) {
@@ -143,7 +191,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
           ...otherStatuses,
           {
             fileName: "s3_upload_progress",
-            status: uploadedCount === totalFilesToUpload ? "Done" : "Uploading...",
+            status:
+              uploadedCount === totalFilesToUpload ? "Done" : "Uploading...",
             progress: progress,
             totalFiles: totalFilesToUpload,
             processedFiles: uploadedCount,
@@ -262,12 +311,12 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     setSummaryData([]);
     setUploadedCount(0);
     setTotalFilesToUpload(0);
-    setUploadStatuses([{"fileName": "s3_upload_progress", "status": "Starting", "progress": 0}]);
+    setUploadStatuses([
+      { fileName: "s3_upload_progress", status: "Starting", progress: 0 },
+    ]);
 
     try {
-      await axios.post<FileResponse>(
-        "http://localhost:3000/upload-to-s3"
-      );
+      await axios.post<FileResponse>("http://localhost:3000/upload-to-s3");
     } catch (error: any) {
       const errorMessage = `Upload to S3 failed: ${
         error.response?.data?.message || error.message
@@ -286,7 +335,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     updateTaskLog("uploadAndScript", "Initiating split file S3 upload...");
     setUploadedCount(0);
     setTotalFilesToUpload(0);
-    setUploadStatuses([{"fileName": "s3_upload_progress", "status": "Starting", "progress": 0}]);
+    setUploadStatuses([
+      { fileName: "s3_upload_progress", status: "Starting", progress: 0 },
+    ]);
     try {
       await axios.post<FileResponse>(
         "http://localhost:3000/upload-split-to-s3",
