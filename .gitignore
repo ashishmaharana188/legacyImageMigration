@@ -9,6 +9,7 @@ lerna-debug.log*
 .env
 .gemini
 New folder
+error.txt
 
 localFiles
 node_modules

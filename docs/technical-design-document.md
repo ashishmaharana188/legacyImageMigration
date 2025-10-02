@@ -35,4 +35,40 @@ To address this, the `executeSql` function in `backend/services/database.ts` was
 
 **Benefit:**
 
-This change drastically reduces the number of network round-trips required to insert the data, resulting in a significant improvement in insertion speed and a reduction in the overall load on the database. The performance gain is most noticeable over remote or high-latency connections.
+This change drastically reduces the number of network round-trips required to insert the data, resulting in a significant improvement in insertion speed and a reduction in the overall load on the database. ### 4.2. Sanity Check Duplicates Enhancement
+
+**Definition of a Perfect Row:**
+A row is considered "perfect" if all of the following fields are populated (not NULL): `folio_id`, `transaction_reference_id`, `user_attr1`, `user_attr2`, and `client_id`.
+
+**Definition of an Imperfect Row:**
+A row is considered "imperfect" if any of the fields required for a perfect row (`folio_id`, `transaction_reference_id`, `user_attr1`, `user_attr2`, or `client_id`) are missing (NULL).
+
+**Problem:**
+
+The initial implementation of the `sanityCheckDuplicates` function in `backend/services/database.ts` primarily focused on deleting imperfect duplicate rows only when a corresponding "perfect" row (i.e., a row with `folio_id`, `transaction_reference_id`, `user_attr1`, `user_attr2`, and `client_id` all populated) existed within the same `user_attr1` group. This left scenarios where groups of `user_attr1`s contained multiple "imperfect" duplicates but no "perfect" rows unaddressed, leading to an inflated count of imperfect data and hindering the finalization of accurate perfect and imperfect data counts.
+
+**Solution:**
+
+To provide a more comprehensive duplicate mitigation strategy, a new deletion rule has been introduced to handle groups of `user_attr1`s that consist solely of imperfect duplicates. This enhancement ensures that even in the absence of a perfect row, duplicate imperfect entries are reduced to a single, most recent record.
+
+**Implementation Details:**
+
+-   **New Deletion Rule (Rule 3):** A new SQL query, `deleteImperfectDuplicatesSql`, was added to `backend/services/database.ts`. This query identifies groups of `aif_document_details` records that share the same `client_id` and `user_attr1` (normalized if specified), where:
+    *   The group contains more than one record.
+    *   None of the records in the group meet the criteria for a "perfect" row (i.e., all are imperfect).
+    *   Within such groups, all records except the most recent one (ordered by `creation_date` descending, then `id` descending) are marked for deletion.
+-   **Integration into `sanityCheckDuplicates`:**
+    *   **Dry Run:** The `dryRun` logic within `sanityCheckDuplicates` was updated to incorporate this new rule and the revised definition of a "perfect" row. When simulating deletions, rows that would be removed by `deleteImperfectDuplicatesSql` are now correctly identified and marked with a `wouldBeDeleted` flag and an appropriate `reason`. This provides a more accurate preview of the changes.
+    *   **Live Deletion:** The `deleteImperfectDuplicatesSql` query is now executed as part of the live deletion process, following the existing rules for deleting imperfects with perfect counterparts and older perfect duplicates.
+    *   **Total Deleted Count:** The `totalDeleted` count in the live deletion summary now includes the rows deleted by this new rule, providing an accurate total of mitigated duplicates.
+
+**Benefit:**
+
+This enhancement allows for a more robust and complete sanity check process. By addressing imperfect duplicate groups that lack perfect rows, the system can:
+-   **Finalize Accurate Counts:** Provide more precise "Perfect count" and "Imperfect count" metrics, reflecting the true state of data after duplicate mitigation.
+-   **Mitigate Duplicates:** Empower users to effectively reduce redundant imperfect data, streamlining the process of identifying and fixing remaining imperfect records.
+-   **Improved Data Quality:** Contribute to overall better data quality by systematically removing unnecessary duplicate entries, even in complex imperfect scenarios.
+
+## 5. Conclusion
+
+(Summary of the document and future considerations.)
