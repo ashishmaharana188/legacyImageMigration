@@ -1,16 +1,16 @@
 # Legacy Image Migration Local Development Application Architecture
 
 ## Overview
-
 The Legacy Image Migration application is a full-stack web solution for processing Excel files, generating and splitting TIFF files, uploading to AWS S3, and inserting data into relational and MongoDB databases. It includes duplicate checking, S3 browsing, and real-time updates via WebSocket.
 
 ## Architecture Components
 
 ### 1. Frontend
-
 - **Framework**: React, TypeScript, Vite
 - **Location**: `frontend/src`
 - **Key Components**:
+  - **Routing** (`frontend/src/routes`):
+    - Manages client-side routing for navigation between views.
   - **Action Components** (`frontend/src/components/action`):
     - `DetailsDisplayTask.tsx`: Displays processed file details.
     - `ProgressTrackingTask.tsx`: Tracks processing progress.
@@ -31,10 +31,10 @@ The Legacy Image Migration application is a full-stack web solution for processi
     - `index.css`: Styling.
     - `types`: Type definitions.
 - **Functionality**:
+  - Client-side routing via `src/routes`.
   - File uploads, processing triggers, S3 browsing, database insertion, duplicate checking, real-time updates.
 
 ### 2. Backend
-
 - **Framework**: Node.js, TypeScript, Python (MuPDF)
 - **Location**: `backend/`
 - **Key Components**:
@@ -62,18 +62,17 @@ The Legacy Image Migration application is a full-stack web solution for processi
     - `s3-tool.ts`, `upload-s3.bat`: S3 utilities.
 
 ### 3. Data Flow
-
 1. **File Upload**:
-   - Excel upload via `UploadAndScriptTask.tsx`/`UploadAndScriptUI.tsx`.
+   - Excel upload via `UploadAndScriptTask.tsx`/`UploadAndScriptUI.tsx` (routed via `src/routes`).
    - `fileController.ts` → `pdfProcessor.ts` → `processed.csv`.
 2. **File Splitting**:
-   - Triggered via `UploadAndScriptTask.tsx`.
+   - Triggered via `UploadAndScriptTask.tsx` (routed via `src/routes`).
    - `splitProcessor.ts`/`mupdf_splitter.py` → split TIFFs in `split_output/`.
 3. **S3 Upload**:
-   - Triggered via `S3BrowserTask.tsx`.
+   - Triggered via `S3BrowserTask.tsx` (routed via `src/routes`).
    - `s3Uploader.ts`/`s3Manager.ts` → AWS S3.
 4. **Database Insertion**:
-   - Triggered via `SQLAndMongoTask.tsx`.
+   - Triggered via `SQLAndMongoTask.tsx` (routed via `src/routes`).
    - `database.ts`: SQL inserts.
    - `mongoDatabase.ts`: MongoDB inserts.
 5. **Additional Features**:
@@ -82,8 +81,7 @@ The Legacy Image Migration application is a full-stack web solution for processi
    - Real-time updates: `WebSocketContext.tsx`/`webSocketService.ts`.
 
 ### 4. Technology Stack
-
-- **Frontend**: React, TypeScript, Vite, WebSocket.
+- **Frontend**: React, TypeScript, Vite, WebSocket, client-side routing (`src/routes`).
 - **Backend**: Node.js, TypeScript, Python (MuPDF).
 - **Storage**: AWS S3.
 - **Databases**: Relational (e.g., PostgreSQL), MongoDB.
@@ -91,16 +89,15 @@ The Legacy Image Migration application is a full-stack web solution for processi
 - **Logging**: Custom logger.
 
 ### 5. System Interactions
-
 - **Frontend ↔ Backend**: REST APIs (`fileController.ts`), WebSocket (`webSocketService.ts`).
 - **Backend ↔ S3**: AWS SDK (`s3Uploader.ts`, `s3Manager.ts`).
 - **Backend ↔ Databases**: SQL/MongoDB drivers.
 - **Python Integration**: Node.js invokes Python scripts.
 
 ### 6. Diagram
-
 ```
 [User] → [Frontend: React/Vite]
+  ↓ (Routes: src/routes)
   ↓ (REST/WebSocket)
 [Backend: Node.js/TypeScript]
   ├── fileController.ts → API routing
@@ -113,8 +110,8 @@ The Legacy Image Migration application is a full-stack web solution for processi
 ```
 
 ### 7. Analysis Guidelines for LLMs
-
 - **Frontend**:
+  - Analyze `src/routes` for client-side routing logic.
   - Review `action`/`ui` components for task logic/UI.
   - Check `WebSocketContext.tsx`, `webSocketService.ts` for real-time features.
 - **Backend**:
@@ -126,6 +123,8 @@ The Legacy Image Migration application is a full-stack web solution for processi
   - Optimize TIFF splitting (`mupdf_splitter.py`).
   - Ensure WebSocket scalability (`webSocketService.ts`).
   - Enhance error handling (`logger.ts`).
+  - Review routing efficiency (`src/routes`).
 - **Extensibility**:
   - Modular components/services for new tasks.
-  - Python scripts for flexible processing.
+  - Flexible routing structure (`src/routes`).
+  - Python scripts for adaptable processing.
