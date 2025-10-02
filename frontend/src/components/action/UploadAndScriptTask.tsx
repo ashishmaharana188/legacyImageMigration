@@ -79,7 +79,7 @@ interface FileResponse {
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
   clearTaskLog: (task: string) => void;
-  setSummaryData: React.Dispatch<React.SetStateAction<SummaryItem[]>>;
+  setSummaryData: React.Dispatch<React.SetStateAction<{ [key: string]: any[] }>>;
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }
 
@@ -308,7 +308,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     setLoading(true);
     setUploadMessage("Uploading to S3");
     updateTaskLog("uploadAndScript", "Initiating S3 upload...");
-    setSummaryData([]);
+    setSummaryData({});
     setUploadedCount(0);
     setTotalFilesToUpload(0);
     setUploadStatuses([
