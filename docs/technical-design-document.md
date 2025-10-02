@@ -28,10 +28,10 @@ To address this, the `executeSql` function in `backend/services/database.ts` was
 
 **Implementation Details:**
 
--   **Chunking:** The logic now processes the list of transactions in chunks (currently set to 500 rows per chunk).
--   **Dynamic Query Building:** For each chunk, a single, parameterized `INSERT` statement is constructed dynamically. The query is built to handle multiple rows at once, for example:
-    `INSERT INTO ... VALUES ($1, $2, ...), ($32, $33, ...), ...;`
--   **Reduced Round-Trips:** Instead of sending thousands of individual queries, the system now sends only a handful of batch queries (e.g., 2 queries for 1000 rows instead of 1000 queries).
+- **Chunking:** The logic now processes the list of transactions in chunks (currently set to 500 rows per chunk).
+- **Dynamic Query Building:** For each chunk, a single, parameterized `INSERT` statement is constructed dynamically. The query is built to handle multiple rows at once, for example:
+  `INSERT INTO ... VALUES ($1, $2, ...), ($32, $33, ...), ...;`
+- **Reduced Round-Trips:** Instead of sending thousands of individual queries, the system now sends only a handful of batch queries (e.g., 2 queries for 1000 rows instead of 1000 queries).
 
 **Benefit:**
 
@@ -53,22 +53,48 @@ To provide a more comprehensive duplicate mitigation strategy, a new deletion ru
 
 **Implementation Details:**
 
--   **New Deletion Rule (Rule 3):** A new SQL query, `deleteImperfectDuplicatesSql`, was added to `backend/services/database.ts`. This query identifies groups of `aif_document_details` records that share the same `client_id` and `user_attr1` (normalized if specified), where:
-    *   The group contains more than one record.
-    *   None of the records in the group meet the criteria for a "perfect" row (i.e., all are imperfect).
-    *   Within such groups, all records except the most recent one (ordered by `creation_date` descending, then `id` descending) are marked for deletion.
--   **Integration into `sanityCheckDuplicates`:**
-    *   **Dry Run:** The `dryRun` logic within `sanityCheckDuplicates` was updated to incorporate this new rule and the revised definition of a "perfect" row. When simulating deletions, rows that would be removed by `deleteImperfectDuplicatesSql` are now correctly identified and marked with a `wouldBeDeleted` flag and an appropriate `reason`. This provides a more accurate preview of the changes.
-    *   **Live Deletion:** The `deleteImperfectDuplicatesSql` query is now executed as part of the live deletion process, following the existing rules for deleting imperfects with perfect counterparts and older perfect duplicates.
-    *   **Total Deleted Count:** The `totalDeleted` count in the live deletion summary now includes the rows deleted by this new rule, providing an accurate total of mitigated duplicates.
+- **New Deletion Rule (Rule 3):** A new SQL query, `deleteImperfectDuplicatesSql`, was added to `backend/services/database.ts`. This query identifies groups of `aif_document_details` records that share the same `client_id` and `user_attr1` (normalized if specified), where:
+  - The group contains more than one record.
+  - None of the records in the group meet the criteria for a "perfect" row (i.e., all are imperfect).
+  - Within such groups, all records except the most recent one (ordered by `creation_date` descending, then `id` descending) are marked for deletion.
+- **Integration into `sanityCheckDuplicates`:**
+  - **Dry Run:** The `dryRun` logic within `sanityCheckDuplicates` was updated to incorporate this new rule and the revised definition of a "perfect" row. When simulating deletions, rows that would be removed by `deleteImperfectDuplicatesSql` are now correctly identified and marked with a `wouldBeDeleted` flag and an appropriate `reason`. This provides a more accurate preview of the changes.
+  - **Live Deletion:** The `deleteImperfectDuplicatesSql` query is now executed as part of the live deletion process, following the existing rules for deleting imperfects with perfect counterparts and older perfect duplicates.
+  - **Total Deleted Count:** The `totalDeleted` count in the live deletion summary now includes the rows deleted by this new rule, providing an accurate total of mitigated duplicates.
 
 **Benefit:**
 
 This enhancement allows for a more robust and complete sanity check process. By addressing imperfect duplicate groups that lack perfect rows, the system can:
--   **Finalize Accurate Counts:** Provide more precise "Perfect count" and "Imperfect count" metrics, reflecting the true state of data after duplicate mitigation.
--   **Mitigate Duplicates:** Empower users to effectively reduce redundant imperfect data, streamlining the process of identifying and fixing remaining imperfect records.
--   **Improved Data Quality:** Contribute to overall better data quality by systematically removing unnecessary duplicate entries, even in complex imperfect scenarios.
+
+- **Finalize Accurate Counts:** Provide more precise "Perfect count" and "Imperfect count" metrics, reflecting the true state of data after duplicate mitigation.
+- **Mitigate Duplicates:** Empower users to effectively reduce redundant imperfect data, streamlining the process of identifying and fixing remaining imperfect records.
+- **Improved Data Quality:** Contribute to overall better data quality by systematically removing unnecessary duplicate entries, even in complex imperfect scenarios.
 
 ## 5. Conclusion
 
 (Summary of the document and future considerations.)
+
+# SQL Execution Summary Implementation Flow
+
+## Objective
+
+To display the "Total Inserts" count within the "SQL Execution Summary" section of the `DetailsDisplayUI` component in the frontend, utilizing the `successfulRows` value provided by the backend.
+
+## Implementation Steps
+
+1.  **Update `SqlExecutionLog` Interface (Previous Step)**
+
+    - **File:** `frontend/src/types/index.ts`
+    - **Change:** An optional `totalInserts?: number;` property was previously added to the `SqlExecutionLog` interface. While this property is not directly used for display in the current implementation, it remains for potential future direct backend provision.
+
+2.  **Modify `DetailsDisplayUI` Component**
+    - **File:** `frontend/src/components/ui/DetailsDisplayUI.tsx`
+    - **Change:** Within the `SQL Execution Summary` conditional block (`log.successfulRows !== undefined && log.badRows !== undefined`), the display for "Total Inserts" was updated to use `log.successfulRows`. A conditional check (`log.successfulRows !== undefined ? log.successfulRows : 'N/A'`) is used to gracefully handle cases where `successfulRows` might not be present in the log object.
+
+## Backend Considerations
+
+- The backend is currently expected to provide `successfulRows` within the `SqlExecutionLog` object. This value is now directly used to represent "Total Inserts" on the frontend.
+
+## Verification
+
+To verify the changes, run the frontend application and trigger a process that generates a `SqlExecutionLog` with `successfulRows` data. The "Total Inserts" count should now be visible under the "SQL Execution Summary" in the UI, reflecting the `successfulRows` value.

@@ -66,6 +66,7 @@ export interface SqlExecutionLog {
   badRows: number;
   badRowsFilePath?: string;
   message: string;
+  totalInserts?: number; // Added for SQL Execution Summary
 }
 
 export interface MongoTransferLog {
