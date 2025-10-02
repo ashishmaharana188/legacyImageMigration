@@ -65,7 +65,7 @@ interface DryRunResultRow {
 }
 
 interface ImperfectDuplicateRow {
-  user_attr2: string;
+  user_attr1: string;
 }
 
 export class Database {
@@ -87,7 +87,10 @@ export class Database {
   }
 
   private async reconnectPool(): Promise<void> {
-    this.logger.warn("Attempting to reconnect PostgreSQL pool...");
+    this.logger.warn({
+      function: "reconnectPool",
+      message: "Attempting to reconnect PostgreSQL pool.",
+    });
     const MAX_RECONNECT_RETRIES = 5;
     const RECONNECT_DELAY_MS = 5000; // 5 seconds
 
@@ -95,27 +98,38 @@ export class Database {
       try {
         if (this.pool) {
           await this.pool.end();
-          this.logger.info("Existing PostgreSQL pool ended.");
+          this.logger.info({
+            function: "reconnectPool",
+            message: "Existing PostgreSQL pool ended.",
+          });
         }
         this.pool = this.createPool();
         await this.warmup(); // Warm up the new pool
-        this.logger.info("PostgreSQL pool reconnected successfully.");
+        this.logger.info({
+          function: "reconnectPool",
+          message: "PostgreSQL pool reconnected successfully.",
+        });
         return;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.error(
-          `PostgreSQL pool reconnection failed (attempt ${
+        this.logger.error({
+          function: "reconnectPool",
+          message: `PostgreSQL pool reconnection failed (attempt ${
             i + 1
-          }/${MAX_RECONNECT_RETRIES}): ${msg}`
-        );
+          }/${MAX_RECONNECT_RETRIES})`,
+          error: msg,
+        });
         if (i < MAX_RECONNECT_RETRIES - 1) {
           await new Promise((resolve) =>
             setTimeout(resolve, RECONNECT_DELAY_MS)
           );
         } else {
-          this.logger.error(
-            "Failed to reconnect PostgreSQL pool after multiple attempts."
-          );
+          this.logger.error({
+            function: "reconnectPool",
+            message:
+              "Failed to reconnect PostgreSQL pool after multiple attempts.",
+            error: msg,
+          });
           throw e; // Re-throw after all retries fail
         }
       }
@@ -140,18 +154,26 @@ export class Database {
 
     // Lifecycle diagnostics
     newPool.on("connect", () => {
-      this.logger.info("pg Pool: connect (new backend connection established)");
+      this.logger.info({
+        function: "createPool",
+        message: "pg Pool: new backend connection established",
+      });
     });
     newPool.on("acquire", () => {
-      this.logger.info("pg Pool: acquire (client checked out from pool)");
+      this.logger.info({
+        function: "createPool",
+        message: "pg Pool: client checked out from pool",
+      });
     });
 
     // IMPORTANT: Do NOT end() or null-out the pool on idle client errors.
     // Log and let pg discard the broken idle client internally.
     newPool.on("error", (err) => {
-      this.logger.error(
-        `pg Pool: unexpected error on idle client: ${err.message}`
-      );
+      this.logger.error({
+        function: "createPool",
+        message: "pg Pool: unexpected error on idle client",
+        error: err.message,
+      });
       // Check for critical connection errors that warrant a full pool reconnection
       if (
         err.message.includes("ECONNREFUSED") ||
@@ -159,13 +181,19 @@ export class Database {
         err.message.includes("ENOTFOUND") ||
         err.message.includes("EHOSTUNREACH")
       ) {
-        this.logger.error(
-          `pg Pool: Critical connection error detected. Attempting to reconnect pool: ${err.message}`
-        );
+        this.logger.error({
+          function: "createPool",
+          message:
+            "pg Pool: Critical connection error detected. Attempting to reconnect pool.",
+          error: err.message,
+        });
         this.reconnectPool().catch((reconnectErr) => {
-          this.logger.error(
-            `Failed to re-establish PostgreSQL pool after critical error: ${reconnectErr.message}`
-          );
+          this.logger.error({
+            function: "createPool",
+            message:
+              "Failed to re-establish PostgreSQL pool after critical error.",
+            error: reconnectErr.message,
+          });
         });
       }
     });
@@ -173,22 +201,40 @@ export class Database {
     // Optional warm-up (tolerant of transient failures; does not mutate pool)
     (async () => {
       try {
-        this.logger.info("pool warm-up: attempting initial connect/release");
+        this.logger.info({
+          function: "createPool",
+          message: "pool warm-up: attempting initial connect/release",
+        });
         const client = await newPool.connect();
         // attach a temporary error handler while checked out
         const onClientError = (e: Error) =>
-          this.logger.error(`warm-up client error: ${e.message}`);
+          this.logger.error({
+            function: "createPool",
+            message: "warm-up client error",
+            error: e.message,
+          });
         client.on("error", onClientError);
         client.release();
         client.off("error", onClientError);
-        this.logger.info("pool warm-up: connect/release successful");
+        this.logger.info({
+          function: "createPool",
+          message: "pool warm-up: connect/release successful",
+        });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`, e);
+        this.logger.warn({
+          function: "createPool",
+          message: "pool warm-up: failed (tolerated)",
+          error: msg,
+          originalError: e,
+        });
       }
     })();
 
-    this.logger.info("Postgres pool created");
+    this.logger.info({
+      function: "createPool",
+      message: "Postgres pool created",
+    });
     const poolConfig = {
       user: useSshTunnel ? process.env.DB_USER : "postgres",
       host: useSshTunnel ? process.env.DB_HOST : "localhost",
@@ -197,9 +243,10 @@ export class Database {
         ? parseInt(process.env.DB_PORT || "5433", 10)
         : parseInt(process.env.DB_PORT || "5432", 10),
     };
-    this.logger.info(
-      `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`
-    );
+    this.logger.info({
+      function: "createPool",
+      message: `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`,
+    });
     return newPool;
   }
 
@@ -215,37 +262,55 @@ export class Database {
 
     for (let i = 0; i < MAX_RETRIES; i++) {
       try {
-        this.logger.info(
-          `Attempting database warm-up (attempt ${i + 1}/${MAX_RETRIES})...`
-        );
+        this.logger.info({
+          function: "warmup",
+          message: `Attempting database warm-up (attempt ${
+            i + 1
+          }/${MAX_RETRIES})...`,
+        });
         client = await this.getPool().connect();
         const onClientError = (e: Error) =>
-          this.logger.error(`warmup client error: ${e.message}`);
+          this.logger.error({
+            function: "warmup",
+            message: "warmup client error",
+            error: e.message,
+          });
         client.on("error", onClientError);
         // A simple ping ensures the backend is reachable
         await client.query("SELECT 1");
         client.off("error", onClientError);
-        this.logger.info("Database connection warm-up successful");
+        this.logger.info({
+          function: "warmup",
+          message: "Database connection warm-up successful",
+        });
         return; // Success, exit the loop
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unknown error";
-        this.logger.warn(
-          `Database warm-up failed (attempt ${i + 1}/${MAX_RETRIES}): ${msg}`,
-          err
-        );
+        this.logger.warn({
+          function: "warmup",
+          message: `Database warm-up failed (attempt ${i + 1}/${MAX_RETRIES})`,
+          error: msg,
+          originalError: err,
+        });
         if (client) {
           client.release();
           client = null;
         }
         if (i < MAX_RETRIES - 1) {
-          this.logger.info(`Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
+          this.logger.info({
+            function: "warmup",
+            message: `Retrying in ${RETRY_DELAY_MS / 1000} seconds...`,
+          });
           await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
         }
       } finally {
         if (client) client.release();
       }
     }
-    this.logger.error(`Database warm-up failed after ${MAX_RETRIES} attempts.`);
+    this.logger.error({
+      function: "warmup",
+      message: `Database warm-up failed after ${MAX_RETRIES} attempts.`,
+    });
   }
 
   private readonly logger = winston.createLogger({
@@ -266,12 +331,16 @@ export class Database {
 
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../processed");
-    this.logger.info("getProcessedFolioNumbers: Reading processed directory");
+    this.logger.info({
+      function: "getProcessedFolioNumbers",
+      message: "Reading processed directory",
+    });
     try {
       const files = await fs.readdir(csvPath);
-      this.logger.info(
-        `getProcessedFolioNumbers: found ${files.length} files in processed`
-      );
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: `Found ${files.length} files in processed directory`,
+      });
 
       const latestCsv = files
         .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
@@ -279,18 +348,25 @@ export class Database {
         .pop();
 
       if (!latestCsv) {
-        this.logger.warn("getProcessedFolioNumbers: no processed_*.csv found");
+        this.logger.warn({
+          function: "getProcessedFolioNumbers",
+          message: "No processed_*.csv found",
+        });
         return [];
       }
 
       const csvFullPath = path.join(csvPath, latestCsv);
-      this.logger.info(
-        `getProcessedFolioNumbers: Reading CSV file: ${csvFullPath}`
-      );
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: `Reading CSV file: ${csvFullPath}`,
+      });
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = await workbook.csv.readFile(csvFullPath);
-      this.logger.info("getProcessedFolioNumbers: CSV loaded into workbook");
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: "CSV loaded into workbook",
+      });
 
       const idAcnos: string[] = [];
       worksheet.eachRow((row, rowNumber) => {
@@ -298,28 +374,34 @@ export class Database {
         try {
           const idAcnoCell = row.getCell(5);
           if (idAcnoCell && idAcnoCell.text) {
-            const idAcno = idAcnoCell.text.trim();
+            const idAcno = (idAcnoCell.text as string).trim();
             if (idAcno) {
               idAcnos.push(idAcno);
             }
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn(
-            `getProcessedFolioNumbers: parse error at row ${rowNumber}: ${msg}`
-          );
+          this.logger.warn({
+            function: "getProcessedFolioNumbers",
+            message: `Parse error at row ${rowNumber}`,
+            error: msg,
+          });
         }
       });
 
       const uniqueIdAcnos = [...new Set(idAcnos)];
-      this.logger.info(
-        `getProcessedFolioNumbers: found ${uniqueIdAcnos.length} unique id_acno values`
-      );
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: `Found ${uniqueIdAcnos.length} unique id_acno values`,
+      });
       return uniqueIdAcnos;
     } catch (error) {
-      this.logger.error(
-        `getProcessedFolioNumbers: Error reading processed folder or CSV file: ${error}`
-      );
+      this.logger.error({
+        function: "getProcessedFolioNumbers",
+        message: "Error reading processed folder or CSV file",
+        error: error instanceof Error ? error.message : String(error),
+        originalError: error,
+      });
       return []; // Return empty array on error to avoid breaking the main query
     }
   }
@@ -340,9 +422,15 @@ export class Database {
 
     try {
       const csvPath = path.join(__dirname, "../../processed");
-      this.logger.info("generateSql: Reading processed directory");
+      this.logger.info({
+        function: "generateSql",
+        message: "Reading processed directory",
+      });
       const files = await fs.readdir(csvPath);
-      this.logger.info(`generateSql: found ${files.length} files in processed`);
+      this.logger.info({
+        function: "generateSql",
+        message: `Found ${files.length} files in processed directory`,
+      });
 
       const latestCsv = files
         .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
@@ -350,7 +438,10 @@ export class Database {
         .pop();
 
       if (!latestCsv) {
-        this.logger.warn("generateSql: no processed_*.csv found");
+        this.logger.warn({
+          function: "generateSql",
+          message: "No processed_*.csv found",
+        });
         logs.push({
           row: 0,
           status: "error",
@@ -360,13 +451,17 @@ export class Database {
       }
 
       const csvFullPath = path.join(csvPath, latestCsv);
-      this.logger.info("generateSql: Reading CSV file");
+      this.logger.info({
+        function: "generateSql",
+        message: "Reading CSV file",
+      });
 
       const workbook = new ExcelJS.Workbook();
-      await workbook.csv.readFile(csvFullPath);
-      this.logger.info("generateSql: CSV loaded into workbook");
-
       const worksheet = await workbook.csv.readFile(csvFullPath);
+      this.logger.info({
+        function: "generateSql",
+        message: "CSV loaded into workbook",
+      });
 
       const transactions: {
         id_fund: number;
@@ -392,9 +487,11 @@ export class Database {
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn(
-            `generateSql: parse error at row ${rowNumber}: ${msg}`
-          );
+          this.logger.warn({
+            function: "generateSql",
+            message: `Parse error at row ${rowNumber}`,
+            error: msg,
+          });
           logs.push({
             row: rowNumber,
             status: "error",
@@ -403,9 +500,10 @@ export class Database {
         }
       });
 
-      this.logger.info(
-        `generateSql: parsed ${transactions.length} transaction rows`
-      );
+      this.logger.info({
+        function: "generateSql",
+        message: `Parsed ${transactions.length} transaction rows`,
+      });
 
       const trxnNameMap: Record<string, string> = {
         NEW: "Initial Contribution Form",
@@ -432,10 +530,7 @@ export class Database {
             if (!ext) throw new Error("Invalid file extension");
 
             const format = ext.replace(".", "").toUpperCase();
-            const clientId = String(data.id_fund)
-              .split("")
-              .map((char) => (/\\d/.test(char) ? char.charCodeAt(0) : ""))
-              .join("");
+            const clientId = data.id_fund;
 
             const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
             const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
@@ -461,9 +556,11 @@ ${data.page_count}, ${clientId}
             return sql;
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error";
-            this.logger.warn(
-              `generateSql: failed generating SQL for row ${index + 2}: ${msg}`
-            );
+            this.logger.warn({
+              function: "generateSql",
+              message: `Failed generating SQL for row ${index + 2}`,
+              error: msg,
+            });
             logs.push({
               row: index + 2,
               status: "error",
@@ -475,7 +572,10 @@ ${data.page_count}, ${clientId}
         .filter((val): val is string => val !== null);
 
       if (values.length === 0) {
-        this.logger.warn("generateSql: no valid rows to generate SQL");
+        this.logger.warn({
+          function: "generateSql",
+          message: "No valid rows to generate SQL",
+        });
         logs.push({
           row: 0,
           status: "error",
@@ -495,11 +595,19 @@ page_count, client_id
 ) VALUES ${values.join(", ")};
 `;
 
-      this.logger.info("Generated multi-row SQL");
+      this.logger.info({
+        function: "generateSql",
+        message: "Generated multi-row SQL",
+      });
       return { sql, transactions, logs };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      this.logger.error(`generateSql: failed: ${msg}`);
+      this.logger.error({
+        function: "generateSql",
+        message: "Failed to generate SQL",
+        error: msg,
+        originalError: e,
+      });
       logs.push({
         row: 0,
         status: "error",
@@ -523,7 +631,10 @@ page_count, client_id
     let client: PoolClient | null = null;
 
     try {
-      this.logger.info("executeSql: generating SQL from CSV");
+      this.logger.info({
+        function: "executeSql",
+        message: "Generating SQL from CSV",
+      });
       const { transactions, logs: generateLogs } = await this.generateSql();
       logs.push(...generateLogs);
 
@@ -663,8 +774,23 @@ page_count, client_id
             null,
             data.id_ihno.toString(),
             data.id_acno,
-            null, null, null, null, null, null, null, null, null, null, null, null,
-            false, new Date(), "system", new Date(), "system",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            new Date(),
+            "system",
+            new Date(),
+            "system",
             data.page_count,
             actualClientId,
           ];
@@ -686,7 +812,9 @@ page_count, client_id
               page_count, client_id
             ) VALUES ${valueStrings.join(", ")}
           `;
-          this.logger.info(`executeSql: executing batch of ${valueStrings.length} rows.`);
+          this.logger.info(
+            `executeSql: executing batch of ${valueStrings.length} rows.`
+          );
           const result = await client.query(queryText, valueParams);
           insertedRows += result.rowCount || 0;
         }
@@ -735,11 +863,19 @@ page_count, client_id
           this.logger.info("executeSql: transaction rolled back");
         } catch (e) {
           const m = e instanceof Error ? e.message : "Unknown error";
-          this.logger.error(`executeSql: ROLLBACK failed: ${m}`);
+          this.logger.error({
+            function: "executeSql",
+            message: `ROLLBACK failed: ${m}`,
+            error: e,
+          });
         }
       }
 
-      this.logger.error(`executeSql: failed:`, err);
+      this.logger.error({
+        function: "executeSql",
+        message: `SQL execution failed: ${msg}`,
+        error: err,
+      });
       logs.push({
         row: 0,
         status: "error",
@@ -1078,9 +1214,9 @@ RETURNING d.user_attr1, d.user_attr2;
     ) {
       content = "user_attr1,user_attr2,reason\n";
       badRows.forEach((row) => {
-        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},\"${
+        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},"${
           row.reason
-        }\"\n`;
+        }"\n`;
       });
     } else {
       // Fallback if structure is unexpected
@@ -1325,7 +1461,7 @@ RETURNING d.user_attr1, d.user_attr2;
                   AND p.transaction_reference_id IS NOT NULL
             )
         )
-        SELECT DISTINCT d.user_attr2, 'Imperfect Duplicate Group (No Action Taken)' as reason
+        SELECT DISTINCT d.user_attr1, 'Imperfect Duplicate Group (No Action Taken)' as reason
         FROM investor.aif_document_details d
         JOIN groups_with_no_perfect_row gwnpr ON d.client_id = gwnpr.client_id AND ${keyExpr(
           "d"
@@ -1386,7 +1522,7 @@ RETURNING d.user_attr1, d.user_attr2;
           imperfectDuplicatesSql,
           [cutoffTms]
         );
-        const imperfectDuplicates = imperfectRes.rows.map((r) => r.user_attr2);
+        const imperfectDuplicates = imperfectRes.rows.map((r) => r.user_attr1);
 
         const totalDuplicatesFound = processedRows.filter(
           (p) => p.wouldBeDeleted
@@ -1440,11 +1576,11 @@ RETURNING d.user_attr1, d.user_attr2;
         [cutoffTms]
       );
       const imperfectDuplicates = imperfectRes.rows
-        .map((row) => row.user_attr2)
+        .map((row) => row.user_attr1)
         .filter((value) => value !== null) as string[];
       const imperfectDuplicatesFilePath = await this.writeBadRowsToFile(
-        imperfectDuplicates.map((ua2) => ({
-          user_attr2: ua2,
+        imperfectDuplicates.map((ua1) => ({
+          user_attr1: ua1,
           reason: "Imperfect Duplicate Group (No Action Taken)",
         })),
         "imperfect_duplicates.csv"
@@ -1480,10 +1616,20 @@ RETURNING d.user_attr1, d.user_attr2;
         try {
           await client.query("ROLLBACK");
         } catch (e) {
-          this.logger.error(`sanityCheckDuplicates: ROLLBACK failed: ${e}`);
+          this.logger.error({
+            function: "sanityCheckDuplicates",
+            message: `ROLLBACK failed: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+            error: e,
+          });
         }
       }
-      this.logger.error(`sanityCheckDuplicates: failed: ${msg}`);
+      this.logger.error({
+        function: "sanityCheckDuplicates",
+        message: `Sanity check duplicates failed: ${msg}`,
+        error: err,
+      });
       logs.push({
         row: 0,
         status: "error",
