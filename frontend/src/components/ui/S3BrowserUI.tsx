@@ -1,65 +1,48 @@
 import React from "react";
 
-interface S3File {
+interface S3Item {
   key: string;
+  type: "file" | "dir";
   lastModified?: string;
 }
 
-interface S3Item extends S3File {
-  type: "file" | "dir";
-}
-
 interface S3BrowserUIProps {
-  s3Files: S3File[];
-  s3Directories: string[];
+  items: S3Item[];
   currentPrefix: string;
-  nextContinuationToken: string | undefined;
-  isFilterMode: boolean;
-  searchTerm: string;
+  isLoading: boolean;
   isSearching: boolean;
   searchResults: S3Item[];
-  clientPage: number;
-  searchPage: number;
-  totalPages: number;
-  totalSearchPages: number;
-  paginatedItems: S3Item[];
-  paginatedSearchResults: S3Item[];
+  isFilterMode: boolean;
+  searchTerm: string;
+  hasNextPage?: boolean;
+  hasNextSearchPage?: boolean;
   setIsFilterMode: React.Dispatch<React.SetStateAction<boolean>>;
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
-  setClientPage: React.Dispatch<React.SetStateAction<number>>;
-  setSearchPage: React.Dispatch<React.SetStateAction<number>>;
   handleLoadMore: () => void;
+  handleLoadMoreSearch: () => void;
   handleDeleteS3File: (key: string) => Promise<void>;
   handleDirectoryClick: (directoryKey: string) => void;
   handleBreadcrumbClick: (index: number) => void;
-  handleSearch: () => Promise<void>;
   handleReload: () => void;
 }
 
 const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
-  s3Files,
-  s3Directories,
+  items,
   currentPrefix,
-  nextContinuationToken,
-  isFilterMode,
-  searchTerm,
+  isLoading,
   isSearching,
   searchResults,
-  clientPage,
-  searchPage,
-  totalPages,
-  totalSearchPages,
-  paginatedItems,
-  paginatedSearchResults,
+  isFilterMode,
+  searchTerm,
+  hasNextPage,
+  hasNextSearchPage,
   setIsFilterMode,
   setSearchTerm,
-  setClientPage,
-  setSearchPage,
   handleLoadMore,
+  handleLoadMoreSearch,
   handleDeleteS3File,
   handleDirectoryClick,
   handleBreadcrumbClick,
-  handleSearch,
   handleReload,
 }) => {
   return (
@@ -67,11 +50,14 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-black">S3 Browser</h2>
         <div className="flex gap-2">
-          <button onClick={handleReload} className="btn">
-            Reload S3
+          <button onClick={handleReload} className="btn" disabled={isLoading}>
+            {isLoading ? "Loading..." : "Reload"}
           </button>
-          <button onClick={() => setIsFilterMode(!isFilterMode)} className="btn">
-            {isFilterMode ? "Cancel Search" : "Search / Filter"}
+          <button
+            onClick={() => setIsFilterMode(!isFilterMode)}
+            className="btn"
+          >
+            {isFilterMode ? "Cancel Search" : "Search"}
           </button>
         </div>
       </div>
@@ -94,23 +80,23 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
                 Search Results ({searchResults.length} found)
               </h3>
               <ul>
-                {paginatedSearchResults.map((item) => (
-                  <li key={item.key} onClick={() => handleDirectoryClick(item.key)} className="p-1 cursor-pointer hover:bg-gray-200 rounded">
+                {searchResults.map((item) => (
+                  <li
+                    key={item.key}
+                    onClick={() => handleDirectoryClick(item.key)}
+                    className="p-1 cursor-pointer hover:bg-gray-200 rounded"
+                  >
                     {item.key.replace(currentPrefix, "").replace("/", "")}
                   </li>
                 ))}
               </ul>
-              <div className="flex justify-between items-center mt-4">
-                <button onClick={() => setSearchPage((prev) => Math.max(prev - 1, 1))} disabled={searchPage === 1} className="btn">
-                  Previous
-                </button>
-                <span>
-                  Page {searchPage} of {totalSearchPages}
-                </span>
-                <button onClick={() => setSearchPage((prev) => Math.min(prev + 1, totalSearchPages))} disabled={searchPage === totalSearchPages} className="btn">
-                  Next
-                </button>
-              </div>
+              {hasNextSearchPage && (
+                <div className="flex justify-center mt-4">
+                  <button onClick={handleLoadMoreSearch} className="btn">
+                    Load More Results
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -119,7 +105,10 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
           <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-t-md">
             {currentPrefix.split("/").filter(Boolean).map((part, index) => (
               <div key={index} className="flex items-center gap-2">
-                <span onClick={() => handleBreadcrumbClick(index)} className="cursor-pointer hover:underline">
+                <span
+                  onClick={() => handleBreadcrumbClick(index)}
+                  className="cursor-pointer hover:underline"
+                >
                   {part}
                 </span>
                 <span>/</span>
@@ -127,53 +116,56 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
             ))}
           </div>
           <div className="bg-white p-2 rounded-b-md min-h-[400px]">
-            <div className="text-lg mb-2 px-1">
-              {s3Directories.length} directories, {s3Files.length} files
-            </div>
-            <ul>
-              {paginatedItems.map((item) => {
-                if (item.type === "dir") {
-                  return (
-                    <li key={item.key} onClick={() => handleDirectoryClick(item.key)} className="p-1 cursor-pointer hover:bg-gray-200 rounded">
-                      {item.key.replace(currentPrefix, "").replace("/", "")}
-                    </li>
-                  );
-                } else {
-                  const s3FileItem = item as S3File;
-                  return (
-                    <li key={s3FileItem.key} className="p-1 flex justify-between items-center hover:bg-gray-200 rounded">
-                      <span>{s3FileItem.key.replace(currentPrefix, "")}</span>
-                      <button onClick={() => handleDeleteS3File(s3FileItem.key)} className="btn-danger">
-                        Delete
-                      </button>
-                    </li>
-                  );
-                }
-              })}
-            </ul>
+            {isLoading && items.length === 0 ? (
+              <div>Loading...</div>
+            ) : (
+              <>
+                <div className="text-lg mb-2 px-1">
+                  Displaying {items.length} items
+                </div>
+                <ul>
+                  {items.map((item) => {
+                    if (item.type === "dir") {
+                      return (
+                        <li
+                          key={item.key}
+                          onClick={() => handleDirectoryClick(item.key)}
+                          className="p-1 cursor-pointer hover:bg-gray-200 rounded"
+                        >
+                          {item.key.replace(currentPrefix, "").replace("/", "")}
+                        </li>
+                      );
+                    } else {
+                      return (
+                        <li
+                          key={item.key}
+                          className="p-1 flex justify-between items-center hover:bg-gray-200 rounded"
+                        >
+                          <span>{item.key.replace(currentPrefix, "")}</span>
+                          <button
+                            onClick={() => handleDeleteS3File(item.key)}
+                            className="btn-danger"
+                          >
+                            Delete
+                          </button>
+                        </li>
+                      );
+                    }
+                  })}
+                </ul>
+              </>
+            )}
 
-            {nextContinuationToken && (
+            {hasNextPage && (
               <div className="flex justify-center mt-4">
-                <button onClick={handleLoadMore} className="btn">
-                  Load More from S3
+                <button onClick={handleLoadMore} className="btn" disabled={isLoading}>
+                  {isLoading ? 'Loading...' : 'Load More'}
                 </button>
               </div>
             )}
           </div>
         </div>
       )}
-
-      <div className="flex justify-between items-center mt-4">
-        <button onClick={() => setClientPage((prev) => Math.max(prev - 1, 1))} disabled={clientPage === 1} className="btn">
-          Previous
-        </button>
-        <span>
-          Page {clientPage} of {totalPages}
-        </span>
-        <button onClick={() => setClientPage((prev) => Math.min(prev + 1, totalPages))} disabled={clientPage === totalPages} className="btn">
-          Next
-        </button>
-      </div>
     </div>
   );
 };

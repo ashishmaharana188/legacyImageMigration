@@ -13,12 +13,25 @@ const agent = new https.Agent({
   maxSockets: 200,
 });
 
+// Check for essential AWS credentials
+const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+const sessionToken = process.env.AWS_SESSION_TOKEN; // Often required for temporary credentials
+const region = process.env.AWS_DEFAULT_REGION || "ap-south-1";
+
+if (!accessKeyId || !secretAccessKey) {
+  const errorMessage =
+    "AWS credentials are not configured properly. Please ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set.";
+  console.error(errorMessage);
+  throw new Error(errorMessage);
+}
+
 const s3 = new S3Client({
-  region: process.env.AWS_DEFAULT_REGION || "ap-south-1",
+  region: region,
   credentials: {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
-    sessionToken: process.env.AWS_SESSION_TOKEN!,
+    accessKeyId: accessKeyId,
+    secretAccessKey: secretAccessKey,
+    sessionToken: sessionToken, // Pass sessionToken if it exists
   },
   requestHandler: new NodeHttpHandler({
     httpsAgent: agent,

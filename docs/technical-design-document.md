@@ -70,6 +70,39 @@ This enhancement allows for a more robust and complete sanity check process. By 
 - **Mitigate Duplicates:** Empower users to effectively reduce redundant imperfect data, streamlining the process of identifying and fixing remaining imperfect records.
 - **Improved Data Quality:** Contribute to overall better data quality by systematically removing unnecessary duplicate entries, even in complex imperfect scenarios.
 
+### 4.3. S3 Browser Refactoring with TanStack Query
+
+**Problem:**
+
+The original S3 Browser component (`S3BrowserTask.tsx`) was built using `useEffect` for data fetching and manual state management with multiple `useState` hooks. This approach led to several issues:
+
+-   **Complex State Management:** Numerous state variables (`s3Files`, `s3Directories`, `nextContinuationToken`, `isSearching`, `searchResults`) were required to manage data, loading states, and pagination, making the component difficult to maintain.
+-   **Manual Data Fetching:** Logic for fetching, refetching (after deletes), and pagination ("Load More") was handled by imperative functions (`fetchS3Objects`, `handleLoadMore`), leading to more complex code.
+-   **Unnecessary API Calls:** The `useEffect`-based approach could trigger redundant API calls, especially during searching and initial component load.
+-   **Poor User Experience:** Navigating between previously visited folders required re-fetching data every time, resulting in a slow and unresponsive UI.
+
+**Solution:**
+
+To address these issues, the component was refactored to use `@tanstack/react-query`, a powerful data-fetching and state management library. This change streamlines the component by replacing manual, imperative logic with a declarative, hook-based approach.
+
+**Implementation Details:**
+
+-   **Declarative Data Fetching:**
+    -   The `useEffect` hook for fetching S3 objects was replaced with the `useInfiniteQuery` hook. The query is tied to a unique key `['s3Objects', currentPrefix]`, which automatically triggers a refetch whenever the `currentPrefix` (the current folder) changes.
+    -   A separate `useInfiniteQuery` was implemented for handling debounced searching, which is only enabled when the user is in "filter mode" and has entered a search term.
+-   **Simplified State Management:**
+    -   `useInfiniteQuery` consolidates data, loading, and error states into a single object, which allowed for the removal of several `useState` variables.
+    -   The hook manages pagination state internally, providing a `fetchNextPage` function and an `hasNextPage` boolean to simplify the "Load More" functionality.
+-   **Efficient Mutations:**
+    -   The file deletion logic was refactored to use the `useMutation` hook.
+    -   Upon a successful deletion, the mutation invalidates the `['s3Objects', currentPrefix]` query. This automatically triggers a background refetch for the current folder, ensuring the UI is always synchronized with the server state without manual intervention.
+-   **Improved User Experience with Caching:**
+    -   TanStack Query provides out-of-the-box caching. When a user navigates to a folder, the data is fetched and cached. If the user navigates away and then returns, the cached data is displayed instantly, making the application feel significantly faster and more responsive.
+
+**Benefit:**
+
+This refactoring resulted in a more robust, maintainable, and performant S3 Browser. The code is now simpler and more declarative, and the user experience is greatly improved due to automatic caching and efficient, synchronized data fetching.
+
 ## 5. Conclusion
 
 (Summary of the document and future considerations.)
