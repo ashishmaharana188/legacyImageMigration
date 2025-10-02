@@ -4,73 +4,11 @@ import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
 import { Pool, PoolClient } from "pg";
-import winston from "winston";
-
-interface SqlLog {
-  row: number;
-  status: "success" | "error" | "executed" | "updated";
-  message: string;
-  sql?: string;
-}
-
-interface SanityCheckRow {
-  id: number;
-  document_process: string;
-  document_activity: string;
-  document_type: string;
-  document_format: string;
-  document_path: string;
-  folio_id: number | null;
-  transaction_reference_id: string | null;
-  document_status: string;
-  mime_type: string;
-  user_attr0: string | null;
-  user_attr1: string | null;
-  user_attr2: string | null;
-  user_attr3: string | null;
-  user_attr4: string | null;
-  user_attr5: string | null;
-  user_attr6: string | null;
-  user_attr7: string | null;
-  user_attr8: string | null;
-  user_attr9: string | null;
-  approval_status: string | null;
-  approved_by: string | null;
-  approved_on: Date | null;
-  comments: string | null;
-  audit_code: string | null;
-  del_flag: boolean;
-  last_update_tms: Date;
-  last_updated_by: string;
-  creation_date: Date;
-  created_by: string;
-  page_count: number;
-  client_id: number;
-  rn: number | null; // For ranked duplicates
-  reason: string;
-}
-
-interface DryRunResultRow {
-  id: number;
-  client_id: number;
-  user_attr1_normalized: string;
-  user_attr1: string;
-  user_attr2: string;
-  creation_date: string;
-  folio_id: string | null;
-  transaction_reference_id: string | null;
-  isPerfect: boolean;
-  wouldBeDeleted: boolean;
-  reason: string; // To explain why it would be deleted or is imperfect
-}
-
-interface ImperfectDuplicateRow {
-  user_attr1: string;
-}
+import logger from "../utils/logger";
+import { getPgPool, reconnectPgPool, warmupPgPool } from "../controllers/dbConnect";
+import { SqlLog, SanityCheckRow, DryRunResultRow, ImperfectDuplicateRow } from "../types/database";
 
 export class Database {
-  private pool: Pool;
-
   private readonly trxnMap: Record<string, string> = {
     IC: "IC",
     NCT: "NCT",
@@ -83,247 +21,22 @@ export class Database {
   };
 
   constructor() {
-    this.pool = this.createPool();
+    // Pool is now managed externally
   }
 
   private async reconnectPool(): Promise<void> {
-    this.logger.warn({
-      function: "reconnectPool",
-      message: "Attempting to reconnect PostgreSQL pool.",
-    });
-    const MAX_RECONNECT_RETRIES = 5;
-    const RECONNECT_DELAY_MS = 5000; // 5 seconds
-
-    for (let i = 0; i < MAX_RECONNECT_RETRIES; i++) {
-      try {
-        if (this.pool) {
-          await this.pool.end();
-          this.logger.info({
-            function: "reconnectPool",
-            message: "Existing PostgreSQL pool ended.",
-          });
-        }
-        this.pool = this.createPool();
-        await this.warmup(); // Warm up the new pool
-        this.logger.info({
-          function: "reconnectPool",
-          message: "PostgreSQL pool reconnected successfully.",
-        });
-        return;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.error({
-          function: "reconnectPool",
-          message: `PostgreSQL pool reconnection failed (attempt ${
-            i + 1
-          }/${MAX_RECONNECT_RETRIES})`,
-          error: msg,
-        });
-        if (i < MAX_RECONNECT_RETRIES - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, RECONNECT_DELAY_MS)
-          );
-        } else {
-          this.logger.error({
-            function: "reconnectPool",
-            message:
-              "Failed to reconnect PostgreSQL pool after multiple attempts.",
-            error: msg,
-          });
-          throw e; // Re-throw after all retries fail
-        }
-      }
-    }
-  }
-
-  private createPool(): Pool {
-    const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
-    const newPool = new Pool({
-      user: useSshTunnel ? process.env.DB_USER : "postgres",
-      host: useSshTunnel ? process.env.DB_HOST : "localhost",
-      database: useSshTunnel ? process.env.DB_NAME : "test",
-      password: useSshTunnel ? process.env.DB_PASSWORD : "123456",
-      port: useSshTunnel
-        ? parseInt(process.env.DB_PORT || "5433", 10)
-        : parseInt(process.env.DB_PORT || "5432", 10),
-      max: 20,
-      idleTimeoutMillis: 30000, // 30 seconds
-      connectionTimeoutMillis: 10000,
-      keepAlive: true,
-    });
-
-    // Lifecycle diagnostics
-    newPool.on("connect", () => {
-      this.logger.info({
-        function: "createPool",
-        message: "pg Pool: new backend connection established",
-      });
-    });
-    newPool.on("acquire", () => {
-      this.logger.info({
-        function: "createPool",
-        message: "pg Pool: client checked out from pool",
-      });
-    });
-
-    // IMPORTANT: Do NOT end() or null-out the pool on idle client errors.
-    // Log and let pg discard the broken idle client internally.
-    newPool.on("error", (err) => {
-      this.logger.error({
-        function: "createPool",
-        message: "pg Pool: unexpected error on idle client",
-        error: err.message,
-      });
-      // Check for critical connection errors that warrant a full pool reconnection
-      if (
-        err.message.includes("ECONNREFUSED") ||
-        err.message.includes("ETIMEDOUT") ||
-        err.message.includes("ENOTFOUND") ||
-        err.message.includes("EHOSTUNREACH")
-      ) {
-        this.logger.error({
-          function: "createPool",
-          message:
-            "pg Pool: Critical connection error detected. Attempting to reconnect pool.",
-          error: err.message,
-        });
-        this.reconnectPool().catch((reconnectErr) => {
-          this.logger.error({
-            function: "createPool",
-            message:
-              "Failed to re-establish PostgreSQL pool after critical error.",
-            error: reconnectErr.message,
-          });
-        });
-      }
-    });
-
-    // Optional warm-up (tolerant of transient failures; does not mutate pool)
-    (async () => {
-      try {
-        this.logger.info({
-          function: "createPool",
-          message: "pool warm-up: attempting initial connect/release",
-        });
-        const client = await newPool.connect();
-        // attach a temporary error handler while checked out
-        const onClientError = (e: Error) =>
-          this.logger.error({
-            function: "createPool",
-            message: "warm-up client error",
-            error: e.message,
-          });
-        client.on("error", onClientError);
-        client.release();
-        client.off("error", onClientError);
-        this.logger.info({
-          function: "createPool",
-          message: "pool warm-up: connect/release successful",
-        });
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn({
-          function: "createPool",
-          message: "pool warm-up: failed (tolerated)",
-          error: msg,
-          originalError: e,
-        });
-      }
-    })();
-
-    this.logger.info({
-      function: "createPool",
-      message: "Postgres pool created",
-    });
-    const poolConfig = {
-      user: useSshTunnel ? process.env.DB_USER : "postgres",
-      host: useSshTunnel ? process.env.DB_HOST : "localhost",
-      database: useSshTunnel ? process.env.DB_NAME : "test",
-      port: useSshTunnel
-        ? parseInt(process.env.DB_PORT || "5433", 10)
-        : parseInt(process.env.DB_PORT || "5432", 10),
-    };
-    this.logger.info({
-      function: "createPool",
-      message: `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`,
-    });
-    return newPool;
+    await reconnectPgPool();
   }
 
   public getPool(): Pool {
-    // Keep returning the existing singleton pool.
-    return this.pool;
+    return getPgPool();
   }
 
   public async warmup() {
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY_MS = 2000; // 2 seconds
-    let client: PoolClient | null = null;
-
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      try {
-        this.logger.info({
-          function: "warmup",
-          message: `Attempting database warm-up (attempt ${
-            i + 1
-          }/${MAX_RETRIES})...`,
-        });
-        client = await this.getPool().connect();
-        const onClientError = (e: Error) =>
-          this.logger.error({
-            function: "warmup",
-            message: "warmup client error",
-            error: e.message,
-          });
-        client.on("error", onClientError);
-        // A simple ping ensures the backend is reachable
-        await client.query("SELECT 1");
-        client.off("error", onClientError);
-        this.logger.info({
-          function: "warmup",
-          message: "Database connection warm-up successful",
-        });
-        return; // Success, exit the loop
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        this.logger.warn({
-          function: "warmup",
-          message: `Database warm-up failed (attempt ${i + 1}/${MAX_RETRIES})`,
-          error: msg,
-          originalError: err,
-        });
-        if (client) {
-          client.release();
-          client = null;
-        }
-        if (i < MAX_RETRIES - 1) {
-          this.logger.info({
-            function: "warmup",
-            message: `Retrying in ${RETRY_DELAY_MS / 1000} seconds...`,
-          });
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        }
-      } finally {
-        if (client) client.release();
-      }
-    }
-    this.logger.error({
-      function: "warmup",
-      message: `Database warm-up failed after ${MAX_RETRIES} attempts.`,
-    });
+    await warmupPgPool();
   }
 
-  private readonly logger = winston.createLogger({
-    level: "info",
-    format: winston.format.json(),
-    transports: [
-      new winston.transports.File({
-        filename: "logs/error.log",
-        level: "error",
-      }),
-      new winston.transports.File({ filename: "logs/combined.log" }),
-    ],
-  });
+  private readonly logger = logger;
 
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";
@@ -1702,12 +1415,8 @@ RETURNING d.user_attr1, d.user_attr2;
 
   public async reconnect(): Promise<void> {
     this.logger.info("Manual reconnection triggered.");
-    if (this.pool) {
-      await this.pool.end();
-      this.logger.info("Existing PostgreSQL pool ended manually.");
-    }
-    this.pool = this.createPool();
-    await this.warmup();
+    await reconnectPgPool();
+    await warmupPgPool();
     this.logger.info("New PostgreSQL pool created and warmed up manually.");
   }
 
