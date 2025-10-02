@@ -1,16 +1,13 @@
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
-
-// Define the types for the messages you expect from the WebSocket
-// This should be expanded based on all possible message types
-interface WebSocketMessage {
-  type: string;
-  [key: string]: any;
-}
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react';
+import { TaskLog, UploadStatus, S3UploadProgress } from '../types';
 
 interface WebSocketContextType {
-  lastMessage: WebSocketMessage | null;
-  // Connection status can be useful for the UI
+  uploadStatuses: UploadStatus[];
+  taskLogs: { [key: string]: TaskLog[] };
+  s3UploadProgress: S3UploadProgress;
   isConnected: boolean;
+  updateTaskLog: (task: string, log: TaskLog) => void;
+  clearTaskLog: (task: string) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -28,13 +25,31 @@ interface WebSocketProviderProps {
 }
 
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
-  const [lastMessage, setLastMessage] = useState<WebSocketMessage | null>(null);
+  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
+  const [taskLogs, setTaskLogs] = useState<{ [key: string]: TaskLog[] }>({});
+  const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({ processed: 0, total: 0 });
   const [isConnected, setIsConnected] = useState(false);
+
+  const progressAccumulator = useRef<S3UploadProgress>({ processed: 0, total: 0 });
   const reconnectAttempts = useRef(0);
   const ws = useRef<WebSocket | null>(null);
-  // Use a ref for the reconnect timeout to avoid issues with state updates in timeouts
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setS3UploadProgress((prevProgress) => {
+        if (
+          prevProgress.processed !== progressAccumulator.current.processed ||
+          prevProgress.total !== progressAccumulator.current.total
+        ) {
+          return { ...progressAccumulator.current };
+        }
+        return prevProgress;
+      });
+    }, 200);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const connectWebSocket = () => {
@@ -53,7 +68,68 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
       ws.current.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          setLastMessage(message);
+
+          if (message.type === "s3-upload-total") {
+            progressAccumulator.current.total = message.totalFiles;
+          }
+
+          if (message.type === "s3-upload-progress") {
+            progressAccumulator.current.processed += 1;
+          }
+
+          if (message.type === "progressUpdate" || message.type === "progressComplete") {
+            setUploadStatuses((prevStatuses) => {
+              const fileName = "excel_processing";
+              const existingFileIndex = prevStatuses.findIndex((s) => s.fileName === fileName);
+              const totalRows = message.totalRows || 0;
+              const processedRows = message.processedRows || 0;
+              const progressPercentage = totalRows > 0 ? Math.round((processedRows / totalRows) * 100) : 0;
+
+              let newStatus: UploadStatus = {
+                fileName: fileName,
+                progress: progressPercentage,
+                status: message.type === "progressComplete" ? "Complete" : "Processing",
+                totalFiles: totalRows,
+                processedFiles: processedRows,
+                successfulFiles: message.successfulRows || 0,
+                errorFiles: message.errors || 0,
+                notFoundFiles: message.notFound || 0,
+                badRowsDetails: prevStatuses[existingFileIndex]?.badRowsDetails || [],
+              };
+
+              if (
+                message.currentRow &&
+                (message.currentRow.page_count_status === "Error" ||
+                  message.currentRow.page_count_status === "Not Found" ||
+                  message.currentRow.page_count_status === "Path Error" ||
+                  message.currentRow.page_count_status === "Missing serverId" ||
+                  message.currentRow.page_count_status === "Missing drivePath" ||
+                  message.currentRow.page_count_status === "Missing pathVal" ||
+                  message.currentRow.page_count_status === "Unsupported" ||
+                  message.currentRow.page_count_status === "PDF Error")
+              ) {
+                const currentBadRows = newStatus.badRowsDetails || [];
+                const isDuplicate = currentBadRows.some(
+                  (detail) =>
+                    detail.id_ihno === message.currentRow.id_ihno &&
+                    detail.id_acno === message.currentRow.id_acno &&
+                    detail.page_count_status === message.currentRow.page_count_status
+                );
+
+                if (!isDuplicate) {
+                  newStatus.badRowsDetails = [...currentBadRows, message.currentRow];
+                }
+              }
+
+              if (existingFileIndex > -1) {
+                const updatedStatuses = [...prevStatuses];
+                updatedStatuses[existingFileIndex] = { ...updatedStatuses[existingFileIndex], ...newStatus };
+                return updatedStatuses;
+              } else {
+                return [...prevStatuses, newStatus];
+              }
+            });
+          }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
         }
@@ -90,9 +166,24 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     };
   }, []);
 
+  const updateTaskLog = useCallback((task: string, log: TaskLog) => {
+    setTaskLogs((prev) => {
+      const existingLogs = prev[task] || [];
+      return { ...prev, [task]: [...existingLogs, log] };
+    });
+  }, []);
+
+  const clearTaskLog = useCallback((task: string) => {
+    setTaskLogs((prev) => ({ ...prev, [task]: [] }));
+  }, []);
+
   const value = {
-    lastMessage,
+    uploadStatuses,
+    taskLogs,
+    s3UploadProgress,
     isConnected,
+    updateTaskLog,
+    clearTaskLog,
   };
 
   return (
