@@ -111,8 +111,6 @@ export async function uploadFile(
     // upload.on("httpUploadProgress", (progress) => { ... });
 
     await upload.done();
-
-    console.log(`[UPLOADED] ${key}`);
   } catch (err: any) {
     if (isAuthError(err)) {
       console.error(
