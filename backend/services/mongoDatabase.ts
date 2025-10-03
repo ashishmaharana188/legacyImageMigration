@@ -35,22 +35,32 @@ export class MongoDatabase {
   public async testConnectionAndQuery(): Promise<any[]> {
     try {
       if (mongoose.connection.readyState !== 1) {
-        logger.warn("MongoDB not connected. Attempting to connect...");
+        logger.warn({
+          category: "app-flow",
+          message: "MongoDB not connected. Attempting to connect...",
+        });
         await this.connect();
       }
       const db = this.getDb();
       if (!db) {
-        logger.error("Database connection is not available.");
+        logger.error({
+          category: "app-flow",
+          message: "Database connection is not available.",
+        });
         return [];
       }
 
       const result = await this.model.find({}).limit(1).lean();
-      logger.info(
-        `MongoDB connection test successful. Found ${result.length} document(s).`
-      );
+      logger.info({
+        category: "app-flow",
+        message: `MongoDB connection test successful. Found ${result.length} document(s).`,
+      });
       return result;
     } catch (error) {
-      logger.error(`MongoDB connection test failed: ${error}`);
+      logger.error({
+        category: "app-flow",
+        message: `MongoDB connection test failed: ${error}`,
+      });
       throw error;
     }
   }
@@ -64,7 +74,10 @@ export class MongoDatabase {
       await this.connect();
       const db = this.getDb();
       if (!db) {
-        logger.error("Database connection is not available.");
+        logger.error({
+          category: "task-steps",
+          message: "Database connection is not available.",
+        });
         return { transferredCount: 0 };
       }
 
@@ -122,7 +135,10 @@ export class MongoDatabase {
       await this.disconnect();
       return { transferredCount: pgData.length, documents: documentsToInsert };
     } catch (error) {
-      logger.error(`Data transfer error: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Data transfer error: ${error}`,
+      });
       throw error;
     }
   }
@@ -131,7 +147,10 @@ export class MongoDatabase {
     try {
       await this.model.insertMany(documents);
     } catch (error) {
-      logger.error(`Error inserting documents: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Error inserting documents: ${error}`,
+      });
       throw error;
     }
   }
@@ -152,7 +171,10 @@ export class MongoDatabase {
       await this.connect();
       const db = this.getDb();
       if (!db) {
-        logger.error("Database connection is not available.");
+        logger.error({
+          category: "task-steps",
+          message: "Database connection is not available.",
+        });
         return {
           updatedCount: 0,
           syncedCount: 0,
@@ -197,7 +219,10 @@ export class MongoDatabase {
       await this.disconnect();
       return { updatedCount, syncedCount, updatedDocuments, syncedDocuments };
     } catch (error) {
-      logger.error(`Mongo transaction update error: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Mongo transaction update error: ${error}`,
+      });
       throw error;
     }
   }
@@ -207,12 +232,18 @@ export class MongoDatabase {
       // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
       const date = new Date(cutoffTms);
       if (isNaN(date.getTime())) {
-        logger.error(`Invalid cutoffTms date string: ${cutoffTms}`);
+        logger.error({
+          category: "task-steps",
+          message: `Invalid cutoffTms date string: ${cutoffTms}`,
+        });
         return null;
       }
       return date;
     } catch (error) {
-      logger.error(`Error converting cutoffTms to Date: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Error converting cutoffTms to Date: ${error}`,
+      });
       return null;
     }
   }
@@ -249,7 +280,10 @@ export class MongoDatabase {
       await this.disconnect();
       return documents;
     } catch (error) {
-      logger.error(`Error fetching documents by date: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Error fetching documents by date: ${error}`,
+      });
       throw error;
     }
   }
@@ -290,12 +324,16 @@ export class MongoDatabase {
           logs,
         };
       }
-      logger.info(
-        `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`
-      );
+      logger.debug({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`,
+      });
     }
 
-    logger.info(`sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`);
+    logger.debug({
+      category: "task-steps",
+      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`,
+    });
 
     try {
       await this.connect();
@@ -436,14 +474,17 @@ export class MongoDatabase {
         0
       );
 
-      logger.info(
-        `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`
-      );
+      logger.info({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`,
+      });
 
       if (!dryRun) {
-        logger.info(
-          "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates."
-        );
+        logger.info({
+          category: "task-steps",
+          message:
+            "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates.",
+        });
         for (const dupGroup of duplicates) {
           if (dupGroup.documents.length > 1) {
             // Sort documents by createdOnDate in ascending order (oldest first)
@@ -466,9 +507,10 @@ export class MongoDatabase {
                 status: "info",
                 message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
               });
-              logger.info(
-                `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`
-              );
+              logger.debug({
+                category: "task-steps",
+                message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
+              });
             }
           }
         }
@@ -489,7 +531,10 @@ export class MongoDatabase {
         logs,
       };
     } catch (error) {
-      logger.error(`sanityCheckMongoDuplicates failed: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates failed: ${error}`,
+      });
       logs.push({
         status: "error",
         message: `sanityCheckMongoDuplicates failed: ${error}`,
