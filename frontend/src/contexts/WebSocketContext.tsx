@@ -27,11 +27,10 @@ interface WebSocketProviderProps {
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: TaskLog[] }>({});
-  const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({ processed: 0, total: 0 });
+    const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({ processedDirectories: 0, totalDirectories: 0, currentDirectory: "" });
   const [isConnected, setIsConnected] = useState(false);
 
-  const progressAccumulator = useRef<S3UploadProgress>({ processed: 0, total: 0 });
-  const reconnectAttempts = useRef(0);
+  const progressAccumulator = useRef<S3UploadProgress>({ processedDirectories: 0, totalDirectories: 0, currentDirectory: "" });  const reconnectAttempts = useRef(0);
   const ws = useRef<WebSocket | null>(null);
   const reconnectTimeout = useRef<NodeJS.Timeout | null>(null);
 
@@ -39,8 +38,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     const interval = setInterval(() => {
       setS3UploadProgress((prevProgress) => {
         if (
-          prevProgress.processed !== progressAccumulator.current.processed ||
-          prevProgress.total !== progressAccumulator.current.total
+          prevProgress.processedDirectories !== progressAccumulator.current.processedDirectories ||
+          prevProgress.totalDirectories !== progressAccumulator.current.totalDirectories ||
+          prevProgress.currentDirectory !== progressAccumulator.current.currentDirectory
         ) {
           return { ...progressAccumulator.current };
         }
@@ -69,12 +69,14 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
         try {
           const message = JSON.parse(event.data);
 
-          if (message.type === "s3-upload-total") {
-            progressAccumulator.current.total = message.totalFiles;
+          if (message.type === "s3-upload-total-directories") {
+            progressAccumulator.current.totalDirectories = message.totalDirectories;
           }
 
-          if (message.type === "s3-upload-progress") {
-            progressAccumulator.current.processed += 1;
+          if (message.type === "s3-directory-progress") {
+            progressAccumulator.current.processedDirectories = message.completedDirectories;
+            progressAccumulator.current.totalDirectories = message.totalDirectories;
+            progressAccumulator.current.currentDirectory = message.currentDirectory;
           }
 
           if (message.type === "progressUpdate" || message.type === "progressComplete") {

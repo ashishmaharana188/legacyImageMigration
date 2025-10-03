@@ -57,6 +57,7 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({ uploadStatu
                     progress={s3UploadStatus.progress}
                     total={s3UploadStatus.totalFiles}
                     processed={s3UploadStatus.processedFiles}
+                    unit="directories"
                 />
             )}
             {excelProcessingStatus && (
