@@ -65,6 +65,30 @@ function countFilesRecursive(dir: string): number {
   return count;
 }
 
+function countTrackedDirectories(dir: string, isInsideClientCodeDir: boolean = false): number {
+  let count = 0;
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    const currentDirName = path.basename(dir);
+    const isClientCodeDir = /^CLIENT_CODE_\d+$/.test(currentDirName);
+
+    if (isInsideClientCodeDir || !isClientCodeDir) {
+      // If we are inside a CLIENT_CODE_ directory, or the current directory is not a CLIENT_CODE_ directory, count it.
+      count++;
+    }
+
+    for (const entry of entries) {
+      const entryPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        count += countTrackedDirectories(entryPath, isInsideClientCodeDir || isClientCodeDir);
+      }
+    }
+  } catch (err) {
+    console.error(`Error counting tracked directories in ${dir}:`, err);
+  }
+  return count;
+}
+
 export async function uploadFile(
   localFilePath: string,
   bucket: string,
@@ -88,16 +112,15 @@ export async function uploadFile(
 
     await upload.done();
 
-    // Send a simple, lightweight message for each successful upload.
-    broadcast(JSON.stringify({ type: "s3-upload-progress" }));
-
     console.log(`[UPLOADED] ${key}`);
   } catch (err: any) {
     if (isAuthError(err)) {
       console.error(
         `S3 uploadFile failed for ${key}: Authentication token expired or invalid. Please refresh your credentials.`
       );
-      throw new Error("S3 upload failed due to expired or invalid credentials.");
+      throw new Error(
+        "S3 upload failed due to expired or invalid credentials."
+      );
     } else {
       console.error(`S3 uploadFile error for ${key}:`, err);
       throw err;
@@ -110,54 +133,62 @@ async function performIterativeUpload(
   bucket: string,
   prefix: string
 ) {
-  const totalFiles = countFilesRecursive(localDir);
-  if (totalFiles === 0) {
+  let totalDirectories = 0;
+  const directoryQueue: { localPath: string; s3Prefix: string; isClientCodeParent: boolean }[] = [];
+
+  const initialDirName = path.basename(localDir);
+  const isInitialDirClientCode = /^CLIENT_CODE_\d+$/.test(initialDirName);
+
+  if (!isInitialDirClientCode) {
+    // If the root directory is NOT a CLIENT_CODE_ directory, count it and its children normally.
+    totalDirectories = countTrackedDirectories(localDir, false);
+    directoryQueue.push({ localPath: localDir, s3Prefix: prefix, isClientCodeParent: false });
+  } else {
+    // If the root directory IS a CLIENT_CODE_ directory, don't count it, but count its children.
+    // Add its children to the queue directly, marking them as being inside a CLIENT_CODE_ parent.
+    const entries = fs.readdirSync(localDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const entryPath = path.join(localDir, entry.name);
+        const entryKey = `${prefix}/${entry.name}`;
+        totalDirectories += countTrackedDirectories(entryPath, true); // Count children of CLIENT_CODE_ dir
+        directoryQueue.push({ localPath: entryPath, s3Prefix: entryKey, isClientCodeParent: true });
+      }
+    }
+  }
+
+  if (totalDirectories === 0) {
     broadcast(
       JSON.stringify({
         type: "complete",
         fileName: prefix,
         status: "Done",
         isDirectory: true,
-        totalFiles: 0,
+        totalDirectories: 0,
       })
     );
     return { successful: [], failed: [] };
   }
 
-  // Send the total number of files to the client at the very beginning.
+  // Send the total number of directories to the client at the very beginning.
   broadcast(
     JSON.stringify({
-      type: "s3-upload-total",
-      totalFiles: totalFiles,
+      type: "s3-upload-total-directories",
+      totalDirectories: totalDirectories,
     })
   );
 
-  let uploadedFiles = 0;
+  let completedDirectories = 0;
   const results = {
     successful: [] as string[],
     failed: [] as { name: string; error: string }[],
   };
-  const directoryQueue: { localPath: string; s3Prefix: string }[] = [
-    { localPath: localDir, s3Prefix: prefix },
-  ];
-
-  // The detailed, per-directory progress is no longer needed with the aggregate counter.
-  // broadcast(
-  //   JSON.stringify({
-  //     type: "progress",
-  //     fileName: prefix,
-  //     progress: 0,
-  //     status: "In progress",
-  //     isDirectory: true,
-  //     totalFiles: totalFiles,
-  //   })
-  // );
-
-  // The updateProgress function is no longer needed as we send incremental updates.
-  // const updateProgress = () => { ... };
 
   while (directoryQueue.length > 0) {
-    const { localPath, s3Prefix } = directoryQueue.shift()!; // Using as a queue
+    const { localPath, s3Prefix, isClientCodeParent } = directoryQueue.shift()!; // Using as a queue
+    const currentDirName = path.basename(localPath);
+    const isCurrentDirClientCode = /^CLIENT_CODE_\d+$/.test(currentDirName);
+
     try {
       const entries = fs.readdirSync(localPath, { withFileTypes: true });
       const batchSize = 50;
@@ -171,23 +202,12 @@ async function performIterativeUpload(
           const entryKey = `${s3Prefix}/${entry.name}`;
 
           if (entry.isDirectory()) {
-            // Announcing individual directories is too noisy.
-            // broadcast(
-            //   JSON.stringify({
-            //     type: "progress",
-            //     fileName: entryKey,
-            //     status: "Starting...",
-            //     isDirectory: true,
-            //   })
-            // );
-            directoryQueue.push({ localPath: entryPath, s3Prefix: entryKey });
+            directoryQueue.push({ localPath: entryPath, s3Prefix: entryKey, isClientCodeParent: isClientCodeParent || isCurrentDirClientCode });
           } else {
             const fileUploadPromise = (async () => {
               try {
                 await uploadFile(entryPath, bucket, entryKey, entry.name);
                 results.successful.push(entry.name);
-                uploadedFiles++;
-                // updateProgress(); // No longer needed
               } catch (uploadError: any) {
                 results.failed.push({
                   name: entry.name,
@@ -199,6 +219,23 @@ async function performIterativeUpload(
           }
         }
         await Promise.all(uploadPromises);
+
+        // After all files in the current directory batch are processed, increment completedDirectories
+        // and send a progress update for the directory.
+        if (i + batchSize >= entries.length) {
+          // Increment if it's a tracked directory (i.e., not a CLIENT_CODE_ parent that was skipped)
+          if (isClientCodeParent || !isCurrentDirClientCode) {
+              completedDirectories++;
+              broadcast(
+                JSON.stringify({
+                  type: "s3-directory-progress",
+                  completedDirectories: completedDirectories,
+                  totalDirectories: totalDirectories,
+                  currentDirectory: s3Prefix,
+                })
+              );
+          }
+        }
       }
     } catch (err: any) {
       if (isAuthError(err)) {
@@ -219,6 +256,8 @@ async function performIterativeUpload(
       fileName: prefix,
       status: "Done",
       isDirectory: true,
+      totalDirectories: totalDirectories,
+      completedDirectories: completedDirectories,
     })
   );
 
@@ -230,11 +269,7 @@ export async function uploadDirectoryRecursive(
   bucket: string,
   prefix: string
 ) {
-  return performIterativeUpload(
-    localDir,
-    bucket,
-    prefix
-  );
+  return performIterativeUpload(localDir, bucket, prefix);
 }
 
 export async function uploadSplitFilesToS3(
@@ -242,10 +277,5 @@ export async function uploadSplitFilesToS3(
   bucket: string,
   prefix: string
 ) {
-  return performIterativeUpload(
-    localDir,
-    bucket,
-    prefix
-  );
+  return performIterativeUpload(localDir, bucket, prefix);
 }
-

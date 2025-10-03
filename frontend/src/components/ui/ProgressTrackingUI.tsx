@@ -19,6 +19,7 @@ interface ProgressTrackingUIProps {
         page_count_status: string | number;
     }>;
     displayType?: 'aggregate' | 'default';
+    unit?: string; // New prop for unit of progress
 }
 
 const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
@@ -32,6 +33,7 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     currentlySplitting,
     badRowsDetails,
     displayType = 'default',
+    unit = 'files', // Default to 'files' if not provided
 }) => {
     const [isExpanded, setIsExpanded] = useState(false);
 
@@ -54,7 +56,7 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
                     </div>
                 </div>
                 <div className="text-center mt-2 font-mono text-black">
-                    {(processed || 0).toLocaleString()} / {(total || 0).toLocaleString()} files uploaded
+                    {(processed || 0).toLocaleString()} / {(total || 0).toLocaleString()} {unit} uploaded
                 </div>
             </div>
         );

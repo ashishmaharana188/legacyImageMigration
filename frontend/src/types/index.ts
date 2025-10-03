@@ -97,6 +97,7 @@ export type TaskLog =
   | FolioTransactionUpdateLog;
 
 export interface S3UploadProgress {
-  processed: number;
-  total: number;
+  processedDirectories: number;
+  totalDirectories: number;
+  currentDirectory: string;
 }
