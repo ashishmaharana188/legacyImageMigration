@@ -2,6 +2,7 @@ import { createTunnel } from "tunnel-ssh";
 import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
+import logger from "../utils/logger"; // Import the logger
 
 export const startSshTunnel = async () => {
   const tunnelOptions: any = {
@@ -47,8 +48,16 @@ export const startSshTunnel = async () => {
 };
 
 export const startMongoSshTunnel = async () => {
+  logger.info({
+    function: "startMongoSshTunnel",
+    message: "Attempting to start MongoDB SSH tunnel.",
+  });
+
   if (process.env.USE_MONGO_SSH_TUNNEL !== "true") {
-    console.log("MongoDB SSH tunnel is disabled. Skipping tunnel creation.");
+    logger.info({
+      function: "startMongoSshTunnel",
+      message: "MongoDB SSH tunnel is disabled. Skipping tunnel creation.",
+    });
     return null;
   }
 
@@ -82,16 +91,61 @@ export const startMongoSshTunnel = async () => {
   };
 
   try {
+    logger.info({
+      function: "startMongoSshTunnel",
+      message: "Calling createTunnel to establish MongoDB SSH tunnel.",
+    });
     const [server, conn] = await createTunnel(
       tunnelOptions,
       serverOptions,
       sshOptions,
       forwardOptions
     );
-    console.log(`MongoDB SSH tunnel created: localhost:${localPort} -> ${process.env.MONGO_SSH_REMOTE_HOST ? "SET" : "NOT SET"}:${process.env.MONGO_SSH_REMOTE_PORT ? "SET" : "NOT SET"}`);
+
+    server.on("error", (err: Error) => {
+      logger.error({
+        function: "startMongoSshTunnel",
+        message: "MongoDB SSH tunnel server error.",
+        error: err.message,
+        stack: err.stack,
+      });
+    });
+
+    server.on("close", () => {
+      logger.warn({
+        function: "startMongoSshTunnel",
+        message: "MongoDB SSH tunnel server closed.",
+      });
+    });
+
+    conn.on("error", (err: Error) => {
+      logger.error({
+        function: "startMongoSshTunnel",
+        message: "MongoDB SSH connection error.",
+        error: err.message,
+        stack: err.stack,
+      });
+    });
+
+    conn.on("end", () => {
+      logger.warn({
+        function: "startMongoSshTunnel",
+        message: "MongoDB SSH connection ended.",
+      });
+    });
+
+    logger.info({
+      function: "startMongoSshTunnel",
+      message: `MongoDB SSH tunnel created successfully and listening on localhost:${localPort}.`,
+    });
     return { server, localPort }; // Return the local port
-  } catch (error) {
-    console.error("MongoDB SSH tunnel error:", error);
+  } catch (error: any) {
+    logger.error({
+      function: "startMongoSshTunnel",
+      message: "MongoDB SSH tunnel error during creation.",
+      error: error.message,
+      stack: error.stack,
+    });
     throw error;
   }
 };

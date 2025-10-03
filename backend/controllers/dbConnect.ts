@@ -1,12 +1,25 @@
 import { Pool, PoolClient } from "pg";
 import mongoose from "mongoose";
 import logger from "../utils/logger"; // Centralized logger
+import { startMongoSshTunnel, startSshTunnel } from "../services/tunnel"; // Import both tunnel starters
 
 // --- PostgreSQL Pool Configuration ---
 let pgPool: Pool | null = null;
 
 const createPgPool = (): Pool => {
   const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
+  if (useSshTunnel) {
+    logger.info("Attempting to start PostgreSQL SSH tunnel.");
+    startSshTunnel().catch((err) => {
+      logger.error({
+        function: "createPgPool",
+        message: "Failed to start PostgreSQL SSH tunnel.",
+        error: err.message,
+        stack: err.stack,
+      });
+      // Depending on criticality, you might want to exit or throw here
+    });
+  }
   const newPool = new Pool({
     user: useSshTunnel ? process.env.DB_USER : "postgres",
     host: useSshTunnel ? process.env.DB_HOST : "localhost",
@@ -266,6 +279,8 @@ export const connectMongo = async (): Promise<void> => {
     let uri: string;
 
     if (useTunnel) {
+      logger.info("Attempting to start MongoDB SSH tunnel.");
+      await startMongoSshTunnel(); // Start the SSH tunnel
       uri = process.env.MONGO_URI || "mongodb://localhost:27017/investor";
       const connectOptions: mongoose.ConnectOptions = {};
       if (process.env.MONGO_USER && process.env.MONGO_PASSWORD) {
