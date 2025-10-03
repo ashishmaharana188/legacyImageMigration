@@ -4,7 +4,8 @@
 
 ## Backend-to-Frontend Communication
 
-- **RESTful APIs or GraphQL**: Use REST for simplicity or GraphQL for efficient, flexible data retrieval.
+- **GraphQL for Frontend-Backend Communication**: Prefer GraphQL with Apollo Client for constant frontend-backend communication over WebSockets to reduce complexity and improve query efficiency. RESTful APIs can be used for simpler interactions where GraphQL is not strictly necessary.
+- **WebSockets for Real-Time**: Only use WebSockets for specific real-time use cases (e.g., notifications, live data) and justify their necessity.
 - **HTTPS**: Ensure encrypted communication to secure data in transit.
 - **Authentication/Authorization**: Implement JWT, OAuth2, or API keys for secure access.
 - **Consistent Response Format**: Use JSON with standardized structure (e.g., { data, error, status }).
@@ -13,18 +14,14 @@
 - **Rate Limiting**: Enforce on backend to protect against excessive requests.
 - **CORS**: Configure properly to allow secure cross-origin requests from frontend.
 - **API Versioning**: Use versioning (e.g., /api/v1/) to manage changes without breaking clients.
-- **WebSockets for Real-Time**: Use for dynamic updates (e.g., notifications, live data).
 - **Data Optimization**: Minimize payload size with pagination, filtering, or compression.
 - **Timeout Management**: Set appropriate server timeouts to avoid long-running requests.
 
 ## Logging Best Practices
 
-- **Structured Logging**: Use JSON for logs to enable parsing and querying.
-- **Log Levels**: Apply DEBUG, INFO, WARN, ERROR for appropriate granularity.
-- **Contextual Data**: Include request IDs, user IDs, and timestamps for traceability.
+- **Structured Logging**: Use JSON format for logs, including `timestamp` (ISO 8601), `level` (`INFO`, `WARN`, `ERROR`, `DEBUG`), `function` (name of the function or component), `context` (relevant details like input parameters, endpoint, query variables), `message` (descriptive outcome or error message), and `error` (stack trace or error details if applicable). This enables parsing, querying, and detailed debugging.
 - **Centralized Logging**: Use tools like ELK Stack, Splunk, or CloudWatch for aggregation.
 - **Mask Sensitive Data**: Redact PII, tokens, or credentials in logs.
-- **Error Logging**: Capture full stack traces and request details for debugging.
 - **Performance Logging**: Track response times and payload sizes for optimization.
 - **Log Retention**: Define policies to manage storage and comply with regulations.
 - **Correlation IDs**: Use to trace requests across frontend and backend services.
@@ -41,11 +38,12 @@ The Legacy Image Migration application is a full-stack web solution for processi
 
 ### 1. Frontend
 
-- **Framework**: React, TypeScript, Vite
+- **Framework**: React, TypeScript, Vite, @tanstack/react-router, @tanstack/react-query
 - **Location**: `frontend/src`
 - **Key Components**:
-  - **Routing** (`frontend/src/routes`):
-    - Manages client-side routing for navigation between views.
+  - **Routing** (`frontend/src/routes`, `frontend/src/routeTree.gen.ts`):
+    - Manages client-side routing for navigation between views using `@tanstack/react-router`.
+  - **Data Fetching & State Synchronization**: Uses `@tanstack/react-query` for efficient data fetching, caching, and synchronization.
   - **Action Components** (`frontend/src/components/action`):
     - `DetailsDisplayTask.tsx`: Displays processed file details.
     - `ProgressTrackingTask.tsx`: Tracks processing progress.
@@ -119,7 +117,7 @@ The Legacy Image Migration application is a full-stack web solution for processi
 
 ### 4. Technology Stack
 
-- **Frontend**: React, TypeScript, Vite, WebSocket, client-side routing (`src/routes`).
+- **Frontend**: React, TypeScript, Vite, WebSocket, @tanstack/react-router, @tanstack/react-query.
 - **Backend**: Node.js, TypeScript, Python (MuPDF).
 - **Storage**: AWS S3.
 - **Databases**: Relational (e.g., PostgreSQL), MongoDB.
@@ -128,7 +126,7 @@ The Legacy Image Migration application is a full-stack web solution for processi
 
 ### 5. System Interactions
 
-- **Frontend ↔ Backend**: REST APIs (`fileController.ts`), WebSocket (`webSocketService.ts`).
+- **Frontend ↔ Backend**: GraphQL (preferred), REST APIs (`fileController.ts`), WebSocket (for real-time updates only, via `webSocketService.ts`).
 - **Backend ↔ S3**: AWS SDK (`s3Uploader.ts`, `s3Manager.ts`).
 - **Backend ↔ Databases**: SQL/MongoDB drivers.
 - **Python Integration**: Node.js invokes Python scripts.
@@ -136,9 +134,9 @@ The Legacy Image Migration application is a full-stack web solution for processi
 ### 6. Diagram
 
 ```
-[User] → [Frontend: React/Vite]
+[User] → [Frontend: React/Vite/TanStack Router/TanStack Query]
   ↓ (Routes: src/routes)
-  ↓ (REST/WebSocket)
+  ↓ (GraphQL (preferred)/REST/WebSocket for real-time)
 [Backend: Node.js/TypeScript]
   ├── fileController.ts → API routing
   ├── pdfProcessor.ts → processed.csv
@@ -176,7 +174,7 @@ This section details the current implementation flow of the Legacy Image Migrati
 
 ## 1. Overall Application Flow
 
-The application starts with `backend/app.ts` initializing the Express server, WebSocket server, and database connections (PostgreSQL and MongoDB, potentially via SSH tunnels). On the frontend, `frontend/src/main.tsx` sets up the TanStack Router, which renders `frontend/src/App.tsx` within `WebSocketProvider` and `TaskLogProvider` contexts. Users interact with various tasks via the `Sidebar`, triggering actions that communicate with the backend via REST APIs and receive real-time updates via WebSockets.
+The application starts with `backend/app.ts` initializing the Express server, WebSocket server, and database connections (PostgreSQL and MongoDB, potentially via SSH tunnels). On the frontend, `frontend/src/main.tsx` sets up the TanStack Router, which renders `frontend/src/App.tsx` within `WebSocketProvider` and `TaskLogProvider` contexts. Users interact with various tasks via the `Sidebar`, triggering actions that communicate with the backend primarily via REST APIs (with a preference for GraphQL for constant communication) and receive real-time updates via WebSockets (for specific real-time use cases).
 
 ## 2. Frontend Component Flows
 
@@ -395,19 +393,19 @@ The application adheres to structured JSON logging for both REST API interaction
     *   **Example (Backend `logger.ts` output)**:
         ```json
         {
-          "timestamp": "2025-10-02T10:00:00Z",
+          "timestamp": "2025-10-01T22:53:00Z",
           "level": "INFO",
-          "function": "processExcelFile",
-          "context": { "originalFile": "example.xlsx" },
-          "message": "Processing file: example.xlsx"
+          "function": "fetchUserData",
+          "context": { "userId": "123", "endpoint": "/api/users" },
+          "message": "Initiating user data fetch"
         }
         {
-          "timestamp": "2025-10-02T10:01:00Z",
+          "timestamp": "2025-10-01T22:53:00Z",
           "level": "ERROR",
-          "function": "executeSql",
-          "context": { "transactionId": "abc123" },
-          "message": "SQL execution failed",
-          "error": "ECONNREFUSED: Connection refused..."
+          "function": "fetchUserData",
+          "context": { "userId": "123", "endpoint": "/api/users" },
+          "message": "Failed to fetch user data",
+          "error": "TypeError: Cannot read property 'id' of null"
         }
         ```
 *   **WebSocket Logging**:
