@@ -9,6 +9,7 @@ import StorageIcon from "@mui/icons-material/Storage";
 import BugReportIcon from "@mui/icons-material/BugReport";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
 import SidebarItem from "./SidebarItem";
+import { Link } from "@tanstack/react-router";
 
 const drawerWidth = 240;
 
@@ -46,7 +47,7 @@ interface MiniDrawerProps {
   open: boolean;
   handleDrawerClose: () => void;
   handleDrawerOpen: () => void;
-  onSelectTask: (task: string) => void; // New prop
+  onSelectTask: (task: string) => void; // This can be removed if not used elsewhere
 }
 
 const Drawer = styled(MuiDrawer, {
@@ -100,30 +101,34 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
       </DrawerHeader>
       <Divider />
       <List>
-        <SidebarItem
-          icon={<UploadFileIcon />}
-          text="Upload and Script"
-          isSidebarOpen={open}
-          onClick={() => onSelectTask("uploadAndScript")}
-        ></SidebarItem>
-        <SidebarItem
-          icon={<StorageIcon />}
-          text="SQL and Mongo Calls"
-          isSidebarOpen={open}
-          onClick={() => onSelectTask("sqlAndMongo")}
-        ></SidebarItem>
-        <SidebarItem
-          icon={<CloudUploadIcon />}
-          text="S3 Browser"
-          isSidebarOpen={open}
-          onClick={() => onSelectTask("s3Browser")}
-        ></SidebarItem>
-        <SidebarItem
-          icon={<BugReportIcon />}
-          text="Sanity Checks"
-          isSidebarOpen={open}
-          onClick={() => onSelectTask("sanityCheck")}
-        ></SidebarItem>
+        <Link to="/upload-script" onClick={() => onSelectTask("upload-script")}>
+          <SidebarItem
+            icon={<UploadFileIcon />}
+            text="Upload and Script"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link to="/sql-mongo" onClick={() => onSelectTask("sql-mongo")}>
+          <SidebarItem
+            icon={<StorageIcon />}
+            text="SQL and Mongo Calls"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link to="/s3-browser" onClick={() => onSelectTask("s3-browser")}>
+          <SidebarItem
+            icon={<CloudUploadIcon />}
+            text="S3 Browser"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link to="/sanity-check" onClick={() => onSelectTask("sanity-check")}>
+          <SidebarItem
+            icon={<BugReportIcon />}
+            text="Sanity Checks"
+            isSidebarOpen={open}
+          />
+        </Link>
       </List>
     </Drawer>
   );

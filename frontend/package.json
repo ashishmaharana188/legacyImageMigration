@@ -10,7 +10,8 @@
     "lint": "eslint .",
     "start": "vite",
     "preview": "vite preview",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist",
+    "generate-routes": "npx @tanstack/router-cli generate"
   },
   "dependencies": {
     "@emotion/react": "^11.14.0",
@@ -18,6 +19,9 @@
     "@mui/icons-material": "^7.3.2",
     "@mui/material": "^7.3.2",
     "@mui/x-date-pickers": "^8.11.1",
+    "@tanstack/react-query": "^5.90.2",
+    "@tanstack/react-router": "^1.132.31",
+    "axios": "^1.12.2",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
     "react-resizable-panels": "^3.0.6"

@@ -10,14 +10,12 @@ interface SidebarItemProps {
   icon: React.ReactElement;
   text: string;
   isSidebarOpen: boolean;
-  onClick: () => void; // New prop
 }
 
 const SidebarItem: React.FC<SidebarItemProps> = ({
   icon,
   text,
   isSidebarOpen,
-  onClick,
 }) => {
   return (
     <ListItem disablePadding sx={{ display: "block" }}>
@@ -27,7 +25,6 @@ const SidebarItem: React.FC<SidebarItemProps> = ({
           justifyContent: isSidebarOpen ? "initial" : "center",
           px: 2.5,
         }}
-        onClick={onClick}
       >
         <ListItemIcon
           sx={{

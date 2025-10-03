@@ -8,7 +8,7 @@
     "start:prod": "cross-env NODE_ENV=production concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
     "start": "node dist/app.js",
     "dev": "cross-env NODE_ENV=development concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist && rm -rf logs",
     "lint": "eslint .",
     "preview": "vite preview",
     "dist": "npx tsc"

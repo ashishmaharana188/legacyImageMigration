@@ -1,0 +1,118 @@
+import React, { useState } from 'react';
+
+interface ProgressTrackingUIProps {
+    title: string;
+    progress?: number;
+    total?: number;
+    processed?: number;
+    successful?: number;
+    errors?: number;
+    notFound?: number;
+    currentlySplitting?: number;
+    badRowsDetails?: Array<{
+        rowNumber: number;
+        id_fund: string;
+        id_trtype: string;
+        id_ihno: string;
+        id_path: string;
+        id_acno: string;
+        page_count_status: string | number;
+    }>;
+    displayType?: 'aggregate' | 'default';
+}
+
+const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
+    title,
+    progress = 0,
+    total,
+    processed,
+    successful,
+    errors,
+    notFound,
+    currentlySplitting,
+    badRowsDetails,
+    displayType = 'default',
+}) => {
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const toggleExpansion = () => {
+        setIsExpanded(!isExpanded);
+    };
+
+    const percentage = Math.round(progress);
+
+    if (displayType === 'aggregate') {
+        return (
+            <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
+                <h4 className="font-semibold text-black mb-2">{title}</h4>
+                <div className="w-full bg-gray-300 rounded-full h-6">
+                    <div
+                        className="bg-black h-6 rounded-full text-lg font-medium text-white text-center leading-6"
+                        style={{ width: `${percentage}%` }}
+                    >
+                        {percentage}%
+                    </div>
+                </div>
+                <div className="text-center mt-2 font-mono text-black">
+                    {(processed || 0).toLocaleString()} / {(total || 0).toLocaleString()} files uploaded
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="mt-4">
+            <h5 className="font-semibold">{title}</h5>
+            <button onClick={toggleExpansion} className="text-sm text-blue-500">
+                {isExpanded ? "Hide Details" : "Show Details"}
+            </button>
+            {isExpanded && (
+                <div className="bg-gray-100 p-2 rounded">
+                    {progress !== undefined && (
+                        <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
+                            <div
+                                className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+                                style={{ width: `${percentage}%` }}
+                            >
+                                {percentage}%
+                            </div>
+                        </div>
+                    )}
+                    <div className="text-sm">
+                        {total !== undefined && <p><strong>Total:</strong> {total}</p>}
+                        {processed !== undefined && <p><strong>Processed:</strong> {processed}</p>}
+                        {successful !== undefined && <p><strong>Successful:</strong> {successful}</p>}
+                        {errors !== undefined && <p><strong>Errors:</strong> {errors}</p>}
+                        {notFound !== undefined && <p><strong>Not Found:</strong> {notFound}</p>}
+                        {currentlySplitting !== undefined && <p><strong>Currently Splitting:</strong> {currentlySplitting}</p>}
+                    </div>
+                    {badRowsDetails && badRowsDetails.length > 0 && (
+                        <div className="mt-2">
+                            <h6 className="font-semibold">Bad Rows Details:</h6>
+                            <table className="w-full text-sm text-left">
+                                <thead className="text-xs uppercase bg-gray-50">
+                                    <tr>
+                                        <th scope="col" className="px-2 py-1">IH No</th>
+                                        <th scope="col" className="px-2 py-1">AC No</th>
+                                        <th scope="col" className="px-2 py-1">Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {badRowsDetails.map((row, index) => (
+                                        <tr key={index} className="bg-white border-b">
+                                            <td className="px-2 py-1">{row.id_ihno}</td>
+                                            <td className="px-2 py-1">{row.id_acno}</td>
+                                            <td className="px-2 py-1">{row.page_count_status}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
+export default ProgressTrackingUI;

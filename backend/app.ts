@@ -2,20 +2,10 @@ import dotenv from "dotenv";
 import os from "os";
 import path from "path";
 import * as fs from "fs";
-import { Database } from "./services/database";
 
-// Graceful shutdown and error handling
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-  // Optionally, you can add more robust logging or graceful shutdown logic here
-});
-
-process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
-  // It's often recommended to restart the process after an uncaught exception
-  process.exit(1);
-});
-
+// --- Environment Variable Loading ---
+// This block MUST be at the very top of the file, before any other imports,
+// to ensure all environment variables are loaded before any other code runs.
 const isProduction = process.env.NODE_ENV === "production";
 const envFile = isProduction ? ".env.production" : ".env.development";
 const userConfigDir = path.join(os.homedir(), ".appConfig");
@@ -23,6 +13,7 @@ const envPath = path.join(userConfigDir, envFile);
 
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
+  console.log(`Loading environment variables from: ${envPath}`);
   console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
   console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
   console.log(`MONGO_URI: ${process.env.MONGO_URI ? "SET" : "NOT SET"}`);
@@ -34,18 +25,29 @@ if (fs.existsSync(envPath)) {
     console.log("Connected to Dev database");
   }
 } else {
-  console.warn(`Warning: Environment file not found at: ${envPath}`);
+  console.warn(`Warning: Environment file not found at: ${envPath}. Please ensure it exists.`);
 }
+// --- End of Environment Variable Loading ---
 
 import express from "express";
 import cors from "cors";
 import multer from "multer";
 import * as fsp from "fs/promises";
 import { fileController } from "./controllers/fileController";
-import { startSshTunnel, startMongoSshTunnel } from "./services/tunnel";
+import { startSshTunnel } from "./services/tunnel";
 import { initWebSocket } from "./services/webSocketService";
 import { verifyS3Connection } from "./services/s3Manager";
-import { MongoDatabase } from "./services/mongoDatabase";
+import { connectMongo, disconnectMongo, warmupPgPool } from "./controllers/dbConnect";
+
+// Graceful shutdown and error handling
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("Unhandled Rejection at:", promise, "reason:", reason);
+});
+
+process.on("uncaughtException", (error) => {
+  console.error("Uncaught Exception:", error);
+  process.exit(1);
+});
 
 const app = express();
 const port = process.env.PORT || 3000;
@@ -158,42 +160,13 @@ app.post("/reconnect", fileController.reconnect);
 
 const startServer = async () => {
   let pgServer: any;
-  let mongoServer: any;
-  let mongoLocalPort: number | undefined;
 
   if (process.env.USE_SSH_TUNNEL === "true") {
     pgServer = await startSshTunnel();
   }
 
-  if (process.env.USE_MONGO_SSH_TUNNEL === "true") {
-    const tunnelResult = await startMongoSshTunnel();
-    if (tunnelResult) {
-      mongoServer = tunnelResult.server;
-      mongoLocalPort = tunnelResult.localPort;
-
-      if (process.env.MONGO_URI) {
-        try {
-          const mongoUriObj = new URL(process.env.MONGO_URI);
-          mongoUriObj.hostname = "localhost";
-          mongoUriObj.port = mongoLocalPort.toString();
-          process.env.MONGO_URI = mongoUriObj.toString();
-          console.log(
-            `MongoDB URI updated for tunnel: ${
-              process.env.MONGO_URI ? "SET" : "NOT SET"
-            }`
-          );
-        } catch (e) {
-          console.error("Error parsing MONGO_URI for tunnel update:", e);
-        }
-      } else {
-        console.warn("USE_MONGO_SSH_TUNNEL is true but MONGO_URI is not set.");
-      }
-    }
-  }
-
-  const mongoDatabase = new MongoDatabase();
   try {
-    await mongoDatabase.connect();
+    await connectMongo();
     console.log("MongoDB connection established during startup.");
   } catch (error) {
     console.error(
@@ -202,9 +175,7 @@ const startServer = async () => {
     );
   }
 
-  // Initialize and warm up PostgreSQL database
-  const database = new Database();
-  await database.warmup();
+  await warmupPgPool();
 
   await verifyS3Connection();
 
@@ -223,10 +194,7 @@ const startServer = async () => {
         pgServer.close();
         console.log("PostgreSQL SSH tunnel closed.");
       }
-      if (mongoServer) {
-        mongoServer.close();
-        console.log("MongoDB SSH tunnel closed.");
-      }
+      disconnectMongo();
       process.exit(0);
     });
   };

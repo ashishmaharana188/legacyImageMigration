@@ -4,73 +4,11 @@ import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
 import { Pool, PoolClient } from "pg";
-import winston from "winston";
-
-interface SqlLog {
-  row: number;
-  status: "success" | "error" | "executed" | "updated";
-  message: string;
-  sql?: string;
-}
-
-interface SanityCheckRow {
-  id: number;
-  document_process: string;
-  document_activity: string;
-  document_type: string;
-  document_format: string;
-  document_path: string;
-  folio_id: number | null;
-  transaction_reference_id: string | null;
-  document_status: string;
-  mime_type: string;
-  user_attr0: string | null;
-  user_attr1: string | null;
-  user_attr2: string | null;
-  user_attr3: string | null;
-  user_attr4: string | null;
-  user_attr5: string | null;
-  user_attr6: string | null;
-  user_attr7: string | null;
-  user_attr8: string | null;
-  user_attr9: string | null;
-  approval_status: string | null;
-  approved_by: string | null;
-  approved_on: Date | null;
-  comments: string | null;
-  audit_code: string | null;
-  del_flag: boolean;
-  last_update_tms: Date;
-  last_updated_by: string;
-  creation_date: Date;
-  created_by: string;
-  page_count: number;
-  client_id: number;
-  rn: number | null; // For ranked duplicates
-  reason: string;
-}
-
-interface DryRunResultRow {
-  id: number;
-  client_id: number;
-  user_attr1_normalized: string;
-  user_attr1: string;
-  user_attr2: string;
-  creation_date: string;
-  folio_id: string | null;
-  transaction_reference_id: string | null;
-  isPerfect: boolean;
-  wouldBeDeleted: boolean;
-  reason: string; // To explain why it would be deleted or is imperfect
-}
-
-interface ImperfectDuplicateRow {
-  user_attr2: string;
-}
+import logger from "../utils/logger";
+import { getPgPool, reconnectPgPool, warmupPgPool } from "../controllers/dbConnect";
+import { SqlLog, SanityCheckRow, DryRunResultRow, ImperfectDuplicateRow } from "../types/database";
 
 export class Database {
-  private pool: Pool;
-
   private readonly trxnMap: Record<string, string> = {
     IC: "IC",
     NCT: "NCT",
@@ -83,182 +21,22 @@ export class Database {
   };
 
   constructor() {
-    this.pool = this.createPool();
+    // Pool is now managed externally
   }
 
   private async reconnectPool(): Promise<void> {
-    this.logger.warn("Attempting to reconnect PostgreSQL pool...");
-    const MAX_RECONNECT_RETRIES = 5;
-    const RECONNECT_DELAY_MS = 5000; // 5 seconds
-
-    for (let i = 0; i < MAX_RECONNECT_RETRIES; i++) {
-      try {
-        if (this.pool) {
-          await this.pool.end();
-          this.logger.info("Existing PostgreSQL pool ended.");
-        }
-        this.pool = this.createPool();
-        await this.warmup(); // Warm up the new pool
-        this.logger.info("PostgreSQL pool reconnected successfully.");
-        return;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.error(
-          `PostgreSQL pool reconnection failed (attempt ${
-            i + 1
-          }/${MAX_RECONNECT_RETRIES}): ${msg}`
-        );
-        if (i < MAX_RECONNECT_RETRIES - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, RECONNECT_DELAY_MS)
-          );
-        } else {
-          this.logger.error(
-            "Failed to reconnect PostgreSQL pool after multiple attempts."
-          );
-          throw e; // Re-throw after all retries fail
-        }
-      }
-    }
-  }
-
-  private createPool(): Pool {
-    const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
-    const newPool = new Pool({
-      user: useSshTunnel ? process.env.DB_USER : "postgres",
-      host: useSshTunnel ? process.env.DB_HOST : "localhost",
-      database: useSshTunnel ? process.env.DB_NAME : "test",
-      password: useSshTunnel ? process.env.DB_PASSWORD : "123456",
-      port: useSshTunnel
-        ? parseInt(process.env.DB_PORT || "5433", 10)
-        : parseInt(process.env.DB_PORT || "5432", 10),
-      max: 20,
-      idleTimeoutMillis: 30000, // 30 seconds
-      connectionTimeoutMillis: 10000,
-      keepAlive: true,
-    });
-
-    // Lifecycle diagnostics
-    newPool.on("connect", () => {
-      this.logger.info("pg Pool: connect (new backend connection established)");
-    });
-    newPool.on("acquire", () => {
-      this.logger.info("pg Pool: acquire (client checked out from pool)");
-    });
-
-    // IMPORTANT: Do NOT end() or null-out the pool on idle client errors.
-    // Log and let pg discard the broken idle client internally.
-    newPool.on("error", (err) => {
-      this.logger.error(
-        `pg Pool: unexpected error on idle client: ${err.message}`
-      );
-      // Check for critical connection errors that warrant a full pool reconnection
-      if (
-        err.message.includes("ECONNREFUSED") ||
-        err.message.includes("ETIMEDOUT") ||
-        err.message.includes("ENOTFOUND") ||
-        err.message.includes("EHOSTUNREACH")
-      ) {
-        this.logger.error(
-          `pg Pool: Critical connection error detected. Attempting to reconnect pool: ${err.message}`
-        );
-        this.reconnectPool().catch((reconnectErr) => {
-          this.logger.error(
-            `Failed to re-establish PostgreSQL pool after critical error: ${reconnectErr.message}`
-          );
-        });
-      }
-    });
-
-    // Optional warm-up (tolerant of transient failures; does not mutate pool)
-    (async () => {
-      try {
-        this.logger.info("pool warm-up: attempting initial connect/release");
-        const client = await newPool.connect();
-        // attach a temporary error handler while checked out
-        const onClientError = (e: Error) =>
-          this.logger.error(`warm-up client error: ${e.message}`);
-        client.on("error", onClientError);
-        client.release();
-        client.off("error", onClientError);
-        this.logger.info("pool warm-up: connect/release successful");
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error";
-        this.logger.warn(`pool warm-up: failed (tolerated): ${msg}`, e);
-      }
-    })();
-
-    this.logger.info("Postgres pool created");
-    const poolConfig = {
-      user: useSshTunnel ? process.env.DB_USER : "postgres",
-      host: useSshTunnel ? process.env.DB_HOST : "localhost",
-      database: useSshTunnel ? process.env.DB_NAME : "test",
-      port: useSshTunnel
-        ? parseInt(process.env.DB_PORT || "5433", 10)
-        : parseInt(process.env.DB_PORT || "5432", 10),
-    };
-    this.logger.info(
-      `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`
-    );
-    return newPool;
+    await reconnectPgPool();
   }
 
   public getPool(): Pool {
-    // Keep returning the existing singleton pool.
-    return this.pool;
+    return getPgPool();
   }
 
   public async warmup() {
-    const MAX_RETRIES = 5;
-    const RETRY_DELAY_MS = 2000; // 2 seconds
-    let client: PoolClient | null = null;
-
-    for (let i = 0; i < MAX_RETRIES; i++) {
-      try {
-        this.logger.info(
-          `Attempting database warm-up (attempt ${i + 1}/${MAX_RETRIES})...`
-        );
-        client = await this.getPool().connect();
-        const onClientError = (e: Error) =>
-          this.logger.error(`warmup client error: ${e.message}`);
-        client.on("error", onClientError);
-        // A simple ping ensures the backend is reachable
-        await client.query("SELECT 1");
-        client.off("error", onClientError);
-        this.logger.info("Database connection warm-up successful");
-        return; // Success, exit the loop
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : "Unknown error";
-        this.logger.warn(
-          `Database warm-up failed (attempt ${i + 1}/${MAX_RETRIES}): ${msg}`,
-          err
-        );
-        if (client) {
-          client.release();
-          client = null;
-        }
-        if (i < MAX_RETRIES - 1) {
-          this.logger.info(`Retrying in ${RETRY_DELAY_MS / 1000} seconds...`);
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
-        }
-      } finally {
-        if (client) client.release();
-      }
-    }
-    this.logger.error(`Database warm-up failed after ${MAX_RETRIES} attempts.`);
+    await warmupPgPool();
   }
 
-  private readonly logger = winston.createLogger({
-    level: "info",
-    format: winston.format.json(),
-    transports: [
-      new winston.transports.File({
-        filename: "logs/error.log",
-        level: "error",
-      }),
-      new winston.transports.File({ filename: "logs/combined.log" }),
-    ],
-  });
+  private readonly logger = logger;
 
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";
@@ -266,12 +44,16 @@ export class Database {
 
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../processed");
-    this.logger.info("getProcessedFolioNumbers: Reading processed directory");
+    this.logger.info({
+      function: "getProcessedFolioNumbers",
+      message: "Reading processed directory",
+    });
     try {
       const files = await fs.readdir(csvPath);
-      this.logger.info(
-        `getProcessedFolioNumbers: found ${files.length} files in processed`
-      );
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: `Found ${files.length} files in processed directory`,
+      });
 
       const latestCsv = files
         .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
@@ -279,18 +61,25 @@ export class Database {
         .pop();
 
       if (!latestCsv) {
-        this.logger.warn("getProcessedFolioNumbers: no processed_*.csv found");
+        this.logger.warn({
+          function: "getProcessedFolioNumbers",
+          message: "No processed_*.csv found",
+        });
         return [];
       }
 
       const csvFullPath = path.join(csvPath, latestCsv);
-      this.logger.info(
-        `getProcessedFolioNumbers: Reading CSV file: ${csvFullPath}`
-      );
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: `Reading CSV file: ${csvFullPath}`,
+      });
 
       const workbook = new ExcelJS.Workbook();
       const worksheet = await workbook.csv.readFile(csvFullPath);
-      this.logger.info("getProcessedFolioNumbers: CSV loaded into workbook");
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: "CSV loaded into workbook",
+      });
 
       const idAcnos: string[] = [];
       worksheet.eachRow((row, rowNumber) => {
@@ -298,28 +87,34 @@ export class Database {
         try {
           const idAcnoCell = row.getCell(5);
           if (idAcnoCell && idAcnoCell.text) {
-            const idAcno = idAcnoCell.text.trim();
+            const idAcno = (idAcnoCell.text as string).trim();
             if (idAcno) {
               idAcnos.push(idAcno);
             }
           }
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn(
-            `getProcessedFolioNumbers: parse error at row ${rowNumber}: ${msg}`
-          );
+          this.logger.warn({
+            function: "getProcessedFolioNumbers",
+            message: `Parse error at row ${rowNumber}`,
+            error: msg,
+          });
         }
       });
 
       const uniqueIdAcnos = [...new Set(idAcnos)];
-      this.logger.info(
-        `getProcessedFolioNumbers: found ${uniqueIdAcnos.length} unique id_acno values`
-      );
+      this.logger.info({
+        function: "getProcessedFolioNumbers",
+        message: `Found ${uniqueIdAcnos.length} unique id_acno values`,
+      });
       return uniqueIdAcnos;
     } catch (error) {
-      this.logger.error(
-        `getProcessedFolioNumbers: Error reading processed folder or CSV file: ${error}`
-      );
+      this.logger.error({
+        function: "getProcessedFolioNumbers",
+        message: "Error reading processed folder or CSV file",
+        error: error instanceof Error ? error.message : String(error),
+        originalError: error,
+      });
       return []; // Return empty array on error to avoid breaking the main query
     }
   }
@@ -340,9 +135,15 @@ export class Database {
 
     try {
       const csvPath = path.join(__dirname, "../../processed");
-      this.logger.info("generateSql: Reading processed directory");
+      this.logger.info({
+        function: "generateSql",
+        message: "Reading processed directory",
+      });
       const files = await fs.readdir(csvPath);
-      this.logger.info(`generateSql: found ${files.length} files in processed`);
+      this.logger.info({
+        function: "generateSql",
+        message: `Found ${files.length} files in processed directory`,
+      });
 
       const latestCsv = files
         .filter((f) => f.startsWith("processed_") && f.endsWith(".csv"))
@@ -350,7 +151,10 @@ export class Database {
         .pop();
 
       if (!latestCsv) {
-        this.logger.warn("generateSql: no processed_*.csv found");
+        this.logger.warn({
+          function: "generateSql",
+          message: "No processed_*.csv found",
+        });
         logs.push({
           row: 0,
           status: "error",
@@ -360,13 +164,17 @@ export class Database {
       }
 
       const csvFullPath = path.join(csvPath, latestCsv);
-      this.logger.info("generateSql: Reading CSV file");
+      this.logger.info({
+        function: "generateSql",
+        message: "Reading CSV file",
+      });
 
       const workbook = new ExcelJS.Workbook();
-      await workbook.csv.readFile(csvFullPath);
-      this.logger.info("generateSql: CSV loaded into workbook");
-
       const worksheet = await workbook.csv.readFile(csvFullPath);
+      this.logger.info({
+        function: "generateSql",
+        message: "CSV loaded into workbook",
+      });
 
       const transactions: {
         id_fund: number;
@@ -392,9 +200,11 @@ export class Database {
           });
         } catch (err) {
           const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn(
-            `generateSql: parse error at row ${rowNumber}: ${msg}`
-          );
+          this.logger.warn({
+            function: "generateSql",
+            message: `Parse error at row ${rowNumber}`,
+            error: msg,
+          });
           logs.push({
             row: rowNumber,
             status: "error",
@@ -403,9 +213,10 @@ export class Database {
         }
       });
 
-      this.logger.info(
-        `generateSql: parsed ${transactions.length} transaction rows`
-      );
+      this.logger.info({
+        function: "generateSql",
+        message: `Parsed ${transactions.length} transaction rows`,
+      });
 
       const trxnNameMap: Record<string, string> = {
         NEW: "Initial Contribution Form",
@@ -432,10 +243,7 @@ export class Database {
             if (!ext) throw new Error("Invalid file extension");
 
             const format = ext.replace(".", "").toUpperCase();
-            const clientId = String(data.id_fund)
-              .split("")
-              .map((char) => (/\\d/.test(char) ? char.charCodeAt(0) : ""))
-              .join("");
+            const clientId = data.id_fund;
 
             const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
             const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
@@ -461,9 +269,11 @@ ${data.page_count}, ${clientId}
             return sql;
           } catch (err) {
             const msg = err instanceof Error ? err.message : "Unknown error";
-            this.logger.warn(
-              `generateSql: failed generating SQL for row ${index + 2}: ${msg}`
-            );
+            this.logger.warn({
+              function: "generateSql",
+              message: `Failed generating SQL for row ${index + 2}`,
+              error: msg,
+            });
             logs.push({
               row: index + 2,
               status: "error",
@@ -475,7 +285,10 @@ ${data.page_count}, ${clientId}
         .filter((val): val is string => val !== null);
 
       if (values.length === 0) {
-        this.logger.warn("generateSql: no valid rows to generate SQL");
+        this.logger.warn({
+          function: "generateSql",
+          message: "No valid rows to generate SQL",
+        });
         logs.push({
           row: 0,
           status: "error",
@@ -495,11 +308,19 @@ page_count, client_id
 ) VALUES ${values.join(", ")};
 `;
 
-      this.logger.info("Generated multi-row SQL");
+      this.logger.info({
+        function: "generateSql",
+        message: "Generated multi-row SQL",
+      });
       return { sql, transactions, logs };
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error";
-      this.logger.error(`generateSql: failed: ${msg}`);
+      this.logger.error({
+        function: "generateSql",
+        message: "Failed to generate SQL",
+        error: msg,
+        originalError: e,
+      });
       logs.push({
         row: 0,
         status: "error",
@@ -523,7 +344,10 @@ page_count, client_id
     let client: PoolClient | null = null;
 
     try {
-      this.logger.info("executeSql: generating SQL from CSV");
+      this.logger.info({
+        function: "executeSql",
+        message: "Generating SQL from CSV",
+      });
       const { transactions, logs: generateLogs } = await this.generateSql();
       logs.push(...generateLogs);
 
@@ -580,18 +404,6 @@ page_count, client_id
       }
       // --- End of new logic for client_id lookup ---
 
-      const queryText = `
-INSERT INTO investor.aif_document_details(
-document_process, document_activity, document_type, document_format, document_path,
-folio_id, transaction_reference_id, document_status, mime_type,
-user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,
-user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
-approval_status, approved_by, approved_on, comments, audit_code,
-del_flag, last_update_tms, last_updated_by, creation_date, created_by,
-page_count, client_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
-`;
-
       const trxnNameMap: Record<string, string> = {
         IC: "Initial Contribution Form",
         NCT: "Non Commercial Transactions Form",
@@ -611,90 +423,116 @@ page_count, client_id
 
       let insertedRows = 0;
       const badRows: any[] = [];
-      for (const [index, data] of transactions.entries()) {
-        const ext = this.getFileExtension(data.id_path);
-        if (!ext) {
-          this.logger.warn(
-            `executeSql: row ${index + 2} has invalid file extension`
-          );
-          logs.push({
-            row: index + 2,
-            status: "error",
-            message: "Invalid file extension",
-          });
-          badRows.push({
-            id_ihno: data.id_ihno,
-            reason: "Invalid file extension",
-          });
-          continue;
+      const chunkSize = 500; // Process 500 rows at a time
+
+      for (let i = 0; i < transactions.length; i += chunkSize) {
+        const chunk = transactions.slice(i, i + chunkSize);
+        const valueParams: any[] = [];
+        const valueStrings: string[] = [];
+        let paramIndex = 1;
+
+        for (const [indexInChunk, data] of chunk.entries()) {
+          const originalIndex = i + indexInChunk;
+          const ext = this.getFileExtension(data.id_path);
+          if (!ext) {
+            this.logger.warn(
+              `executeSql: row ${originalIndex + 2} has invalid file extension`
+            );
+            logs.push({
+              row: originalIndex + 2,
+              status: "error",
+              message: "Invalid file extension",
+            });
+            badRows.push({
+              id_ihno: data.id_ihno,
+              reason: "Invalid file extension",
+            });
+            continue;
+          }
+
+          const format = ext.replace(".", "").toUpperCase();
+          const actualClientId = clientIdMap.get(String(data.id_fund));
+          if (actualClientId === undefined) {
+            this.logger.warn(
+              `executeSql: client_id not found for id_fund: ${
+                data.id_fund
+              } at row ${originalIndex + 2}`
+            );
+            logs.push({
+              row: originalIndex + 2,
+              status: "error",
+              message: `Client ID not found for id_fund: ${data.id_fund}`,
+            });
+            badRows.push({
+              id_ihno: data.id_ihno,
+              reason: `Client ID not found for id_fund: ${data.id_fund}`,
+            });
+            continue;
+          }
+
+          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
+          const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+          const mime = mimeType[ext.replace(".", "")] || "Unknown";
+
+          const rowValues = [
+            this.trxnMap[data.id_trtype] || "Unknown",
+            "Image Upload",
+            trxnNameMap[data.id_trtype] || "Unknown",
+            format,
+            docPath,
+            null,
+            data.id_ihno.toString(),
+            "A",
+            mime,
+            null,
+            data.id_ihno.toString(),
+            data.id_acno,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            new Date(),
+            "system",
+            new Date(),
+            "system",
+            data.page_count,
+            actualClientId,
+          ];
+
+          const paramsForQuery = rowValues.map(() => `$${paramIndex++}`);
+          valueStrings.push(`(${paramsForQuery.join(", ")})`);
+          valueParams.push(...rowValues);
         }
 
-        const format = ext.replace(".", "").toUpperCase();
-        const actualClientId = clientIdMap.get(String(data.id_fund));
-        const finalClientId =
-          actualClientId !== undefined ? actualClientId : null; // Use null if not found
-        if (finalClientId === null) {
-          this.logger.warn(
-            `executeSql: client_id not found for id_fund: ${
-              data.id_fund
-            } at row ${index + 2}`
+        if (valueStrings.length > 0) {
+          const queryText = `
+            INSERT INTO investor.aif_document_details(
+              document_process, document_activity, document_type, document_format, document_path,
+              folio_id, transaction_reference_id, document_status, mime_type,
+              user_attr0, user_attr1, user_attr2, user_attr3, user_attr4,
+              user_attr5, user_attr6, user_attr7, user_attr8, user_attr9,
+              approval_status, approved_by, approved_on, comments, audit_code,
+              del_flag, last_update_tms, last_updated_by, creation_date, created_by,
+              page_count, client_id
+            ) VALUES ${valueStrings.join(", ")}
+          `;
+          this.logger.info(
+            `executeSql: executing batch of ${valueStrings.length} rows.`
           );
-          logs.push({
-            row: index + 2,
-            status: "error",
-            message: `Client ID not found for id_fund: ${data.id_fund}`,
-          });
-          badRows.push({
-            id_ihno: data.id_ihno,
-            reason: `Client ID not found for id_fund: ${data.id_fund}`,
-          });
-          continue; // Skip this row if client_id is not found
+          const result = await client.query(queryText, valueParams);
+          insertedRows += result.rowCount || 0;
         }
-        const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-        const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
-
-        const mime = mimeType[ext.replace(".", "")] || "Unknown";
-        this.logger.info(`ext: ${ext}, mime: ${mime}`);
-
-        const values = [
-          this.trxnMap[data.id_trtype] || "Unknown",
-          "Image Upload",
-          trxnNameMap[data.id_trtype] || "Unknown",
-          format,
-          docPath,
-          null,
-          data.id_ihno.toString(),
-          "A",
-          mimeType[ext.replace(".", "")] || "Unknown",
-          null,
-          data.id_ihno.toString(),
-          data.id_acno,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          null,
-          false,
-          new Date(),
-          "system",
-          new Date(),
-          "system",
-          data.page_count,
-          finalClientId,
-        ];
-
-        await client.query(queryText, values);
-        insertedRows++;
       }
-      this.logger.debug(`executeSql: preparing row ${insertedRows}`);
-      this.logger.info(`executeSql: inserted ${insertedRows} rows`);
+      this.logger.info(`executeSql: inserted a total of ${insertedRows} rows`);
 
       await client.query("COMMIT");
       this.logger.info("executeSql: COMMIT successful");
@@ -738,11 +576,19 @@ page_count, client_id
           this.logger.info("executeSql: transaction rolled back");
         } catch (e) {
           const m = e instanceof Error ? e.message : "Unknown error";
-          this.logger.error(`executeSql: ROLLBACK failed: ${m}`);
+          this.logger.error({
+            function: "executeSql",
+            message: `ROLLBACK failed: ${m}`,
+            error: e,
+          });
         }
       }
 
-      this.logger.error(`executeSql: failed:`, err);
+      this.logger.error({
+        function: "executeSql",
+        message: `SQL execution failed: ${msg}`,
+        error: err,
+      });
       logs.push({
         row: 0,
         status: "error",
@@ -1081,9 +927,9 @@ RETURNING d.user_attr1, d.user_attr2;
     ) {
       content = "user_attr1,user_attr2,reason\n";
       badRows.forEach((row) => {
-        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},\"${
+        content += `${row.user_attr1 || ""},${row.user_attr2 || ""},"${
           row.reason
-        }\"\n`;
+        }"\n`;
       });
     } else {
       // Fallback if structure is unexpected
@@ -1211,7 +1057,7 @@ RETURNING d.user_attr1, d.user_attr2;
                 creation_date,
                 folio_id,
                 transaction_reference_id,
-                (folio_id IS NOT NULL AND transaction_reference_id IS NOT NULL) as is_perfect,
+                (folio_id IS NOT NULL AND transaction_reference_id IS NOT NULL AND user_attr1 IS NOT NULL AND user_attr2 IS NOT NULL AND client_id IS NOT NULL) as is_perfect,
                 COUNT(CASE WHEN folio_id IS NOT NULL AND transaction_reference_id IS NOT NULL THEN 1 END) OVER (PARTITION BY client_id, ${keyExpr()}) as perfect_rows_in_group,
                 ROW_NUMBER() OVER (PARTITION BY client_id, ${keyExpr()} ORDER BY creation_date DESC, id DESC) as rn_desc,
                 COUNT(*) OVER (PARTITION BY client_id, ${keyExpr()}) as total_rows_in_group
@@ -1238,7 +1084,7 @@ RETURNING d.user_attr1, d.user_attr2;
             JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
               "d"
             )} = kac.k
-            WHERE d.folio_id IS NOT NULL AND d.transaction_reference_id IS NOT NULL
+            WHERE d.folio_id IS NOT NULL AND d.transaction_reference_id IS NOT NULL AND d.user_attr1 IS NOT NULL AND d.user_attr2 IS NOT NULL AND d.client_id IS NOT NULL
               AND d.created_by = 'system'
               ${clientFilter("d")}
         ),
@@ -1274,7 +1120,7 @@ RETURNING d.user_attr1, d.user_attr2;
             )} = kac.k
             WHERE d.created_by = 'system' ${clientFilter("d")}
             GROUP BY d.client_id, ${keyExpr("d")}
-            HAVING COUNT(*) > 1 AND COUNT(CASE WHEN d.folio_id IS NULL OR d.transaction_reference_id IS NULL THEN 1 END) = 0
+            HAVING COUNT(*) > 1 AND COUNT(CASE WHEN d.folio_id IS NULL OR d.transaction_reference_id IS NULL OR d.user_attr1 IS NULL OR d.user_attr2 IS NULL OR d.client_id IS NULL THEN 1 END) = 0
         ),
         ids_to_delete AS (
             SELECT id
@@ -1288,6 +1134,41 @@ RETURNING d.user_attr1, d.user_attr2;
                 JOIN groups_where_all_are_perfect gwaap ON d.client_id = gwaap.client_id AND ${keyExpr(
                   "d"
                 )} = gwaap.k
+                WHERE d.created_by = 'system' ${clientFilter("d")}
+            ) ranked
+            WHERE rn > 1
+        )
+        DELETE FROM investor.aif_document_details
+        WHERE id IN (SELECT id FROM ids_to_delete)
+        RETURNING id;
+      `;
+
+      // Deletion Rule 3: If all rows in a group are imperfect and there are duplicates, keep only the latest one.
+      const deleteImperfectDuplicatesSql = `
+        WITH keys_after_cutoff AS (
+            SELECT DISTINCT client_id, ${keyExpr()} AS k
+            FROM investor.aif_document_details
+            WHERE creation_date > $1::timestamptz
+              AND user_attr1 IS NOT NULL AND client_id IS NOT NULL AND created_by = 'system'
+              ${clientFilter()}
+        ),
+        groups_with_only_imperfect_duplicates AS (
+            SELECT d.client_id, ${keyExpr("d")} AS k
+            FROM investor.aif_document_details d
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr("d")} = kac.k
+            WHERE d.created_by = 'system' ${clientFilter("d")}
+            GROUP BY d.client_id, ${keyExpr("d")}
+            HAVING COUNT(*) > 1
+               AND COUNT(CASE WHEN (d.folio_id IS NOT NULL AND d.transaction_reference_id IS NOT NULL AND d.user_attr1 IS NOT NULL AND d.user_attr2 IS NOT NULL AND d.client_id IS NOT NULL) THEN 1 END) = 0
+        ),
+        ids_to_delete AS (
+            SELECT id
+            FROM (
+                SELECT
+                    d.id,
+                    ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr("d")} ORDER BY d.creation_date DESC, d.id DESC) as rn
+                FROM investor.aif_document_details d
+                JOIN groups_with_only_imperfect_duplicates gwoid ON d.client_id = gwoid.client_id AND ${keyExpr("d")} = gwoid.k
                 WHERE d.created_by = 'system' ${clientFilter("d")}
             ) ranked
             WHERE rn > 1
@@ -1326,9 +1207,12 @@ RETURNING d.user_attr1, d.user_attr2;
                   AND ${keyExpr("p")} = dg.k
                   AND p.folio_id IS NOT NULL
                   AND p.transaction_reference_id IS NOT NULL
+                  AND p.user_attr1 IS NOT NULL
+                  AND p.user_attr2 IS NOT NULL
+                  AND p.client_id IS NOT NULL
             )
         )
-        SELECT DISTINCT d.user_attr2, 'Imperfect Duplicate Group (No Action Taken)' as reason
+        SELECT DISTINCT d.user_attr1, 'Imperfect Duplicate Group (No Action Taken)' as reason
         FROM investor.aif_document_details d
         JOIN groups_with_no_perfect_row gwnpr ON d.client_id = gwnpr.client_id AND ${keyExpr(
           "d"
@@ -1344,16 +1228,26 @@ RETURNING d.user_attr1, d.user_attr2;
           let wouldBeDeleted = false;
           let reason = "";
 
+          const isPerfectRow = (row.folio_id !== null && row.transaction_reference_id !== null && row.user_attr1 !== null && row.user_attr2 !== null && row.client_id !== null);
+
           if (row.perfect_rows_in_group > 0) {
-            if (!row.is_perfect) {
+            if (!isPerfectRow) {
               wouldBeDeleted = true;
               reason =
                 "Would be deleted: Imperfect row in a group with a perfect row.";
             } else {
               reason = "Perfect row, kept.";
             }
+          } else if (row.total_rows_in_group > 1) { // New condition for imperfect duplicates
+            if (row.rn_desc > 1) {
+              wouldBeDeleted = true;
+              reason =
+                "Would be deleted: Older imperfect row in an all-imperfect duplicate group.";
+            } else {
+              reason = "Kept: Newest imperfect row in an all-imperfect duplicate group.";
+            }
           } else {
-            reason = "No action: Group contains no perfect rows.";
+            reason = "No action: Group contains no perfect rows and no duplicates.";
           }
 
           // This covers the case where a group might have perfect rows, but also multiple perfect rows.
@@ -1379,7 +1273,7 @@ RETURNING d.user_attr1, d.user_attr2;
             creation_date: row.creation_date,
             folio_id: row.folio_id,
             transaction_reference_id: row.transaction_reference_id,
-            isPerfect: row.is_perfect,
+            isPerfect: isPerfectRow,
             wouldBeDeleted,
             reason,
           };
@@ -1389,7 +1283,7 @@ RETURNING d.user_attr1, d.user_attr2;
           imperfectDuplicatesSql,
           [cutoffTms]
         );
-        const imperfectDuplicates = imperfectRes.rows.map((r) => r.user_attr2);
+        const imperfectDuplicates = imperfectRes.rows.map((r) => r.user_attr1);
 
         const totalDuplicatesFound = processedRows.filter(
           (p) => p.wouldBeDeleted
@@ -1429,10 +1323,21 @@ RETURNING d.user_attr1, d.user_attr2;
         message: `Rule 2 (Older Perfects) deleted ${delOlderPerfectRes.rowCount} rows.`,
       });
 
+      const delImperfectDuplicatesRes = await client.query(deleteImperfectDuplicatesSql, [
+        cutoffTms,
+      ]);
+      logs.push({
+        row: 0,
+        status: "updated",
+        message: `Rule 3 (Older Imperfect Duplicates) deleted ${delImperfectDuplicatesRes.rowCount} rows.`,
+      });
+
       await client.query("COMMIT");
 
       const totalDeleted =
-        (delImperfectRes.rowCount ?? 0) + (delOlderPerfectRes.rowCount ?? 0);
+        (delImperfectRes.rowCount ?? 0) +
+        (delOlderPerfectRes.rowCount ?? 0) +
+        (delImperfectDuplicatesRes.rowCount ?? 0);
       this.logger.info(
         `sanityCheckDuplicates: committed. Total deleted: ${totalDeleted} rows.`
       );
@@ -1443,11 +1348,11 @@ RETURNING d.user_attr1, d.user_attr2;
         [cutoffTms]
       );
       const imperfectDuplicates = imperfectRes.rows
-        .map((row) => row.user_attr2)
+        .map((row) => row.user_attr1)
         .filter((value) => value !== null) as string[];
       const imperfectDuplicatesFilePath = await this.writeBadRowsToFile(
-        imperfectDuplicates.map((ua2) => ({
-          user_attr2: ua2,
+        imperfectDuplicates.map((ua1) => ({
+          user_attr1: ua1,
           reason: "Imperfect Duplicate Group (No Action Taken)",
         })),
         "imperfect_duplicates.csv"
@@ -1483,10 +1388,20 @@ RETURNING d.user_attr1, d.user_attr2;
         try {
           await client.query("ROLLBACK");
         } catch (e) {
-          this.logger.error(`sanityCheckDuplicates: ROLLBACK failed: ${e}`);
+          this.logger.error({
+            function: "sanityCheckDuplicates",
+            message: `ROLLBACK failed: ${
+              e instanceof Error ? e.message : String(e)
+            }`,
+            error: e,
+          });
         }
       }
-      this.logger.error(`sanityCheckDuplicates: failed: ${msg}`);
+      this.logger.error({
+        function: "sanityCheckDuplicates",
+        message: `Sanity check duplicates failed: ${msg}`,
+        error: err,
+      });
       logs.push({
         row: 0,
         status: "error",
@@ -1500,12 +1415,8 @@ RETURNING d.user_attr1, d.user_attr2;
 
   public async reconnect(): Promise<void> {
     this.logger.info("Manual reconnection triggered.");
-    if (this.pool) {
-      await this.pool.end();
-      this.logger.info("Existing PostgreSQL pool ended manually.");
-    }
-    this.pool = this.createPool();
-    await this.warmup();
+    await reconnectPgPool();
+    await warmupPgPool();
     this.logger.info("New PostgreSQL pool created and warmed up manually.");
   }
 

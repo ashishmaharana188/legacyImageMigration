@@ -1,177 +1,35 @@
+import {
+  connectMongo,
+  disconnectMongo,
+  getMongoModel,
+  getMongoDb,
+} from "../controllers/dbConnect";
 import mongoose from "mongoose";
-import winston from "winston";
-import { Database } from "./database";
-
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-    new winston.transports.File({ filename: "logs/combined.log" }),
-  ],
-});
+import logger from "../utils/logger";
 
 interface MongoDuplicateCheckResult {
   _id: { clientId: string; transactionNo: string };
   count: number;
   documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
-  // Potentially add more fields if needed for dry-run details
 }
 
 export class MongoDatabase {
-  private uri: string;
   private model: mongoose.Model<any>;
 
   constructor() {
-    const useTunnel = process.env.USE_MONGO_SSH_TUNNEL === "true";
-
-    if (useTunnel) {
-      this.uri = process.env.MONGO_URI || "mongodb://localhost:27017/investor";
-      const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema(
-        {
-          activityStatus: String,
-          applicationId: String,
-          barcode: String,
-          branchId: String,
-          clientId: String,
-          createdBy: String,
-          createdFrom: String,
-          createdOn: String,
-          currentStage: Number,
-          documentFormat: String,
-          documentPath: String,
-          documentSize: String,
-          documentType: String,
-          lastUpdatedBy: String,
-          lastUpdatedFrom: String,
-          lastUpdatedOn: String,
-          mimeType: String,
-          processCode: String,
-          sourceUser: String,
-          totalPageCount: Number,
-          transactionCode: String,
-          transactionNo: String,
-          transactionType: String,
-          workDate: String,
-        },
-        { collection: "fnxTransactionInitiationDocUpload", versionKey: false }
-      );
-
-      this.model =
-        mongoose.models.FnxTransactionInitiationDocUpload ||
-        mongoose.model(
-          "FnxTransactionInitiationDocUpload",
-          FnxTransactionInitiationDocUploadSchema
-        );
-    } else {
-      this.uri = process.env.LOCAL_URI || ""; // URI for test_noSql
-      const TestImageMigrationSchema = new mongoose.Schema(
-        {},
-        { strict: false, collection: "testImageMigration", versionKey: false }
-      );
-      this.model =
-        mongoose.models.TestImageMigration ||
-        mongoose.model("TestImageMigration", TestImageMigrationSchema);
-    }
+    this.model = getMongoModel();
   }
 
   public async connect(): Promise<void> {
-    try {
-      const useTunnel = process.env.USE_MONGO_SSH_TUNNEL === "true";
-
-      if (useTunnel) {
-        const connectOptions: mongoose.ConnectOptions = {};
-
-        if (process.env.MONGO_USER && process.env.MONGO_PASSWORD) {
-          connectOptions.user = process.env.MONGO_USER;
-          connectOptions.pass = process.env.MONGO_PASSWORD;
-          if (process.env.MONGO_AUTH_SOURCE) {
-            connectOptions.authSource = process.env.MONGO_AUTH_SOURCE;
-          }
-        }
-        await mongoose.connect(this.uri, connectOptions);
-      } else {
-        if (!this.uri) {
-          logger.error("LOCAL_URI is not set for non-tunnel connection.");
-          process.exit(1);
-        }
-        await mongoose.connect(this.uri);
-      }
-      logger.info("MongoDB connected successfully");
-
-      // Check if the collection exists
-      try {
-        if (mongoose.connection.db) {
-          const collectionName = this.model.collection.name;
-          const collections = await mongoose.connection.db
-            .listCollections({ name: collectionName })
-            .toArray();
-
-          if (collections.length === 0) {
-            logger.error(
-              `Collection '${collectionName}' does not exist. The application will exit.`
-            );
-            await mongoose.disconnect();
-            process.exit(1);
-          } else {
-            logger.info(
-              `MongoDB collection '${collectionName}' accessed successfully.`
-            );
-          }
-        } else {
-          logger.warn(
-            "mongoose.connection.db is not available after connection."
-          );
-        }
-      } catch (collectionError) {
-        logger.warn(
-          `Could not access '${this.model.collection.name}' collection: ${collectionError}`
-        );
-      }
-    } catch (error) {
-      logger.error(`MongoDB connection error: ${error}`);
-      process.exit(1); // Exit process if MongoDB connection fails
-    }
+    await connectMongo();
   }
 
   public getDb() {
-    return mongoose.connection.db;
-  }
-
-  public async insertDocument(document: any): Promise<void> {
-    try {
-      const result = await this.model.insertMany(document, { ordered: false });
-      const insertedInfo = document.map((doc: any) => ({
-        transactionNo: doc.transactionNo,
-        clientId: doc.clientId,
-      }));
-      logger.info({
-        message: `${result.length} documents inserted successfully`,
-        inserted: insertedInfo,
-      });
-    } catch (error: any) {
-      // If some failed, Mongoose will throw a BulkWriteError
-      if (error.writeErrors) {
-        for (const err of error.writeErrors) {
-          const failedDoc = document[err.index];
-          console.error(
-            "Failed to insert transaction_reference_id:",
-            failedDoc.transaction_reference_id
-          );
-        }
-      } else {
-        logger.error("Unexpected bulk insert error", error);
-      }
-    }
+    return getMongoDb();
   }
 
   public async disconnect(): Promise<void> {
-    try {
-      await mongoose.disconnect();
-      logger.info("MongoDB disconnected");
-    } catch (error) {
-      logger.error(`Error disconnecting from MongoDB: ${error}`);
-    }
+    await disconnectMongo();
   }
 
   public async testConnectionAndQuery(): Promise<any[]> {
@@ -202,7 +60,7 @@ export class MongoDatabase {
     documents?: any[]; // Added to return the documents
   }> {
     try {
-      const database = new Database();
+      const database = new (await import("./database.js")).Database();
       await this.connect();
       const db = this.getDb();
       if (!db) {
@@ -269,6 +127,15 @@ export class MongoDatabase {
     }
   }
 
+  public async insertDocument(documents: any[]): Promise<void> {
+    try {
+      await this.model.insertMany(documents);
+    } catch (error) {
+      logger.error(`Error inserting documents: ${error}`);
+      throw error;
+    }
+  }
+
   public async updateMongoTransactions(): Promise<{
     updatedCount: number;
     syncedCount: number;
@@ -281,7 +148,7 @@ export class MongoDatabase {
     const syncedDocuments = [];
 
     try {
-      const database = new Database();
+      const database = new (await import("./database.js")).Database();
       await this.connect();
       const db = this.getDb();
       if (!db) {
@@ -404,7 +271,7 @@ export class MongoDatabase {
 
     if (cutoffDateString) {
       // Parse cutoffDateString (e.g., "9/5/2025") into a Date object at 00:00:00 AM
-      const [month, day, year] = cutoffDateString.split('/').map(Number);
+      const [month, day, year] = cutoffDateString.split("/").map(Number);
       // Month is 0-indexed in JavaScript Date objects
       cutoffDate = new Date(year, month - 1, day, 0, 0, 0, 0);
 
