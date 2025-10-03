@@ -43,7 +43,8 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     if (log.dryRun !== undefined) return "sanity-check-duplicates";
     if (log.successfulRows !== undefined) return "sql-execution-summary";
     if (log.transferredCount !== undefined) return "mongodb-transfer-summary";
-    if (log.updatedFolioRows !== undefined) return "folio-transaction-update-summary";
+    if (log.updatedFolioRows !== undefined)
+      return "folio-transaction-update-summary";
     if (log.updatedDocuments) return "mongo-update-summary";
     if (log.duplicates) return "mongo-duplicate-check-summary";
     if (log.message) return log.message;
@@ -51,7 +52,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   };
 
   useEffect(() => {
-    setAllTaskLogs(prevLogs => {
+    setAllTaskLogs((prevLogs) => {
       const newLogs = { ...prevLogs };
       let hasChanges = false;
       for (const taskKey in taskLogs) {
@@ -63,10 +64,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           continue;
         }
 
-        const existingLogs = new Map(newLogs[taskKey]?.map(log => [getLogIdentifier(log), log]) || []);
-        taskLogs[taskKey].forEach(log => {
+        const existingLogs = new Map(
+          newLogs[taskKey]?.map((log) => [getLogIdentifier(log), log]) || []
+        );
+        taskLogs[taskKey].forEach((log) => {
           const id = getLogIdentifier(log);
-          if (!existingLogs.has(id) || JSON.stringify(existingLogs.get(id)) !== JSON.stringify(log)) {
+          if (
+            !existingLogs.has(id) ||
+            JSON.stringify(existingLogs.get(id)) !== JSON.stringify(log)
+          ) {
             existingLogs.set(id, log);
             hasChanges = true;
           }
@@ -90,7 +96,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               <h4 className="font-semibold capitalize">{task}</h4>
               <button
                 onClick={() => onClearLogs(task)}
-                className="ml-2 px-3 py-1 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                className="ml-2 px-3 py-1 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
                 Clear Logs
               </button>

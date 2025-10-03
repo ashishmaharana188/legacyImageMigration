@@ -17,7 +17,7 @@ const logger = winston.createLogger({
     }),
     new winston.transports.Console({
       format: winston.format.combine(winston.format.colorize(), winston.format.simple()),
-      level: 'debug', // Log debug messages to console
+      level: 'info', // Log info messages and above to console
     }),
   ],
 });
