@@ -131,6 +131,8 @@ async function performIterativeUpload(
   bucket: string,
   prefix: string
 ) {
+  console.log(`[performIterativeUpload] Starting for localDir: ${localDir}, prefix: ${prefix}`);
+
   let totalDirectories = 0;
   const directoryQueue: { localPath: string; s3Prefix: string; isClientCodeParent: boolean }[] = [];
 
@@ -155,6 +157,8 @@ async function performIterativeUpload(
     }
   }
 
+  console.log(`[performIterativeUpload] Calculated totalDirectories: ${totalDirectories}`);
+
   if (totalDirectories === 0) {
     broadcast(
       JSON.stringify({
@@ -165,7 +169,8 @@ async function performIterativeUpload(
         totalDirectories: 0,
       })
     );
-    return { successful: [], failed: [] };
+    console.log(`[performIterativeUpload] No directories to upload for ${localDir}. Returning.`);
+    return { successfulFilesCount: 0, failedFilesCount: 0, failedFileDetails: [] };
   }
 
   // Send the total number of directories to the client at the very beginning.
@@ -177,15 +182,20 @@ async function performIterativeUpload(
   );
 
   let completedDirectories = 0;
+  let successfulFilesCount = 0;
+  let failedFilesCount = 0;
   const results = {
-    successful: [] as string[],
-    failed: [] as { name: string; error: string }[],
+    successfulFilesCount: 0,
+    failedFilesCount: 0,
+    failedFileDetails: [] as { name: string; error: string }[], // Optionally keep a few error details
   };
 
   while (directoryQueue.length > 0) {
     const { localPath, s3Prefix, isClientCodeParent } = directoryQueue.shift()!; // Using as a queue
     const currentDirName = path.basename(localPath);
     const isCurrentDirClientCode = /^CLIENT_CODE_\d+$/.test(currentDirName);
+
+    console.log(`[performIterativeUpload] Processing directory: ${localPath}, s3Prefix: ${s3Prefix}, isClientCodeParent: ${isClientCodeParent}, isCurrentDirClientCode: ${isCurrentDirClientCode}`);
 
     try {
       const entries = fs.readdirSync(localPath, { withFileTypes: true });
@@ -205,9 +215,10 @@ async function performIterativeUpload(
             const fileUploadPromise = (async () => {
               try {
                 await uploadFile(entryPath, bucket, entryKey, entry.name);
-                results.successful.push(entry.name);
+                successfulFilesCount++;
               } catch (uploadError: any) {
-                results.failed.push({
+                failedFilesCount++;
+                results.failedFileDetails.push({
                   name: entry.name,
                   error: uploadError.message,
                 });
@@ -224,6 +235,7 @@ async function performIterativeUpload(
           // Increment if it's a tracked directory (i.e., not a CLIENT_CODE_ parent that was skipped)
           if (isClientCodeParent || !isCurrentDirClientCode) {
               completedDirectories++;
+              console.log(`[performIterativeUpload] Broadcasting s3-directory-progress: completedDirectories: ${completedDirectories}, totalDirectories: ${totalDirectories}, currentDirectory: ${s3Prefix}`);
               broadcast(
                 JSON.stringify({
                   type: "s3-directory-progress",
@@ -242,10 +254,14 @@ async function performIterativeUpload(
         throw new Error(errorMessage);
       } else {
         console.error(`S3 upload error for ${localPath}:`, err);
-        results.failed.push({ name: localPath, error: err.message });
+        failedFilesCount++;
+        results.failedFileDetails.push({ name: localPath, error: err.message });
       }
     }
   }
+
+  results.successfulFilesCount = successfulFilesCount;
+  results.failedFilesCount = failedFilesCount;
 
   // Send a final message to signify the overall completion of the directory upload.
   broadcast(
@@ -256,9 +272,12 @@ async function performIterativeUpload(
       isDirectory: true,
       totalDirectories: totalDirectories,
       completedDirectories: completedDirectories,
+      successfulFilesCount: successfulFilesCount,
+      failedFilesCount: failedFilesCount,
     })
   );
 
+  console.log(`[performIterativeUpload] Completed for localDir: ${localDir}. Results: successfulFilesCount: ${successfulFilesCount}, failedFilesCount: ${failedFilesCount}`);
   return results;
 }
 
