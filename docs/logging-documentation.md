@@ -39,7 +39,7 @@ The backend utilizes `winston` for comprehensive, structured logging across all 
 - **Purpose**: Provides a centralized `winston` logger instance.
 - **Configuration Details**:
   - **Log Level**: Default `info`. `error` level for `error.log`, `debug` level for console output.
-  - **Format**: 
+  - **Format**:
     - **File Transports**: `timestamp` (ISO 8601 format: `YYYY-MM-DDTHH:mm:ssZ`) and `json` format. This makes logs machine-readable and easy to query.
     - **Console Transport**: `colorize()` and `simple()` format for human-readable output during development.
   - **Transports (Output Destinations)**:
@@ -50,12 +50,15 @@ The backend utilizes `winston` for comprehensive, structured logging across all 
 ### Backend Logging in Action
 
 - **`backend/app.ts` (Server Entry Point)**:
-  - Logs server startup messages, environment configurations, and database connection statuses using `console.log`.
-  - Implements `process.on('unhandledRejection')` and `process.on('uncaughtException')` to catch and log critical runtime errors, ensuring application stability and providing immediate alerts for unhandled issues.
+  - Logs server startup messages, environment configurations, and database connection statuses using `logger.info`.
+  - Implements `process.on('unhandledRejection')` and `process.on('uncaughtException')` to catch and log critical runtime errors using `logger.error`, ensuring application stability and providing immediate alerts for unhandled issues.
 
 - **`backend/controllers/fileController.ts` (API Request Handling)**:
-  - Uses `console.error` for logging errors caught during API request processing. All errors are wrapped in a consistent JSON response structure (`statusCode`, `error`, `details`).
-  - Uses `console.log` for general informational messages, such as file processing initiation or S3 upload details.
+  - **Comprehensive Logging**: Now uses the `winston` logger (`logger.info`, `logger.warn`, `logger.error`) for all logging within its API endpoints.
+  - **Initiating Messages**: `logger.info` messages are generated at the start of each API call, providing context about the incoming request and its parameters.
+  - **Success Messages**: `logger.info` messages are generated upon successful completion of an API call, often including a summary of the operation's outcome.
+  - **Failure Messages**: `logger.error` messages are generated when an error occurs, including detailed error messages, stack traces, and relevant contextual data. `logger.warn` is used for client-side errors or invalid inputs.
+  - **Consistent Responses**: All errors are wrapped in a consistent JSON response structure (`statusCode`, `error`, `details`).
 
 - **Backend Services (e.g., `pdfProcessor.ts`, `splitProcessor.ts`, `s3Uploader.ts`, `s3Manager.ts`, `database.ts`, `mongoDatabase.ts`)**:
   - These services are the primary users of the `winston` logger (imported as `logger` from `backend/utils/logger.ts`).
@@ -145,7 +148,7 @@ To debug issues in the frontend, developers should:
 
 The application adheres to structured JSON logging for both REST API interactions and WebSocket messages, as reinforced by the code scan:
 
-- **Backend REST API Logging**: `fileController.ts` and individual services log entry, exit, and key operational steps. Errors are logged with stack traces and contextual details (e.g., input parameters, SQL queries) using the `winston` logger. This provides a comprehensive audit trail for backend operations.
+- **Backend REST API Logging**: `fileController.ts` and individual services now comprehensively use the `winston` logger for all API interactions. This includes `logger.info` for initiating and successful operations, `logger.warn` for client-side issues, and `logger.error` for failures, complete with stack traces and contextual details. This provides a comprehensive audit trail for backend operations.
 
 - **WebSocket Logging**: Backend services broadcast JSON messages for real-time progress. The frontend's `WebSocketContext.tsx` consumes these messages, updating the `uploadStatuses` and `taskLogs` state, which are then displayed in the UI. This effectively "logs" real-time updates for immediate user feedback.
 
