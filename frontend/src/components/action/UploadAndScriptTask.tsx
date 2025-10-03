@@ -304,9 +304,8 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     setLoading(true);
     setUploadMessage("Uploading to S3");
     updateTaskLog("uploadAndScript", "Initiating S3 upload...");
-    setSummaryData({});
     setUploadStatuses([
-      { fileName: "s3_upload_progress", status: "Starting", progress: 0 },
+      { fileName: "s3_upload_progress", status: "Starting", progress: 0, totalFiles: 1, processedFiles: 0 },
     ]);
 
     try {
@@ -328,7 +327,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     setSplitMessage("Uploading split files to S3");
     updateTaskLog("uploadAndScript", "Initiating split file S3 upload...");
     setUploadStatuses([
-      { fileName: "s3_upload_progress", status: "Starting", progress: 0 },
+      { fileName: "s3_upload_progress", status: "Starting", progress: 0, totalFiles: 1, processedFiles: 0 },
     ]);
     try {
       await axios.post<FileResponse>(
