@@ -10,6 +10,7 @@ import {
   reconnectPgPool,
   warmupPgPool,
 } from "../controllers/dbConnect";
+import Cursor from "pg-cursor";
 import {
   SqlLog,
   SanityCheckRow,
@@ -1529,6 +1530,53 @@ RETURNING d.user_attr1, d.user_attr2;
       throw error;
     } finally {
       if (client) client.release();
+    }
+  }
+
+  public async streamUpdateDetails(
+    batchSize: number,
+    processBatch: (batch: any[]) => Promise<void>
+  ): Promise<void> {
+    let client: PoolClient | null = null;
+    try {
+      client = await this.getPool().connect();
+      const query = `
+        SELECT
+          cm.client_code,
+          add.user_attr1,
+          add.transaction_reference_id
+        FROM investor.aif_document_details add
+        JOIN fund.client_master cm ON add.client_id = cm.id;
+      `;
+      const cursor = client.query(new Cursor(query));
+
+      let batch: any[] = [];
+      let rows;
+      do {
+        rows = await new Promise<any[]>((resolve, reject) => {
+          cursor.read(batchSize, (err: Error | undefined, rows: any[]) => {
+            if (err) {
+              return reject(err);
+            }
+            resolve(rows);
+          });
+        });
+
+        if (rows.length > 0) {
+          batch = rows;
+          this.logger.info(`Processing a batch of ${batch.length} rows from PostgreSQL.`);
+          await processBatch(batch);
+        }
+      } while (rows.length > 0);
+
+      this.logger.info("Finished streaming all data from PostgreSQL.");
+    } catch (error) {
+      this.logger.error(`Error streaming details from PostgreSQL: ${error}`);
+      throw error;
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 }

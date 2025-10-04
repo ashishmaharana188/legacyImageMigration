@@ -161,10 +161,10 @@ export class MongoDatabase {
     updatedDocuments: any[];
     syncedDocuments: any[];
   }> {
-    let updatedCount = 0;
-    let syncedCount = 0;
-    const updatedDocuments = [];
-    const syncedDocuments = [];
+    let totalUpdatedCount = 0;
+    let totalSyncedCount = 0;
+    const allUpdatedDocuments: any[] = [];
+    const allSyncedDocuments: any[] = [];
 
     try {
       const database = new (await import("./database.js")).Database();
@@ -183,71 +183,82 @@ export class MongoDatabase {
         };
       }
 
-      const pgData = await database.getUpdateDetails();
-      const bulkOperations = [];
-      const documentsToUpdate = [];
-      const documentsToSync = [];
+      const processBatch = async (pgData: any[]) => {
+        const bulkOperations = [];
+        const documentsToUpdate = [];
+        const documentsToSync = [];
 
-      // 1. Extract unique client_code and user_attr1 pairs from pgData
-      const uniqueFilters = pgData.map(data => ({
-        clientId: data.client_code,
-        transactionNo: data.user_attr1,
-      }));
+        const uniqueFilters = pgData.map((data) => ({
+          clientId: data.client_code,
+          transactionNo: data.user_attr1,
+        }));
 
-      // 2. Fetch all relevant MongoDB documents in a single query
-      const mongoDocs = await this.model.find({ $or: uniqueFilters }).lean();
+        if (uniqueFilters.length === 0) {
+          return;
+        }
 
-      // 3. Create a map for efficient lookup
-      const mongoDocMap = new Map<string, any>();
-      mongoDocs.forEach(doc => {
-        mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
-      });
+        const mongoDocs = await this.model.find({ $or: uniqueFilters }).lean();
+        const mongoDocMap = new Map<string, any>();
+        mongoDocs.forEach((doc) => {
+          mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
+        });
 
-      // 4. Iterate through pgData and use the map for lookup
-      for (const data of pgData) {
-        const key = `${data.client_code}-${data.user_attr1}`;
-        const mongoDoc = mongoDocMap.get(key);
+        for (const data of pgData) {
+          const key = `${data.client_code}-${data.user_attr1}`;
+          const mongoDoc = mongoDocMap.get(key);
 
-        if (mongoDoc) {
-          if (mongoDoc.transactionNo !== data.transaction_reference_id) {
-            bulkOperations.push({
-              updateOne: {
-                filter: { _id: mongoDoc._id }, // Filter by _id for precise update
-                update: { $set: { transactionNo: data.transaction_reference_id } },
-              },
-            });
-            documentsToUpdate.push({
-              clientId: data.client_code,
-              oldTransactionNo: mongoDoc.transactionNo,
-              newTransactionNo: data.transaction_reference_id,
-              documentType: mongoDoc.documentType,
-              processCode: mongoDoc.processCode,
-            });
-          } else {
-            documentsToSync.push({
-              clientId: data.client_code,
-              transactionNo: mongoDoc.transactionNo,
-            });
+          if (mongoDoc) {
+            if (mongoDoc.transactionNo !== data.transaction_reference_id) {
+              bulkOperations.push({
+                updateOne: {
+                  filter: { _id: mongoDoc._id },
+                  update: {
+                    $set: {
+                      transactionNo: data.transaction_reference_id,
+                    },
+                  },
+                },
+              });
+              documentsToUpdate.push({
+                clientId: data.client_code,
+                oldTransactionNo: mongoDoc.transactionNo,
+                newTransactionNo: data.transaction_reference_id,
+                documentType: mongoDoc.documentType,
+                processCode: mongoDoc.processCode,
+              });
+            } else {
+              documentsToSync.push({
+                clientId: data.client_code,
+                transactionNo: mongoDoc.transactionNo,
+              });
+            }
           }
         }
-      }
 
-      if (bulkOperations.length > 0) {
-        const bulkWriteResult = await this.model.bulkWrite(bulkOperations);
-        updatedCount = bulkWriteResult.modifiedCount;
-        updatedDocuments.push(...documentsToUpdate);
-      }
+        if (bulkOperations.length > 0) {
+          const bulkWriteResult = await this.model.bulkWrite(bulkOperations);
+          totalUpdatedCount += bulkWriteResult.modifiedCount;
+          allUpdatedDocuments.push(...documentsToUpdate);
+        }
 
-      syncedCount = documentsToSync.length;
-      syncedDocuments.push(...documentsToSync);
+        totalSyncedCount += documentsToSync.length;
+        allSyncedDocuments.push(...documentsToSync);
+      };
+
+      await database.streamUpdateDetails(200, processBatch);
 
       logger.info({
         category: "task-steps",
-        message: `Mongo transaction update process completed. Updated: ${updatedCount}, Synced: ${syncedCount}`,
+        message: `Mongo transaction update process completed. Updated: ${totalUpdatedCount}, Synced: ${totalSyncedCount}`,
       });
 
       await this.disconnect();
-      return { updatedCount, syncedCount, updatedDocuments, syncedDocuments };
+      return {
+        updatedCount: totalUpdatedCount,
+        syncedCount: totalSyncedCount,
+        updatedDocuments: allUpdatedDocuments,
+        syncedDocuments: allSyncedDocuments,
+      };
     } catch (error) {
       logger.error({
         category: "task-steps",
@@ -482,7 +493,9 @@ export class MongoDatabase {
               sourceUser: "$sourceUser",
             },
             count: { $sum: 1 },
-            documents: { $push: { _id: "$_id", createdOnDate: "$createdOnDate" } }, // Correctly populate documents array
+            documents: {
+              $push: { _id: "$_id", createdOnDate: "$createdOnDate" },
+            }, // Correctly populate documents array
           },
         },
         {
@@ -535,11 +548,14 @@ export class MongoDatabase {
         for (const dupGroup of duplicates) {
           if (dupGroup.documents.length > 1) {
             dupGroup.documents.sort((a, b) => {
-              const dateComparison = a.createdOnDate.getTime() - b.createdOnDate.getTime();
+              const dateComparison =
+                a.createdOnDate.getTime() - b.createdOnDate.getTime();
               if (dateComparison !== 0) {
                 return dateComparison;
               }
-              return a._id.getTimestamp().getTime() - b._id.getTimestamp().getTime();
+              return (
+                a._id.getTimestamp().getTime() - b._id.getTimestamp().getTime()
+              );
             });
 
             const documentsToDeleteIds = dupGroup.documents

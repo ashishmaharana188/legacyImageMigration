@@ -70,7 +70,73 @@ This enhancement allows for a more robust and complete sanity check process. By 
 - **Mitigate Duplicates:** Empower users to effectively reduce redundant imperfect data, streamlining the process of identifying and fixing remaining imperfect records.
 - **Improved Data Quality:** Contribute to overall better data quality by systematically removing unnecessary duplicate entries, even in complex imperfect scenarios.
 
-### 4.3. S3 Browser Refactoring with TanStack Query
+### 4.4. MongoDB Performance Optimization: Compound Indexing for `updateMongoTransactions`
+
+**Problem:**
+
+The `updateMongoTransactions` function in `backend/services/mongoDatabase.ts` currently performs `find` operations on the MongoDB collection using a combination of `clientId` and `transactionNo` within an `$or` query. Without a suitable index, these queries result in full collection scans, leading to significant performance bottlenecks, especially with large datasets (e.g., 50,000 documents or more). This severely impacts the speed of the `updateMongoTransactions` process.
+
+The relevant query pattern is:
+
+```typescript
+const uniqueFilters = pgData.map((data) => ({
+  clientId: data.client_code,
+  transactionNo: data.user_attr1,
+}));
+
+const mongoDocs = await this.model
+  .find({ $or: uniqueFilters })
+  .lean();
+```
+
+**Solution:**
+
+To drastically improve the performance of these MongoDB `find` operations, a compound index should be created on the `clientId` and `transactionNo` fields of the relevant MongoDB collection.
+
+**Implementation Details:**
+
+1.  **Identify the Target Collection:** Determine the MongoDB collection that corresponds to `this.model` in `mongoDatabase.ts`. This is typically the collection storing your transaction documents.
+
+2.  **Create a Compound Index:**
+    The recommended index is a compound index on `clientId` and `transactionNo`. The order of fields in a compound index matters for query efficiency. For queries that filter on both `clientId` and `transactionNo`, `{"clientId": 1, "transactionNo": 1}` is generally optimal.
+
+    **Using MongoDB Shell:**
+    Connect to your MongoDB instance and execute the following command:
+
+    ```javascript
+    db.your_collection_name.createIndex({ clientId: 1, transactionNo: 1 });
+    ```
+    Replace `your_collection_name` with the actual name of your MongoDB collection.
+
+    **Using Mongoose (if applicable in your `mongoDatabase.ts` model definition):**
+    If your `mongoDatabase.ts` uses Mongoose or a similar ODM, you can define the index directly in your schema:
+
+    ```typescript
+    import { Schema, model } from 'mongoose';
+
+    interface ITransaction {
+      clientId: string;
+      transactionNo: string;
+      // other fields
+    }
+
+    const transactionSchema = new Schema<ITransaction>({
+      clientId: { type: String, required: true },
+      transactionNo: { type: String, required: true },
+      // other field definitions
+    });
+
+    // Add the compound index
+    transactionSchema.index({ clientId: 1, transactionNo: 1 });
+
+    const TransactionModel = model<ITransaction>('Transaction', transactionSchema);
+    ```
+    This approach ensures the index is created when your application connects to MongoDB and the model is defined.
+
+**Benefit:**
+
+Implementing this compound index will allow MongoDB to efficiently use the index to locate documents matching the `clientId` and `transactionNo` criteria, avoiding full collection scans. This will lead to a significant reduction in query execution time for the `updateMongoTransactions` process, improving overall application performance and responsiveness.
+
 
 **Problem:**
 
