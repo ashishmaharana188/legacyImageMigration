@@ -305,7 +305,7 @@ export class MongoDatabase {
 
     if (cutoffDateString) {
       // Parse cutoffDateString (e.g., "9/5/2025") into a Date object at 00:00:00 AM
-      const [month, day, year] = cutoffDateString.split("/").map(Number);
+      const [day, month, year] = cutoffDateString.split("/").map(Number);
       // Month is 0-indexed in JavaScript Date objects
       cutoffDate = new Date(year, month - 1, day, 0, 0, 0, 0);
 
@@ -361,8 +361,8 @@ export class MongoDatabase {
         },
         {
           $addFields: {
-            day: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is first in M/D/YYYY
-            month: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is second in M/D/YYYY
+            day: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is first in D/M/YYYY
+            month: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is second in D/M/YYYY
             year: { $toInt: { $arrayElemAt: ["$dateComponents", 2] } },
             timeOnly: { $arrayElemAt: ["$timeComponents", 0] }, // e.g., "10:49:51"
             ampm: { $arrayElemAt: ["$timeComponents", 1] }, // e.g., "AM"
@@ -453,8 +453,7 @@ export class MongoDatabase {
             },
             count: { $sum: 1 },
             documentIds: { $push: "$_id" },
-            // Add other fields here if you want to see them in the dry run output
-            // e.g., firstDocument: { $first: "$$ROOT" }
+            createdOnDates: { $push: "$createdOnDate" }, // Capture createdOnDate for sorting
           },
         },
         {
@@ -463,6 +462,24 @@ export class MongoDatabase {
           },
         },
       ];
+
+      // Log the count of documents after the cutoff date filter
+      const documentsAfterCutoff = await this.model
+        .aggregate([
+          ...pipeline.slice(
+            0,
+            pipeline.findIndex((stage) => "$group" in stage)
+          ), // Get stages up to the group stage
+          { $count: "count" },
+        ])
+        .exec();
+
+      logger.info({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${
+          documentsAfterCutoff[0]?.count || 0
+        }`,
+      });
 
       const duplicates = await this.model
         .aggregate<MongoDuplicateCheckResult>(pipeline)
