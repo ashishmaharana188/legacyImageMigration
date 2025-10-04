@@ -716,7 +716,7 @@ class FileController {
 
       const message =
         totalFailedFiles > 0
-          ? `S3 upload completed: ${totalSuccessfulFiles} successful - ${totalFailedFiles} failed`
+          ? `S3 upload completed: ${totalSuccessfulFiles} Successful - ${totalFailedFiles} Failed`
           : `S3 upload completed successfully. Total files uploaded: ${totalSuccessfulFiles}.`;
 
       res.status(200).json({
@@ -815,7 +815,7 @@ class FileController {
 
       const message =
         totalFailedFiles > 0
-          ? `S3 split files upload completed with ${totalSuccessfulFiles} successful and ${totalFailedFiles} failed files.`
+          ? `S3 split files upload completed: ${totalSuccessfulFiles} Successful and ${totalFailedFiles} Failed`
           : `S3 split files upload completed successfully. Total files uploaded: ${totalSuccessfulFiles}.`;
 
       res.status(200).json({

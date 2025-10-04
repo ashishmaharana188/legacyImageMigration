@@ -368,7 +368,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       let finalMessage = resMessage || "S3 upload completed.";
 
       if (failedFilesCount > 0 && successfulFilesCount > 0) {
-        finalMessage = `S3 upload completed: ${successfulFilesCount} successful - ${failedFilesCount} failed.`;
+        finalMessage = `S3 upload completed: ${successfulFilesCount} Successful - ${failedFilesCount} Failed.`;
       } else if (successfulFilesCount > 0 || failedFilesCount == 0) {
         finalMessage = `S3 upload completed successfully. Total files uploaded: ${successfulFilesCount}.`;
       } else {
@@ -445,7 +445,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       let finalMessage = resMessage || "S3 split files upload completed.";
 
       if (failedFilesCount > 0) {
-        finalMessage = `S3 split files upload completed with ${successfulFilesCount} successful and ${failedFilesCount} failed files.`;
+        finalMessage = `S3 split files upload completed: ${successfulFilesCount} Successful and ${failedFilesCount} Failed`;
       } else if (successfulFilesCount > 0) {
         finalMessage = `S3 split files upload completed successfully. Total files uploaded: ${successfulFilesCount}.`;
       } else {
@@ -465,7 +465,6 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
           s.fileName === "s3_upload_progress"
             ? {
                 ...s,
-
                 progress: 100,
                 successfulFiles: successfulFilesCount,
                 errorFiles: failedFilesCount,
