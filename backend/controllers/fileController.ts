@@ -216,6 +216,7 @@ class FileController {
       const processor = new Splitting();
       const result = await processor.splitFiles();
       logger.debug({
+        category: "responses",
         function: "splitFiles",
         message: "Files split successfully",
         splitSummary: result.summary,
@@ -252,6 +253,7 @@ class FileController {
       const processor = new Splitting();
       const result = await processor.splitFilesWithMuPDF();
       logger.debug({
+        category: "responses",
         function: "splitFilesWithMuPDF",
         message: "Files split successfully with MuPDF",
         splitSummary: result.summary,
@@ -327,6 +329,7 @@ class FileController {
       const { result, summary } = await database.executeSql();
       if (result === "success") {
         logger.debug({
+          category: "responses",
           function: "processSqlMongo",
           action: "executeSql",
           message: "SQL executed successfully",
@@ -367,6 +370,7 @@ class FileController {
       );
       if (result === "success") {
         logger.debug({
+          category: "responses",
           function: "processSqlMongo",
           action: "updateFolioAndTransaction",
           message: "Folio and Transaction updated successfully",
@@ -415,6 +419,7 @@ class FileController {
       const processor = new Database();
       const result = await processor.executeSql();
       logger.debug({
+        category: "responses",
         function: "executeSql",
         message: `Standalone SQL execution ${result.result}`,
         result: result.result,
@@ -457,6 +462,7 @@ class FileController {
       const processor = new Database();
       const result = await processor.updateFolioAndTransaction(updateAll);
       logger.debug({
+        category: "responses",
         function: "updateFolioAndTransaction",
         message: `Standalone Folio and Transaction update ${result.result}`,
         result: result.result,
@@ -502,6 +508,7 @@ class FileController {
         cutoffTms,
       });
       logger.debug({
+        category: "responses",
         function: "checkMongoDuplicates",
         message: "Mongo duplicate check completed successfully",
         result,
@@ -559,6 +566,7 @@ class FileController {
       }
 
       logger.debug({
+        category: "responses",
         function: "sanityCheckDuplicates",
         message: "Sanity check completed successfully",
         result,
@@ -592,6 +600,7 @@ class FileController {
       const mongoDatabase = new MongoDatabase();
       const result = await mongoDatabase.transferDataFromPostgres();
       logger.debug({
+        category: "responses",
         function: "transferDataToMongo",
         message: `Transferred ${result.transferredCount} documents to MongoDB successfully.`,
         transferredCount: result.transferredCount,
@@ -628,6 +637,7 @@ class FileController {
       const mongoDatabase = new MongoDatabase();
       const result = await mongoDatabase.updateMongoTransactions();
       logger.debug({
+        category: "responses",
         function: "updateMongoTransactions",
         message: "Mongo transactions updated successfully.",
         result,
@@ -862,6 +872,7 @@ class FileController {
       });
       const data = await listFiles(prefix, continuationToken);
       logger.debug({
+        category: "responses",
         function: "listS3Files",
         message: "S3 files listed successfully",
         count: data.files.length + data.directories.length,
@@ -909,6 +920,7 @@ class FileController {
       }
       const deletedKeys = await deleteFiles(keys);
       logger.debug({
+        category: "responses",
         function: "deleteS3Files",
         message: `S3 files deleted successfully`,
         deletedCount: deletedKeys.length,
@@ -964,6 +976,7 @@ class FileController {
         message: "--- searchS3Files Debug Start ---",
       });
       logger.debug({
+        category: "app-flow",
         function: "searchS3Files",
         context: {
           currentBrowsingPrefix,
@@ -978,6 +991,7 @@ class FileController {
 
       if (!isTransactionPatternProvided && !isFilenamePatternProvided) {
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message:
             "Logic Branch: No search patterns provided (normal list operation).",
@@ -987,6 +1001,7 @@ class FileController {
           continuationToken
         );
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `listFiles result (no patterns) - directories: ${listResult.directories.length}, files: ${listResult.files.length}`,
         });
@@ -995,6 +1010,7 @@ class FileController {
         nextContinuationToken = listResult.nextContinuationToken;
       } else if (isTransactionPatternProvided && !isFilenamePatternProvided) {
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message:
             "Logic Branch: transactionNumberPattern provided, filenamePattern not (filtered folder display).",
@@ -1008,6 +1024,7 @@ class FileController {
             currentContinuationToken
           );
           logger.debug({
+            category: "app-flow",
             function: "searchS3Files",
             message:
               "listFiles result (transaction pattern) - raw directories (page)",
@@ -1015,12 +1032,14 @@ class FileController {
           });
           allDirectories = allDirectories.concat(listResult.directories);
           logger.debug({
+            category: "app-flow",
             function: "searchS3Files",
             message: `Accumulated allDirectories (current count): ${allDirectories.length}`,
             content: allDirectories,
           });
           currentContinuationToken = listResult.nextContinuationToken;
           logger.debug({
+            category: "app-flow",
             function: "searchS3Files",
             message: `Next ContinuationToken for transaction pattern search: ${currentContinuationToken}`,
           });
@@ -1030,6 +1049,7 @@ class FileController {
           `^${currentBrowsingPrefix}CLIENT_CODE_\\d+_TRANSACTION_NUMBER_${transactionNumberPattern}`
         );
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `Constructed transactionRegex: ${transactionRegex.source}`,
         });
@@ -1037,6 +1057,7 @@ class FileController {
           transactionRegex.test(dir)
         );
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `Filtered directories (by transactionRegex): ${directories.length}`,
         });
@@ -1044,6 +1065,7 @@ class FileController {
         nextContinuationToken = undefined; // All results fetched by looping
       } else if (!isTransactionPatternProvided && isFilenamePatternProvided) {
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message:
             "Logic Branch: filenamePattern provided, transactionNumberPattern not (global file search, extract folders).",
@@ -1051,6 +1073,7 @@ class FileController {
         const s3CommandPrefix = ""; // Global search
         const fileSearchRegex = `^${currentBrowsingPrefix}.*CLIENT_CODE_\\d+_TRANSACTION_NUMBER_\\d+/${filenamePattern}`;
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `Constructed fileSearchRegex (global): ${fileSearchRegex}`,
         });
@@ -1059,6 +1082,7 @@ class FileController {
           fileSearchRegex
         );
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `searchFiles result (global) - matched files: ${allMatchedFiles.files.length}`,
         });
@@ -1075,6 +1099,7 @@ class FileController {
         });
         directories = Array.from(uniqueTransactionFolders).sort();
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `Extracted unique transaction folders: ${directories.length}`,
         });
@@ -1082,6 +1107,7 @@ class FileController {
         nextContinuationToken = undefined; // All results fetched by searchFiles
       } else {
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message:
             "Logic Branch: Both transactionNumberPattern and filenamePattern provided (specific file search).",
@@ -1091,6 +1117,7 @@ class FileController {
           currentBrowsingPrefix.match(/CLIENT_CODE_(\d+)/);
         const clientCode = clientCodeMatch ? clientCodeMatch[1] : "d+";
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `Derived clientCode for specific search: ${clientCode}`,
         });
@@ -1098,6 +1125,7 @@ class FileController {
         const transactionPart = `CLIENT_CODE_${clientCode}_TRANSACTION_NUMBER_${transactionNumberPattern}`;
         const fileSearchRegex = `^${currentBrowsingPrefix}${transactionPart}/${filenamePattern}`;
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `Constructed fileSearchRegex (specific): ${fileSearchRegex}`,
         });
@@ -1107,6 +1135,7 @@ class FileController {
           fileSearchRegex
         );
         logger.debug({
+          category: "app-flow",
           function: "searchS3Files",
           message: `searchFiles result (specific) - matched files: ${allMatchedFiles.files.length}`,
         });
@@ -1116,6 +1145,7 @@ class FileController {
       }
 
       logger.debug({
+        category: "app-flow",
         function: "searchS3Files",
         message: `Final Response - directories count: ${directories.length}, files count: ${files.length}`,
       });
