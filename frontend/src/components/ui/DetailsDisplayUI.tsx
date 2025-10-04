@@ -22,7 +22,22 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
   };
 
   const renderContent = () => {
-    if (log.splitSummary) {
+    if (log.message) {
+      const statusText =
+        log.status && log.status !== "in-progress" ? ` (${log.status})` : "";
+      const statusColor =
+        log.status === "success"
+          ? "text-black"
+          : log.status === "failed"
+          ? "text-black"
+          : "text-black";
+      return (
+        <div className={`${statusColor} font-bold text-lg`}>
+          {log.message}
+          {statusText}
+        </div>
+      );
+    } else if (log.splitSummary) {
       return null; // Handled by ProgressTrackingUI
     } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
       return (

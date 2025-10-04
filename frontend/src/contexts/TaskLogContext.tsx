@@ -42,7 +42,17 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children })
       if (!newLogs[taskKey]) {
         newLogs[taskKey] = [];
       }
-      newLogs[taskKey] = [...newLogs[taskKey], log];
+
+      if (log.id) {
+        const existingLogIndex = newLogs[taskKey].findIndex((item: any) => item.id === log.id);
+        if (existingLogIndex > -1) {
+          newLogs[taskKey][existingLogIndex] = { ...newLogs[taskKey][existingLogIndex], ...log };
+        } else {
+          newLogs[taskKey] = [...newLogs[taskKey], log];
+        }
+      } else {
+        newLogs[taskKey] = [...newLogs[taskKey], log];
+      }
       return newLogs;
     });
   };

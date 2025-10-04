@@ -38,6 +38,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
   const getLogIdentifier = (log: any): string => {
     if (typeof log === "string") return log;
+    if (log.id) return log.id; // Prioritize log.id for unique identification
     if (log.splitSummary) return "splitSummary";
     if (log.originalFile) return `file-upload-${log.originalFile}`;
     if (log.dryRun !== undefined) return "sanity-check-duplicates";
@@ -47,7 +48,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
       return "folio-transaction-update-summary";
     if (log.updatedDocuments) return "mongo-update-summary";
     if (log.duplicates) return "mongo-duplicate-check-summary";
-    if (log.message) return log.message;
+    if (log.message) return `${log.message}-${log.timestamp || Date.now()}`;
     return JSON.stringify(log);
   };
 
