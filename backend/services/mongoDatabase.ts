@@ -452,8 +452,7 @@ export class MongoDatabase {
               sourceUser: "$sourceUser",
             },
             count: { $sum: 1 },
-            documentIds: { $push: "$_id" },
-            createdOnDates: { $push: "$createdOnDate" }, // Capture createdOnDate for sorting
+            documents: { $push: { _id: "$_id", createdOnDate: "$createdOnDate" } }, // Correctly populate documents array
           },
         },
         {
@@ -505,9 +504,14 @@ export class MongoDatabase {
         for (const dupGroup of duplicates) {
           if (dupGroup.documents.length > 1) {
             // Sort documents by createdOnDate in ascending order (oldest first)
-            dupGroup.documents.sort(
-              (a, b) => a.createdOnDate.getTime() - b.createdOnDate.getTime()
-            );
+            dupGroup.documents.sort((a, b) => {
+              const dateComparison = a.createdOnDate.getTime() - b.createdOnDate.getTime();
+              if (dateComparison !== 0) {
+                return dateComparison;
+              }
+              // If dates are the same, use _id as a tie-breaker (ObjectId comparison)
+              return a._id.getTimestamp().getTime() - b._id.getTimestamp().getTime();
+            });
 
             // Keep the newest document, delete all others
             const documentsToDeleteIds = dupGroup.documents
