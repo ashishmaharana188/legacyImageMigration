@@ -426,23 +426,32 @@ class FileController {
         });
       }
 
-      // Send immediate response to unblock frontend
+      // Await the upload process to get final counts
+      const uploadResults = await Promise.all(clientDirs.map(async (clientDir) => {
+        const clientPath = path.join(outputRoot, clientDir.name);
+        const s3Prefix = getS3FilePrefix(clientDir.name);
+        logger.info({ category: 'task-steps', function: "uploadToS3", message: `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}` });
+        try {
+          return await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
+        } catch (error) {
+          logger.error({ category: 'task-steps', function: "uploadToS3", message: `S3 upload error for ${clientDir.name}`, error: error instanceof Error ? error.message : "Unknown error", stack: error instanceof Error ? error.stack : undefined });
+          return { successfulFilesCount: 0, failedFilesCount: 1, failedFileDetails: [{ name: clientDir.name, error: error instanceof Error ? error.message : "Unknown error" }] };
+        }
+      }));
+
+      const totalSuccessfulFiles = uploadResults.reduce((sum, res) => sum + res.successfulFilesCount, 0);
+      const totalFailedFiles = uploadResults.reduce((sum, res) => sum + res.failedFilesCount, 0);
+
+      const message = totalFailedFiles > 0
+        ? `S3 upload completed with ${totalSuccessfulFiles} successful and ${totalFailedFiles} failed files.`
+        : `S3 upload completed successfully. Total files uploaded: ${totalSuccessfulFiles}.`;
+
       res.status(200).json({
         statusCode: 200,
-        message: "S3 upload process initiated. Progress will be shown via WebSocket.",
+        message: message,
+        successfulFilesCount: totalSuccessfulFiles,
+        failedFilesCount: totalFailedFiles,
       });
-
-      // Start uploads in background
-      for (const clientDir of clientDirs) {
-        const clientPath = path.join(outputRoot, clientDir.name);
-              const s3Prefix = getS3FilePrefix(clientDir.name);
-              logger.info({ category: 'task-steps', function: "uploadToS3", message: `Uploading ${clientDir.name} → s3://${bucket}/${s3Prefix}` });
-              // Do not await here, let it run in the background
-              uploadDirectoryRecursive(clientPath, bucket, s3Prefix).catch((error) => {
-                logger.error({ category: 'task-steps', function: "uploadToS3", message: `S3 upload error for ${clientDir.name}`, error: error instanceof Error ? error.message : "Unknown error", stack: error instanceof Error ? error.stack : undefined });
-                // Optionally, send a WebSocket message for individual clientDir failures
-              });
-            }
           } catch (error: any) {
             const errorMessage =
               error.message && error.message.includes("expired credentials")
@@ -480,23 +489,32 @@ class FileController {
         });
       }
 
-      // Send immediate response to unblock frontend
+      // Await the upload process to get final counts
+      const uploadResults = await Promise.all(clientDirs.map(async (clientDir) => {
+        const clientPath = path.join(splitOutputRoot, clientDir.name);
+        const s3Prefix = getS3SplitPrefix(clientDir.name);
+        logger.info({ category: 'task-steps', function: "uploadSplitFilesToS3", message: `Uploading SplitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}` });
+        try {
+          return await uploadSplitFilesToS3(clientPath, bucket, s3Prefix);
+        } catch (error) {
+          logger.error({ category: 'task-steps', function: "uploadSplitFilesToS3", message: `S3 upload error for ${clientDir.name}`, error: error instanceof Error ? error.message : "Unknown error", stack: error instanceof Error ? error.stack : undefined });
+          return { successfulFilesCount: 0, failedFilesCount: 1, failedFileDetails: [{ name: clientDir.name, error: error instanceof Error ? error.message : "Unknown error" }] };
+        }
+      }));
+
+      const totalSuccessfulFiles = uploadResults.reduce((sum, res) => sum + res.successfulFilesCount, 0);
+      const totalFailedFiles = uploadResults.reduce((sum, res) => sum + res.failedFilesCount, 0);
+
+      const message = totalFailedFiles > 0
+        ? `S3 split files upload completed with ${totalSuccessfulFiles} successful and ${totalFailedFiles} failed files.`
+        : `S3 split files upload completed successfully. Total files uploaded: ${totalSuccessfulFiles}.`;
+
       res.status(200).json({
         statusCode: 200,
-        message: "S3 split files upload process initiated. Progress will be shown via WebSocket.",
+        message: message,
+        successfulFilesCount: totalSuccessfulFiles,
+        failedFilesCount: totalFailedFiles,
       });
-
-      // Start uploads in background
-      for (const clientDir of clientDirs) {
-        const clientPath = path.join(splitOutputRoot, clientDir.name);
-      const s3Prefix = getS3SplitPrefix(clientDir.name);
-      logger.info({ category: 'task-steps', function: "uploadSplitFilesToS3", message: `Uploading SplitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}` });
-      // Do not await here, let it run in the background
-      uploadSplitFilesToS3(clientPath, bucket, s3Prefix).catch((error) => {
-        logger.error({ category: 'task-steps', function: "uploadSplitFilesToS3", message: `S3 upload error for ${clientDir.name}`, error: error instanceof Error ? error.message : "Unknown error", stack: error instanceof Error ? error.stack : undefined });
-        // Optionally, send a WebSocket message for individual clientDir failures
-      });
-    }
   } catch (error: any) {
     // This outer catch handles errors like `fs.readdir` failing
     const errorMessage =
