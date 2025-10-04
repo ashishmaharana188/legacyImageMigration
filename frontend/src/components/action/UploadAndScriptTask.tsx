@@ -356,35 +356,44 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     ]);
 
     try {
-      const res = await axios.post<FileResponse>("http://localhost:3000/upload-to-s3");
-      const { successfulFilesCount = 0, failedFilesCount = 0, message: resMessage } = res.data;
+      const res = await axios.post<FileResponse>(
+        "http://localhost:3000/upload-to-s3"
+      );
+      const {
+        successfulFilesCount = 0,
+        failedFilesCount = 0,
+        message: resMessage,
+      } = res.data;
 
       let finalMessage = resMessage || "S3 upload completed.";
-      let finalStatus: "success" | "failed" | "in-progress" = "success";
 
-      if (failedFilesCount > 0) {
-        finalMessage = `S3 upload completed with ${successfulFilesCount} successful and ${failedFilesCount} failed files.`;
-        finalStatus = "failed";
-      } else if (successfulFilesCount > 0) {
+      if (failedFilesCount > 0 && successfulFilesCount > 0) {
+        finalMessage = `S3 upload completed: ${successfulFilesCount} successful - ${failedFilesCount} failed.`;
+      } else if (successfulFilesCount > 0 || failedFilesCount == 0) {
         finalMessage = `S3 upload completed successfully. Total files uploaded: ${successfulFilesCount}.`;
-        finalStatus = "success";
       } else {
         finalMessage = resMessage || "No files found to upload.";
-        finalStatus = "success"; // Or 'info' if available, assuming no error if no files
+        // Or 'info' if available, assuming no error if no files
       }
 
       setUploadMessage(finalMessage);
       updateTaskLog("uploadAndScript", {
         id: s3UploadLogId,
         message: finalMessage,
-        status: finalStatus,
+
         ...res.data,
       });
 
       setUploadStatuses((prevStatuses) =>
         prevStatuses.map((s) =>
           s.fileName === "s3_upload_progress"
-            ? { ...s, status: finalStatus === "success" ? "Done" : "Failed", progress: 100, successfulFiles: successfulFilesCount, errorFiles: failedFilesCount }
+            ? {
+                ...s,
+
+                progress: 100,
+                successfulFiles: successfulFilesCount,
+                errorFiles: failedFilesCount,
+              }
             : s
         )
       );
@@ -396,7 +405,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       updateTaskLog("uploadAndScript", {
         id: s3UploadLogId,
         message: errorMessage,
-        status: "failed"
+        status: "failed",
       });
     } finally {
       setLoading(false);
@@ -427,7 +436,11 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         "http://localhost:3000/upload-split-to-s3",
         {}
       );
-      const { successfulFilesCount = 0, failedFilesCount = 0, message: resMessage } = res.data;
+      const {
+        successfulFilesCount = 0,
+        failedFilesCount = 0,
+        message: resMessage,
+      } = res.data;
 
       let finalMessage = resMessage || "S3 split files upload completed.";
       let finalStatus: "success" | "failed" | "in-progress" = "success";
@@ -454,7 +467,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       setUploadStatuses((prevStatuses) =>
         prevStatuses.map((s) =>
           s.fileName === "s3_upload_progress"
-            ? { ...s, status: finalStatus === "success" ? "Done" : "Failed", progress: 100, successfulFiles: successfulFilesCount, errorFiles: failedFilesCount }
+            ? {
+                ...s,
+                status: finalStatus === "success" ? "Done" : "Failed",
+                progress: 100,
+                successfulFiles: successfulFilesCount,
+                errorFiles: failedFilesCount,
+              }
             : s
         )
       );

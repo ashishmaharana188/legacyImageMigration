@@ -27,6 +27,7 @@ interface S3ApiResponse {
 
 interface S3BrowserTaskProps {
   updateTaskLog: (task: string, log: any) => void;
+  clearTaskLog: (task: string) => void;
 }
 
 const fetchS3Objects = async ({
