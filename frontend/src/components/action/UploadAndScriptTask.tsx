@@ -506,6 +506,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       );
       setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || "Splitting successful");
+      const { message: resMessage, ...restData } = res.data;
+      updateTaskLog("uploadAndScript", {
+        id: mupdfSplitLogId,
+        message: "Splitting with MuPDF Successful!",
+        status: "success",
+        ...restData,
+      });
     } catch (error: any) {
       const errorMessage = `Splitting failed: ${
         error.response?.data?.message || error.message || "Unknown error"
