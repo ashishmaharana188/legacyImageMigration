@@ -5,8 +5,17 @@ import fs from "fs/promises";
 import path from "path";
 import { Pool, PoolClient } from "pg";
 import logger from "../utils/logger";
-import { getPgPool, reconnectPgPool, warmupPgPool } from "../controllers/dbConnect";
-import { SqlLog, SanityCheckRow, DryRunResultRow, ImperfectDuplicateRow } from "../types/database";
+import {
+  getPgPool,
+  reconnectPgPool,
+  warmupPgPool,
+} from "../controllers/dbConnect";
+import {
+  SqlLog,
+  SanityCheckRow,
+  DryRunResultRow,
+  ImperfectDuplicateRow,
+} from "../types/database";
 
 export class Database {
   private readonly trxnMap: Record<string, string> = {
@@ -1155,7 +1164,9 @@ RETURNING d.user_attr1, d.user_attr2;
         groups_with_only_imperfect_duplicates AS (
             SELECT d.client_id, ${keyExpr("d")} AS k
             FROM investor.aif_document_details d
-            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr("d")} = kac.k
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
+              "d"
+            )} = kac.k
             WHERE d.created_by = 'system' ${clientFilter("d")}
             GROUP BY d.client_id, ${keyExpr("d")}
             HAVING COUNT(*) > 1
@@ -1166,9 +1177,13 @@ RETURNING d.user_attr1, d.user_attr2;
             FROM (
                 SELECT
                     d.id,
-                    ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr("d")} ORDER BY d.creation_date DESC, d.id DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr(
+                      "d"
+                    )} ORDER BY d.creation_date DESC, d.id DESC) as rn
                 FROM investor.aif_document_details d
-                JOIN groups_with_only_imperfect_duplicates gwoid ON d.client_id = gwoid.client_id AND ${keyExpr("d")} = gwoid.k
+                JOIN groups_with_only_imperfect_duplicates gwoid ON d.client_id = gwoid.client_id AND ${keyExpr(
+                  "d"
+                )} = gwoid.k
                 WHERE d.created_by = 'system' ${clientFilter("d")}
             ) ranked
             WHERE rn > 1
@@ -1228,7 +1243,12 @@ RETURNING d.user_attr1, d.user_attr2;
           let wouldBeDeleted = false;
           let reason = "";
 
-          const isPerfectRow = (row.folio_id !== null && row.transaction_reference_id !== null && row.user_attr1 !== null && row.user_attr2 !== null && row.client_id !== null);
+          const isPerfectRow =
+            row.folio_id !== null &&
+            row.transaction_reference_id !== null &&
+            row.user_attr1 !== null &&
+            row.user_attr2 !== null &&
+            row.client_id !== null;
 
           if (row.perfect_rows_in_group > 0) {
             if (!isPerfectRow) {
@@ -1238,16 +1258,19 @@ RETURNING d.user_attr1, d.user_attr2;
             } else {
               reason = "Perfect row, kept.";
             }
-          } else if (row.total_rows_in_group > 1) { // New condition for imperfect duplicates
+          } else if (row.total_rows_in_group > 1) {
+            // New condition for imperfect duplicates
             if (row.rn_desc > 1) {
               wouldBeDeleted = true;
               reason =
                 "Would be deleted: Older imperfect row in an all-imperfect duplicate group.";
             } else {
-              reason = "Kept: Newest imperfect row in an all-imperfect duplicate group.";
+              reason =
+                "Kept: Newest imperfect row in an all-imperfect duplicate group.";
             }
           } else {
-            reason = "No action: Group contains no perfect rows and no duplicates.";
+            reason =
+              "No action: Group contains no perfect rows and no duplicates.";
           }
 
           // This covers the case where a group might have perfect rows, but also multiple perfect rows.
@@ -1323,9 +1346,10 @@ RETURNING d.user_attr1, d.user_attr2;
         message: `Rule 2 (Older Perfects) deleted ${delOlderPerfectRes.rowCount} rows.`,
       });
 
-      const delImperfectDuplicatesRes = await client.query(deleteImperfectDuplicatesSql, [
-        cutoffTms,
-      ]);
+      const delImperfectDuplicatesRes = await client.query(
+        deleteImperfectDuplicatesSql,
+        [cutoffTms]
+      );
       logs.push({
         row: 0,
         status: "updated",

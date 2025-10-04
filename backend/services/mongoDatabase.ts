@@ -184,22 +184,39 @@ export class MongoDatabase {
       }
 
       const pgData = await database.getUpdateDetails();
+      const bulkOperations = [];
+      const documentsToUpdate = [];
+      const documentsToSync = [];
 
+      // 1. Extract unique client_code and user_attr1 pairs from pgData
+      const uniqueFilters = pgData.map(data => ({
+        clientId: data.client_code,
+        transactionNo: data.user_attr1,
+      }));
+
+      // 2. Fetch all relevant MongoDB documents in a single query
+      const mongoDocs = await this.model.find({ $or: uniqueFilters }).lean();
+
+      // 3. Create a map for efficient lookup
+      const mongoDocMap = new Map<string, any>();
+      mongoDocs.forEach(doc => {
+        mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
+      });
+
+      // 4. Iterate through pgData and use the map for lookup
       for (const data of pgData) {
-        const filter = {
-          clientId: data.client_code,
-          transactionNo: data.user_attr1,
-        };
-
-        const mongoDoc = await this.model.findOne(filter);
+        const key = `${data.client_code}-${data.user_attr1}`;
+        const mongoDoc = mongoDocMap.get(key);
 
         if (mongoDoc) {
           if (mongoDoc.transactionNo !== data.transaction_reference_id) {
-            await this.model.updateOne(filter, {
-              $set: { transactionNo: data.transaction_reference_id },
+            bulkOperations.push({
+              updateOne: {
+                filter: { _id: mongoDoc._id }, // Filter by _id for precise update
+                update: { $set: { transactionNo: data.transaction_reference_id } },
+              },
             });
-            updatedCount++;
-            updatedDocuments.push({
+            documentsToUpdate.push({
               clientId: data.client_code,
               oldTransactionNo: mongoDoc.transactionNo,
               newTransactionNo: data.transaction_reference_id,
@@ -207,14 +224,27 @@ export class MongoDatabase {
               processCode: mongoDoc.processCode,
             });
           } else {
-            syncedCount++;
-            syncedDocuments.push({
+            documentsToSync.push({
               clientId: data.client_code,
               transactionNo: mongoDoc.transactionNo,
             });
           }
         }
       }
+
+      if (bulkOperations.length > 0) {
+        const bulkWriteResult = await this.model.bulkWrite(bulkOperations);
+        updatedCount = bulkWriteResult.modifiedCount;
+        updatedDocuments.push(...documentsToUpdate);
+      }
+
+      syncedCount = documentsToSync.length;
+      syncedDocuments.push(...documentsToSync);
+
+      logger.info({
+        category: "task-steps",
+        message: `Mongo transaction update process completed. Updated: ${updatedCount}, Synced: ${syncedCount}`,
+      });
 
       await this.disconnect();
       return { updatedCount, syncedCount, updatedDocuments, syncedDocuments };
@@ -501,39 +531,36 @@ export class MongoDatabase {
           message:
             "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates.",
         });
+        const allDocumentsToDeleteIds: mongoose.Types.ObjectId[] = [];
         for (const dupGroup of duplicates) {
           if (dupGroup.documents.length > 1) {
-            // Sort documents by createdOnDate in ascending order (oldest first)
             dupGroup.documents.sort((a, b) => {
               const dateComparison = a.createdOnDate.getTime() - b.createdOnDate.getTime();
               if (dateComparison !== 0) {
                 return dateComparison;
               }
-              // If dates are the same, use _id as a tie-breaker (ObjectId comparison)
               return a._id.getTimestamp().getTime() - b._id.getTimestamp().getTime();
             });
 
-            // Keep the newest document, delete all others
             const documentsToDeleteIds = dupGroup.documents
               .slice(0, -1)
               .map((doc) => doc._id);
-
-            if (documentsToDeleteIds.length > 0) {
-              const deleteResult = await this.model.deleteMany({
-                _id: { $in: documentsToDeleteIds },
-                clientId: dupGroup._id.clientId,
-                transactionNo: dupGroup._id.transactionNo,
-              });
-              logs.push({
-                status: "info",
-                message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
-              });
-              logger.debug({
-                category: "task-steps",
-                message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
-              });
-            }
+            allDocumentsToDeleteIds.push(...documentsToDeleteIds);
           }
+        }
+
+        if (allDocumentsToDeleteIds.length > 0) {
+          const deleteResult = await this.model.deleteMany({
+            _id: { $in: allDocumentsToDeleteIds },
+          });
+          logs.push({
+            status: "info",
+            message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
+          });
+          logger.debug({
+            category: "task-steps",
+            message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
+          });
         }
         logs.push({
           status: "info",
