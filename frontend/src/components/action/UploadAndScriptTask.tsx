@@ -443,24 +443,20 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       } = res.data;
 
       let finalMessage = resMessage || "S3 split files upload completed.";
-      let finalStatus: "success" | "failed" | "in-progress" = "success";
 
       if (failedFilesCount > 0) {
         finalMessage = `S3 split files upload completed with ${successfulFilesCount} successful and ${failedFilesCount} failed files.`;
-        finalStatus = "failed";
       } else if (successfulFilesCount > 0) {
         finalMessage = `S3 split files upload completed successfully. Total files uploaded: ${successfulFilesCount}.`;
-        finalStatus = "success";
       } else {
         finalMessage = resMessage || "No split files found to upload.";
-        finalStatus = "success"; // Or 'info' if available, assuming no error if no files
       }
 
       setSplitMessage(finalMessage);
       updateTaskLog("uploadAndScript", {
         id: splitS3UploadLogId,
         message: finalMessage,
-        status: finalStatus,
+
         ...res.data,
       });
 
@@ -469,7 +465,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
           s.fileName === "s3_upload_progress"
             ? {
                 ...s,
-                status: finalStatus === "success" ? "Done" : "Failed",
+
                 progress: 100,
                 successfulFiles: successfulFilesCount,
                 errorFiles: failedFilesCount,
