@@ -121,7 +121,30 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
         "http://localhost:3000/process-sql-mongo",
         { action: "executeSql" }
       );
-      updateTaskLog("sqlAndMongo", res.data);
+      const { totalRows = 0, successfulRows = 0, badRows = 0, message: resMessage, ...restData } = res.data;
+
+      let finalMessage = resMessage || "SQL execution completed.";
+      let finalStatus: "success" | "failed" = "success";
+
+      if (badRows > 0) {
+        finalMessage = `SQL execution completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
+        finalStatus = "failed";
+      } else if (totalRows > 0) {
+        finalMessage = `SQL executed successfully. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
+        finalStatus = "success";
+      } else {
+        finalMessage = resMessage || "No rows processed during SQL execution.";
+        finalStatus = "success";
+      }
+
+      updateTaskLog("sqlAndMongo", {
+        message: finalMessage,
+        status: finalStatus,
+        totalRows: totalRows,
+        successfulRows: successfulRows,
+        badRows: badRows,
+        ...restData,
+      });
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         updateTaskLog(
@@ -145,7 +168,30 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
         "http://localhost:3000/process-sql-mongo",
         { action: "updateFolioAndTransaction", updateAll }
       );
-      updateTaskLog("sqlAndMongo", res.data);
+      const { updatedFolioRows = 0, updatedTransactionRows = 0, badRows = 0, message: resMessage, ...restData } = res.data;
+
+      let finalMessage = resMessage || "Folio and Transaction update completed.";
+      let finalStatus: "success" | "failed" = "success";
+
+      if (badRows > 0) {
+        finalMessage = `Folio and Transaction update completed: Folio Rows Updated: ${updatedFolioRows}, Transaction Rows Updated: ${updatedTransactionRows}, Bad Rows: ${badRows}.`;
+        finalStatus = "failed";
+      } else if (updatedFolioRows > 0 || updatedTransactionRows > 0) {
+        finalMessage = `Folio and Transaction updated successfully. Folio Rows: ${updatedFolioRows}, Transaction Rows: ${updatedTransactionRows}.`;
+        finalStatus = "success";
+      } else {
+        finalMessage = resMessage || "No Folio or Transaction rows updated.";
+        finalStatus = "success";
+      }
+
+      updateTaskLog("sqlAndMongo", {
+        message: finalMessage,
+        status: finalStatus,
+        updatedFolioRows: updatedFolioRows,
+        updatedTransactionRows: updatedTransactionRows,
+        badRows: badRows,
+        ...restData,
+      });
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
         updateTaskLog(

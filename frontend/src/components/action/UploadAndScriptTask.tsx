@@ -252,11 +252,33 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         }
       );
       setUploadMessage(res.data.message || "Upload successful");
+      const { summary, ...restData } = res.data;
+      const totalRows = summary?.totalRows || 0;
+      const successfulRows = summary?.successfulRows || 0;
+      const badRows = summary?.errors || 0; // Assuming 'errors' in summary corresponds to badRows
+
+      let finalMessage = res.data.message || "Upload successful";
+      let finalStatus: "success" | "failed" | "in-progress" = "success";
+
+      if (badRows > 0) {
+        finalMessage = `Upload completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
+        finalStatus = "failed";
+      } else if (totalRows > 0) {
+        finalMessage = `Upload successful. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
+        finalStatus = "success";
+      } else {
+        finalMessage = res.data.message || "No rows processed.";
+        finalStatus = "success";
+      }
+
       updateTaskLog("uploadAndScript", {
         id: uploadLogId,
-        message: "Upload Successful!",
-        status: "success",
-        ...res.data,
+        message: finalMessage,
+        status: finalStatus,
+        totalRows: totalRows,
+        successfulRows: successfulRows,
+        badRows: badRows,
+        ...restData,
       });
     } catch (error: any) {
       const errorMessage = `Upload failed: ${
@@ -515,11 +537,33 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         }
       );
       setUploadMessage(res.data.message || "Fallback successful");
+      const { summary, ...restData } = res.data;
+      const totalRows = summary?.totalRows || 0;
+      const successfulRows = summary?.successfulRows || 0;
+      const badRows = summary?.errors || 0; // Assuming 'errors' in summary corresponds to badRows
+
+      let finalMessage = res.data.message || "Fallback successful";
+      let finalStatus: "success" | "failed" | "in-progress" = "success";
+
+      if (badRows > 0) {
+        finalMessage = `Fallback completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
+        finalStatus = "failed";
+      } else if (totalRows > 0) {
+        finalMessage = `Fallback successful. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
+        finalStatus = "success";
+      } else {
+        finalMessage = res.data.message || "No rows processed during fallback.";
+        finalStatus = "success";
+      }
+
       updateTaskLog("uploadAndScript", {
         id: fallbackLogId,
-        message: "Fallback Successful!",
-        status: "success",
-        ...res.data,
+        message: finalMessage,
+        status: finalStatus,
+        totalRows: totalRows,
+        successfulRows: successfulRows,
+        badRows: badRows,
+        ...restData,
       });
     } catch (error: any) {
       const errorMessage = `Fallback failed: ${

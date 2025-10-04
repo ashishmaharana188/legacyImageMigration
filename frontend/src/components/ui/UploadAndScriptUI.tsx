@@ -71,7 +71,6 @@ const UploadAndScriptUI: React.FC<UploadAndScriptUIProps> = ({
         >
           {loading ? "Splitting..." : "Split with MuPDF"}
         </button>
-        {splitMessage && <p>{splitMessage}</p>}
       </div>
 
       <div className="mt-4">
