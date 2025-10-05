@@ -1,4 +1,4 @@
-import { PoolClient } from "pg";
+import { PoolClient, Pool } from "pg";
 
 export interface SqlLog {
   row: number;

@@ -40,8 +40,8 @@ export class Database {
     await reconnectPgPool();
   }
 
-  public getPool(): Pool {
-    return getPgPool();
+  public async getPool(): Promise<Pool> {
+    return await getPgPool();
   }
 
   public async warmup() {
@@ -415,8 +415,7 @@ page_count, client_id
         };
       }
 
-      this.logger.info("executeSql: attempting pool.connect()");
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       this.logger.info("executeSql: pool.connect() successful");
 
       client.on("error", (err) => {
@@ -730,7 +729,7 @@ page_count, client_id
 
     try {
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
       client.on("error", (err) =>
         this.logger.error(
@@ -1084,7 +1083,7 @@ SELECT DISTINCT
     let client: PoolClient | null = null;
 
     try {
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       await client.query("BEGIN");
 
       let clientId: number | null = null;
@@ -1546,7 +1545,7 @@ SELECT DISTINCT
   ): Promise<{ id: number } | undefined> {
     let client: PoolClient | null = null;
     try {
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       const res = await client.query(
         "SELECT id FROM fund.client_master WHERE client_code = $1",
         [clientCode]
@@ -1586,7 +1585,7 @@ SELECT DISTINCT
         return [];
       }
 
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       let query = `
         SELECT
           add.document_process,
@@ -1660,7 +1659,7 @@ SELECT DISTINCT
   public async getUpdateDetails(): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       const query = `
         SELECT
           cm.client_code,
@@ -1689,7 +1688,7 @@ SELECT DISTINCT
   ): Promise<void> {
     let client: PoolClient | null = null;
     try {
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       let query = `
         SELECT
           cm.client_code,

@@ -1,21 +1,55 @@
 import { Pool, PoolClient } from "pg";
 import mongoose from "mongoose";
 import logger from "../utils/logger"; // Centralized logger
-import { startMongoSshTunnel } from "../services/tunnel"; // Import the tunnel starter
+import { startMongoSshTunnel, startSshTunnel } from "../services/tunnel"; // Import the tunnel starter
 
 // --- PostgreSQL Pool Configuration ---
 let pgPool: Pool | null = null;
+let pgSshTunnel: any = null; // To store the PostgreSQL SSH tunnel server instance
 
-const createPgPool = (): Pool => {
+const createPgPool = async (): Promise<Pool> => {
   const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
+  let dbHost: string;
+  let dbPort: number;
+
+  if (useSshTunnel) {
+    if (!pgSshTunnel) {
+      logger.info({
+        category: "app-flow",
+        function: "createPgPool",
+        message: "Attempting to start PostgreSQL SSH tunnel.",
+      });
+      try {
+        pgSshTunnel = await startSshTunnel();
+        logger.info({
+          category: "app-flow",
+          function: "createPgPool",
+          message: "PostgreSQL SSH tunnel started successfully.",
+        });
+      } catch (error: any) {
+        logger.error({
+          category: "app-flow",
+          function: "createPgPool",
+          message: "Failed to start PostgreSQL SSH tunnel. PostgreSQL connection will likely fail.",
+          error: error.message,
+        });
+        // If tunnel fails, we might still try to connect to DB directly or throw.
+        // For now, we proceed, and the DB connection will likely fail.
+      }
+    }
+    dbHost = "localhost"; // Connect to the local end of the tunnel
+    dbPort = parseInt(process.env.DB_PORT || "5433", 10); // Local port for the tunnel
+  } else {
+    dbHost = "localhost"; // Direct connection
+    dbPort = parseInt(process.env.DB_PORT || "5432", 10);
+  }
+
   const newPool = new Pool({
     user: useSshTunnel ? process.env.DB_USER : "postgres",
-    host: useSshTunnel ? process.env.DB_HOST : "localhost",
+    host: dbHost,
     database: useSshTunnel ? process.env.DB_NAME : "test",
     password: useSshTunnel ? process.env.DB_PASSWORD : "123456",
-    port: useSshTunnel
-      ? parseInt(process.env.DB_PORT || "5433", 10)
-      : parseInt(process.env.DB_PORT || "5432", 10),
+    port: dbPort,
     max: 20,
     idleTimeoutMillis: 30000, // 30 seconds
     connectionTimeoutMillis: 10000,
@@ -47,19 +81,17 @@ const createPgPool = (): Pool => {
   logger.info({ category: 'app-flow', function: "createPgPool", message: "Postgres pool created", });
   const poolConfig = {
     user: useSshTunnel ? process.env.DB_USER : "postgres",
-    host: useSshTunnel ? process.env.DB_HOST : "localhost",
+    host: dbHost,
     database: useSshTunnel ? process.env.DB_NAME : "test",
-    port: useSshTunnel
-      ? parseInt(process.env.DB_PORT || "5433", 10)
-      : parseInt(process.env.DB_PORT || "5432", 10),
+    port: dbPort,
   };
   logger.info({ category: 'app-flow', function: "createPgPool", message: `Postgres pool configured for ${poolConfig.host}:${poolConfig.port}`, });
   return newPool;
 };
 
-export const getPgPool = (): Pool => {
+export const getPgPool = async (): Promise<Pool> => {
   if (!pgPool) {
-    pgPool = createPgPool();
+    pgPool = await createPgPool();
   }
   return pgPool;
 };
@@ -71,11 +103,17 @@ export const reconnectPgPool = async (): Promise<void> => {
 
   for (let i = 0; i < MAX_RECONNECT_RETRIES; i++) {
     try {
+      if (pgSshTunnel) {
+        pgSshTunnel.close();
+        pgSshTunnel = null;
+        logger.info({ category: 'app-flow', function: "reconnectPgPool", message: "Existing PostgreSQL SSH tunnel closed.", });
+      }
+
       if (pgPool) {
         await pgPool.end();
         logger.info({ category: 'app-flow', function: "reconnectPgPool", message: "Existing PostgreSQL pool ended.", });
       }
-      pgPool = createPgPool();
+      pgPool = await createPgPool(); // This will also handle restarting the SSH tunnel if needed
       await warmupPgPool(); // Warm up the new pool
       logger.info({ category: 'app-flow', function: "reconnectPgPool", message: "PostgreSQL pool reconnected successfully.", });
       return;
@@ -101,7 +139,7 @@ export const warmupPgPool = async () => {
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
       logger.info({ category: 'app-flow', function: "warmupPgPool", message: `Attempting PostgreSQL database warm-up (attempt ${i + 1}/${MAX_RETRIES})...`, });
-      client = await getPgPool().connect();
+      client = await (await getPgPool()).connect();
       const onClientError = (e: Error) =>
         logger.error({ category: 'app-flow', function: "warmupPgPool", message: "warmup client error", error: e.message, });
       client.on("error", onClientError);
@@ -287,4 +325,26 @@ export const getMongoDb = () => {
     throw new Error("MongoDB database object is not available.");
   }
   return mongoConnection.db;
+};
+
+export const disconnectPgPool = async (): Promise<void> => {
+  if (pgPool) {
+    try {
+      await pgPool.end();
+      pgPool = null;
+      logger.info({ category: 'app-flow', message: "PostgreSQL pool disconnected." });
+    } catch (error) {
+      logger.error({ category: 'app-flow', message: `Error disconnecting PostgreSQL pool: ${error}` });
+    }
+  }
+
+  if (pgSshTunnel) {
+    try {
+      pgSshTunnel.close();
+      pgSshTunnel = null;
+      logger.info({ category: 'app-flow', message: "PostgreSQL SSH tunnel closed." });
+    } catch (error) {
+      logger.error({ category: 'app-flow', message: `Error closing PostgreSQL SSH tunnel: ${error}` });
+    }
+  }
 };
