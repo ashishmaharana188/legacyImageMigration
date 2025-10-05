@@ -56,6 +56,15 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     setAllTaskLogs((prevLogs) => {
       const newLogs = { ...prevLogs };
       let hasChanges = false;
+      // First, remove any taskKeys from allTaskLogs that are no longer present in taskLogs from context
+      for (const taskKey in newLogs) {
+        if (!(taskKey in taskLogs)) {
+          delete newLogs[taskKey];
+          hasChanges = true;
+        }
+      }
+
+      // Then, update or add taskLogs from context to allTaskLogs
       for (const taskKey in taskLogs) {
         if (taskLogs[taskKey].length === 0) {
           if (newLogs[taskKey] && newLogs[taskKey].length > 0) {
