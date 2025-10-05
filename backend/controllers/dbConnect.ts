@@ -131,6 +131,7 @@ export const warmupPgPool = async () => {
 // --- MongoDB Connection Configuration ---
 let mongoConnection: mongoose.Connection | null = null;
 let mongoModel: mongoose.Model<any> | null = null;
+let mongoSshTunnel: any = null; // To store the SSH tunnel server instance
 
 const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema(
   {
@@ -197,8 +198,15 @@ export const connectMongo = async (): Promise<void> => {
     let uri: string;
 
     if (useTunnel) {
-      console.log("Attempting to start MongoDB SSH tunnel.");
-      await startMongoSshTunnel(); // Start the SSH tunnel
+      if (!mongoSshTunnel) {
+        console.log("Attempting to start MongoDB SSH tunnel.");
+        const tunnel = await startMongoSshTunnel(); // Start the SSH tunnel
+        if (tunnel) {
+          mongoSshTunnel = tunnel.server;
+        }
+      } else {
+        console.log("MongoDB SSH tunnel already active. Skipping tunnel creation.");
+      }
       uri = process.env.MONGO_URI || "mongodb://localhost:27017/investor";
       const connectOptions: mongoose.ConnectOptions = {};
       if (process.env.MONGO_USER && process.env.MONGO_PASSWORD) {
@@ -255,6 +263,12 @@ export const disconnectMongo = async (): Promise<void> => {
       await mongoose.disconnect();
       mongoConnection = null;
       logger.info({ category: 'app-flow', message: "MongoDB disconnected" });
+
+      if (mongoSshTunnel) {
+        mongoSshTunnel.close();
+        mongoSshTunnel = null;
+        logger.info({ category: 'app-flow', message: "MongoDB SSH tunnel closed" });
+      }
     } catch (error) {
       logger.error({ category: 'app-flow', message: `Error disconnecting from MongoDB: ${error}` });
     }
