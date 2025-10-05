@@ -477,7 +477,7 @@ page_count, client_id
             this.logger.warn(
               `executeSql: client_id not found for id_fund: ${
                 data.id_fund
-              } at row ${originalIndex + 2}`
+              } at row ${originalIndex + 2}. Skipping row.`
             );
             logs.push({
               row: originalIndex + 2,
@@ -488,7 +488,7 @@ page_count, client_id
               id_ihno: data.id_ihno,
               reason: `Client ID not found for id_fund: ${data.id_fund}`,
             });
-            continue;
+            continue; // Skip this row entirely from valueParams and valueStrings
           }
 
           const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
