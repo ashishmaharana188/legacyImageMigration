@@ -137,6 +137,36 @@ To drastically improve the performance of these MongoDB `find` operations, a com
 
 Implementing this compound index will allow MongoDB to efficiently use the index to locate documents matching the `clientId` and `transactionNo` criteria, avoiding full collection scans. This will lead to a significant reduction in query execution time for the `updateMongoTransactions` process, improving overall application performance and responsiveness.
 
+### 4.5. Granular MongoDB Transaction Updates
+
+**Problem:**
+
+The `updateMongoTransactions` function previously performed a global update, fetching all relevant PostgreSQL data and then attempting to match and update MongoDB documents. This approach lacked granularity, making it inefficient for scenarios where updates needed to be restricted to specific `clientId` values or to documents created by a particular source (e.g., 'system'). This could lead to unnecessary data processing and potential performance overhead when only a subset of data required synchronization.
+
+**Solution:**
+
+To enhance efficiency and control, the `updateMongoTransactions` process has been refined to allow for `clientId`-specific updates and to filter PostgreSQL data based on the `created_by = 'system'` field. This ensures that only relevant data is streamed from PostgreSQL and processed for MongoDB updates, aligning with the `sourceUser: 'system'` field in MongoDB.
+
+**Implementation Details:**
+
+1.  **`backend/services/database.ts` - `streamUpdateDetails` function:**
+    *   **`clientId` Parameter:** An optional `clientId` parameter was added to the function signature.
+    *   **SQL Query Filtering:** The PostgreSQL query within `streamUpdateDetails` was modified to include a `WHERE add.created_by = 'system'` clause. Additionally, if a `clientId` is provided, an `AND add.client_id = $X` clause is dynamically appended to the query, and the `clientId` is passed as a parameter to the `pg-cursor` for efficient filtering at the database level.
+
+2.  **`backend/services/mongoDatabase.ts` - `updateMongoTransactions` function:**
+    *   **`clientId` Parameter:** An optional `clientId` parameter was added to the function signature.
+    *   **Stream Call Update:** The `database.streamUpdateDetails` call now passes the `clientId` parameter, ensuring that PostgreSQL streams only the data relevant to the specified client.
+    *   **MongoDB Query Filtering:** The MongoDB `find` query was updated to include `sourceUser: 'system'` as a mandatory filter. If a `clientId` is provided, `clientId: clientId` is also added to the MongoDB query, ensuring that only MongoDB documents belonging to the specified client and created by 'system' are considered for updates.
+
+**Benefit:**
+
+These enhancements provide several key benefits:
+
+-   **Improved Performance:** By filtering data at the source (both PostgreSQL and MongoDB) based on `created_by = 'system'` and `clientId`, the amount of data processed is significantly reduced, leading to faster execution times for `updateMongoTransactions`.
+-   **Enhanced Granularity:** The ability to specify a `clientId` allows for targeted updates, which is crucial for managing large datasets and ensuring that only the intended data is modified.
+-   **Data Consistency:** The explicit filtering by `created_by = 'system'` and `sourceUser: 'system'` ensures that the synchronization process between PostgreSQL and MongoDB is consistent for system-generated entries.
+-   **Reduced Resource Consumption:** Less data transfer and processing lead to lower CPU, memory, and network resource utilization on both the database servers and the application backend.
+
 
 **Problem:**
 

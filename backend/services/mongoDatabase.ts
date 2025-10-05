@@ -65,7 +65,7 @@ export class MongoDatabase {
     }
   }
 
-  public async transferDataFromPostgres(): Promise<{
+  public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
     documents?: any[]; // Added to return the documents
   }> {
@@ -81,12 +81,40 @@ export class MongoDatabase {
         return { transferredCount: 0 };
       }
 
+      let pgClientId: number | undefined;
+      if (clientCode) {
+        const clientRes = await database.getClientIdByCode(clientCode);
+        if (clientRes) {
+          pgClientId = clientRes.id;
+          logger.info({
+            category: "task-steps",
+            message: `Found PostgreSQL client_id: ${pgClientId} for client_code: ${clientCode}`,
+          });
+        } else {
+          logger.warn({
+            category: "task-steps",
+            message: `Client code '${clientCode}' not found in PostgreSQL. Aborting transfer.`,
+          });
+          return { transferredCount: 0 };
+        }
+      }
+
       const transactionsMap: Record<string, string> = {
         IC: "ICP",
         NCT: "NCTP",
       };
 
-      const pgData = await database.getAifDocumentDetails();
+      const pgData = await database.getAifDocumentDetails(pgClientId);
+      logger.info({
+        category: "task-steps",
+        message: `Fetched ${
+          pgData.length
+        } documents from PostgreSQL for transfer. (pgClientId: ${
+          pgClientId || "N/A"
+        })`,
+        pgClientId: pgClientId || "N/A",
+        pgDataCount: pgData.length,
+      });
       const documentsToInsert = [];
 
       for (const data of pgData) {
@@ -155,7 +183,7 @@ export class MongoDatabase {
     }
   }
 
-  public async updateMongoTransactions(): Promise<{
+  public async updateMongoTransactions(clientId?: number): Promise<{
     updatedCount: number;
     syncedCount: number;
     updatedDocuments: any[];
@@ -165,6 +193,14 @@ export class MongoDatabase {
     let totalSyncedCount = 0;
     const allUpdatedDocuments: any[] = [];
     const allSyncedDocuments: any[] = [];
+
+    logger.info({
+      category: "task-steps",
+      message: `Initiating updateMongoTransactions for clientId: ${
+        clientId || "all"
+      }`,
+      clientId: clientId || "N/A",
+    });
 
     try {
       const database = new (await import("./database.js")).Database();
@@ -184,20 +220,46 @@ export class MongoDatabase {
       }
 
       const processBatch = async (pgData: any[]) => {
+        logger.info({
+          category: "task-steps",
+          message: `Processing batch of ${pgData.length} PostgreSQL documents.`,
+          pgDataSample: pgData.slice(0, 2), // Log first 2 items for brevity
+          pgDataCount: pgData.length,
+        });
         const bulkOperations = [];
         const documentsToUpdate = [];
         const documentsToSync = [];
 
         const uniqueFilters = pgData.map((data) => ({
-          clientId: data.client_code,
+          clientId: data.client_code, // Use client_code (string) from PostgreSQL
           transactionNo: data.user_attr1,
         }));
 
         if (uniqueFilters.length === 0) {
+          logger.warn({
+            category: "task-steps",
+            message:
+              "No unique filters generated from PostgreSQL data. Skipping batch.",
+          });
           return;
         }
 
-        const mongoDocs = await this.model.find({ $or: uniqueFilters }).lean();
+        const mongoQuery: any = { $or: uniqueFilters, sourceUser: "system" };
+        // The clientId filter is already part of the uniqueFilters if clientId was provided to streamUpdateDetails
+        // No need to add it again as a top-level AND condition.
+
+        logger.info({
+          category: "task-steps",
+          message: "Fetching MongoDB documents with query.",
+          mongoQuery: JSON.stringify(mongoQuery),
+          uniqueFilters: JSON.stringify(uniqueFilters), // Log uniqueFilters as well
+        });
+        const mongoDocs = await this.model.find(mongoQuery).lean();
+        logger.info({
+          category: "task-steps",
+          message: `Fetched ${mongoDocs.length} documents from MongoDB.`,
+          mongoDocsCount: mongoDocs.length,
+        });
         const mongoDocMap = new Map<string, any>();
         mongoDocs.forEach((doc) => {
           mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
@@ -245,7 +307,7 @@ export class MongoDatabase {
         allSyncedDocuments.push(...documentsToSync);
       };
 
-      await database.streamUpdateDetails(200, processBatch);
+      await database.streamUpdateDetails(1000, processBatch, clientId);
 
       logger.info({
         category: "task-steps",

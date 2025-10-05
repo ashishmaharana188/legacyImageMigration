@@ -592,13 +592,14 @@ class FileController {
 
   async transferDataToMongo(req: Request, res: Response) {
     try {
+      const { clientCode } = req.body;
       logger.info({
         category: "api-calls",
         function: "transferDataToMongo",
-        message: "Initiating data transfer to MongoDB.",
+        message: `Initiating data transfer to MongoDB for clientCode: ${clientCode || 'all'}.`,
       });
       const mongoDatabase = new MongoDatabase();
-      const result = await mongoDatabase.transferDataFromPostgres();
+      const result = await mongoDatabase.transferDataFromPostgres(clientCode);
       logger.debug({
         category: "responses",
         function: "transferDataToMongo",
@@ -629,13 +630,35 @@ class FileController {
 
   async updateMongoTransactions(req: Request, res: Response) {
     try {
+      const { clientCode: rawClientCode } = req.body;
+      const clientCode = rawClientCode ? rawClientCode.trim() : undefined;
       logger.info({
         category: "api-calls",
         function: "updateMongoTransactions",
-        message: "Initiating Mongo transactions update.",
+        message: `Initiating Mongo transactions update for clientCode: ${clientCode || 'all'}.`,
       });
+
+      const database = new Database(); // Instantiate Database service
+      let clientId: number | undefined;
+
+      if (clientCode) {
+        const clientRes = await database.getClientIdByCode(clientCode);
+        if (!clientRes) {
+          logger.warn({
+            category: "api-calls",
+            function: "updateMongoTransactions",
+            message: `Client code '${clientCode}' not found in PostgreSQL. Aborting Mongo transaction update.`,
+          });
+          return res.status(404).json({
+            statusCode: 404,
+            error: `Client code '${clientCode}' not found.`,
+          });
+        }
+        clientId = clientRes.id;
+      }
+
       const mongoDatabase = new MongoDatabase();
-      const result = await mongoDatabase.updateMongoTransactions();
+      const result = await mongoDatabase.updateMongoTransactions(clientId);
       logger.debug({
         category: "responses",
         function: "updateMongoTransactions",

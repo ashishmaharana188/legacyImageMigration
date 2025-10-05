@@ -62,8 +62,9 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   clearTaskLog,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
+  const [clientCode, setClientCode] = useState<string>('');
 
-  const handleTransferToMongo = useCallback(async (updateAll: boolean) => {
+  const handleTransferToMongo = useCallback(async (updateAll: boolean, clientCode: string) => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
     const taskMessage = updateAll ? "Updating Mongo transactions" : "Transferring data to MongoDB";
@@ -73,7 +74,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       const url = updateAll 
         ? "http://localhost:3000/update-mongo-transactions" 
         : "http://localhost:3000/transfer-to-mongo";
-      const res = await axios.post<FileResponse>(url);
+      const res = await axios.post<FileResponse>(url, { clientCode });
       updateTaskLog("sqlAndMongo", res.data);
     } catch (error: unknown) {
       if (axios.isAxiosError(error)) {
@@ -237,6 +238,8 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       handleExecuteSql={handleExecuteSql}
       handleupdateFolioAndTransaction={handleupdateFolioAndTransaction}
       handleReconnect={handleReconnect}
+      clientCode={clientCode}
+      setClientCode={setClientCode}
     />
   );
 };

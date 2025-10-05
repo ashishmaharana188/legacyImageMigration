@@ -2,8 +2,9 @@ import React, { useState } from "react";
 
 interface SQLAndMongoUIProps {
   loading: boolean;
-
-  handleTransferToMongo: (updateAll: boolean) => Promise<void>;
+  clientCode: string;
+  setClientCode: (code: string) => void;
+  handleTransferToMongo: (updateAll: boolean, clientCode: string) => Promise<void>;
   handleGenerateSql: () => Promise<void>;
   handleExecuteSql: () => Promise<void>;
   handleupdateFolioAndTransaction: (updateAll: boolean) => Promise<void>;
@@ -15,6 +16,8 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
   handleExecuteSql,
   handleupdateFolioAndTransaction,
   handleReconnect,
+  clientCode,
+  setClientCode,
 }) => {
   const [updateAll, setUpdateAll] = useState<boolean>(false);
   const [updateAllMongo, setUpdateAllMongo] = useState<boolean>(false);
@@ -80,6 +83,19 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
               Transfers new data or updates existing transaction numbers in
               MongoDB.
             </p>
+            <div className="mb-4">
+              <label htmlFor="clientCode" className="block text-sm font-medium text-gray-700 mb-1">
+                Client Code (Optional)
+              </label>
+              <input
+                type="text"
+                id="clientCode"
+                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-black p-2"
+                value={clientCode}
+                onChange={(e) => setClientCode(e.target.value)}
+                placeholder="e.g., 150"
+              />
+            </div>
             <div className="flex flex-col gap-2 mb-4">
               <label className="inline-flex items-center">
                 <input
@@ -93,7 +109,7 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
             </div>
           </div>
           <button
-            onClick={() => handleTransferToMongo(updateAllMongo)}
+            onClick={() => handleTransferToMongo(updateAllMongo, clientCode)}
             className="btn w-full"
           >
             {updateAllMongo ? "Update Mongo Transactions" : "Transfer to Mongo"}

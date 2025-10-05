@@ -52,6 +52,17 @@ export class Database {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
+  private formatQuery(query: string, params: any[]): string {
+    let formattedQuery = query;
+    params.forEach((param, index) => {
+      // Replace $1, $2, etc., with the actual parameter value
+      // Handle strings by quoting them, numbers directly
+      const replacement = typeof param === 'string' ? `'${param}'` : param;
+      formattedQuery = formattedQuery.replace(`$${index + 1}`, replacement);
+    });
+    return formattedQuery;
+  }
+
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../processed");
     this.logger.info({
@@ -1445,19 +1456,48 @@ RETURNING d.user_attr1, d.user_attr2;
     this.logger.info("New PostgreSQL pool created and warmed up manually.");
   }
 
-  public async getAifDocumentDetails(): Promise<any[]> {
+  public async getClientIdByCode(clientCode: string): Promise<{ id: number } | undefined> {
+    let client: PoolClient | null = null;
+    try {
+      client = await this.getPool().connect();
+      const res = await client.query(
+        "SELECT id FROM fund.client_master WHERE client_code = $1",
+        [clientCode]
+      );
+      logger.info({
+        category: "task-steps",
+        message: `Fetched client ID for code ${clientCode}: ${res.rows[0]?.id || 'Not Found'}`,
+        clientCode: clientCode,
+        clientIdFound: res.rows[0]?.id || "N/A",
+      });
+      return res.rows[0];
+    } catch (error) {
+      logger.error({
+        category: "task-steps",
+        message: `Error fetching client ID for code ${clientCode}: ${error}`,
+        clientCode: clientCode,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      throw error;
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  public async getAifDocumentDetails(clientId?: number): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
       const processedFolioNumbers = await this.getProcessedFolioNumbers();
       if (processedFolioNumbers.length === 0) {
-        this.logger.warn(
-          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
-        );
+        logger.warn({
+          category: "task-steps",
+          message: "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo",
+        });
         return [];
       }
 
       client = await this.getPool().connect();
-      const query = `
+      let query = `
         SELECT
           add.document_process,
           add.document_activity,
@@ -1493,12 +1533,31 @@ RETURNING d.user_attr1, d.user_attr2;
           cm.client_code
         FROM investor.aif_document_details add
         JOIN fund.client_master cm ON add.client_id = cm.id
-        WHERE add.user_attr2 = ANY($1::text[]);
+        WHERE add.user_attr2 = ANY($1::text[])
       `;
-      const res = await client.query(query, [processedFolioNumbers]);
-      this.logger.info(
-        `Fetched ${res.rows.length} rows from aif_document_details based on ${processedFolioNumbers.length} processed folios.`
-      );
+      const queryParams: any[] = [processedFolioNumbers];
+
+      if (clientId) {
+        queryParams.push(clientId);
+        query += ` AND add.client_id = ${queryParams.length}`;
+      }
+
+      query += `;`;
+
+      logger.info({
+        category: "task-steps",
+        message: `Executing getAifDocumentDetails query.`,
+        clientId: clientId || "N/A",
+        query: query,
+        queryParams: JSON.stringify(queryParams),
+      });
+
+      const res = await client.query(query, queryParams);
+      logger.info({
+        category: "task-steps",
+        message: `Fetched ${res.rows.length} rows from aif_document_details.`,
+        rowsFetched: res.rows.length,
+      });
       return res.rows;
     } catch (error) {
       this.logger.error(`Error fetching aif_document_details: ${error}`);
@@ -1535,20 +1594,40 @@ RETURNING d.user_attr1, d.user_attr2;
 
   public async streamUpdateDetails(
     batchSize: number,
-    processBatch: (batch: any[]) => Promise<void>
+    processBatch: (batch: any[]) => Promise<void>,
+    clientId?: number
   ): Promise<void> {
     let client: PoolClient | null = null;
     try {
       client = await this.getPool().connect();
-      const query = `
+      let query = `
         SELECT
           cm.client_code,
           add.user_attr1,
           add.transaction_reference_id
         FROM investor.aif_document_details add
-        JOIN fund.client_master cm ON add.client_id = cm.id;
+        JOIN fund.client_master cm ON add.client_id = cm.id
+        WHERE add.created_by = 'system'
       `;
-      const cursor = client.query(new Cursor(query));
+      const queryParams: any[] = [];
+
+      if (clientId) {
+        queryParams.push(clientId);
+        query += ` AND add.client_id = $${queryParams.length}`;
+      }
+
+      query += `;`; // Ensure the query ends with a semicolon
+
+      logger.info({
+        category: "task-steps",
+        message: `Executing streamUpdateDetails query.`,
+        clientId: clientId || "N/A",
+        query: query,
+        queryParams: JSON.stringify(queryParams),
+        interpolatedQuery: this.formatQuery(query, queryParams),
+      });
+
+      const cursor = client.query(new Cursor(query, queryParams));
 
       let batch: any[] = [];
       let rows;
@@ -1556,20 +1635,34 @@ RETURNING d.user_attr1, d.user_attr2;
         rows = await new Promise<any[]>((resolve, reject) => {
           cursor.read(batchSize, (err: Error | undefined, rows: any[]) => {
             if (err) {
+              logger.error({
+                category: "task-steps",
+                message: `Error reading from PostgreSQL cursor in streamUpdateDetails: ${err.message}`,
+                error: err.message,
+              });
               return reject(err);
             }
+            logger.info({
+              category: "task-steps",
+              message: `Read ${rows.length} rows from PostgreSQL cursor.`,
+              rowsReadFromCursor: rows.length,
+            });
             resolve(rows);
           });
         });
 
         if (rows.length > 0) {
           batch = rows;
-          this.logger.info(`Processing a batch of ${batch.length} rows from PostgreSQL.`);
+          logger.info({
+            category: "task-steps",
+            message: `Processing a batch of ${batch.length} rows from PostgreSQL.`,
+            batchSize: batch.length,
+          });
           await processBatch(batch);
         }
       } while (rows.length > 0);
 
-      this.logger.info("Finished streaming all data from PostgreSQL.");
+      logger.info("Finished streaming all data from PostgreSQL.");
     } catch (error) {
       this.logger.error(`Error streaming details from PostgreSQL: ${error}`);
       throw error;
