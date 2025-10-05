@@ -507,16 +507,17 @@ class FileController {
 
   async checkMongoDuplicates(req: Request, res: Response) {
     try {
-      const { dryRun, cutoffTms } = req.body;
+      const { dryRun, cutoffTms, clientCode } = req.body;
       logger.info({
         category: "api-calls",
         function: "checkMongoDuplicates",
-        message: `Initiating Mongo duplicate check (dryRun: ${dryRun}, cutoffTms: ${cutoffTms}).`,
+        message: `Initiating Mongo duplicate check (dryRun: ${dryRun}, cutoffTms: ${cutoffTms}, clientCode: ${clientCode || 'N/A'}).`,
       });
       const mongoDatabase = new MongoDatabase();
       const result = await mongoDatabase.sanityCheckMongoDuplicates({
         dryRun,
         cutoffTms,
+        clientId: clientCode,
       });
       logger.debug({
         category: "responses",

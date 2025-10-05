@@ -394,6 +394,7 @@ export class MongoDatabase {
   public async sanityCheckMongoDuplicates(params: {
     dryRun?: boolean;
     cutoffTms?: string;
+    clientId?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
@@ -403,7 +404,7 @@ export class MongoDatabase {
     logs: any[];
   }> {
     const logs: any[] = [];
-    const { dryRun = true, cutoffTms: cutoffDateString } = params;
+    const { dryRun = true, cutoffTms: cutoffDateString, clientId } = params;
     let cutoffDate: Date | null = null;
 
     if (cutoffDateString) {
@@ -435,13 +436,14 @@ export class MongoDatabase {
 
     logger.debug({
       category: "task-steps",
-      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`,
+      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}, clientId: ${clientId || 'N/A'}`,
     });
 
     try {
       await this.connect();
 
       const pipeline: any[] = [
+        ...(clientId ? [{ $match: { clientId: clientId } }] : []),
         {
           $addFields: {
             // Split by comma and space to get date and time parts
