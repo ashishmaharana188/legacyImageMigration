@@ -8,6 +8,7 @@ import { uploadDirectoryRecursive } from "../services/s3Uploader";
 import { uploadSplitFilesToS3 } from "../services/s3Uploader";
 import path from "path";
 import fs from "fs/promises";
+import { SqlLog } from "../types/database";
 import {
   S3_BUCKET_NAME,
   getS3FilePrefix,
@@ -318,6 +319,8 @@ class FileController {
   async processSqlMongo(req: Request, res: Response) {
     const { action, updateAll } = req.body;
     const database = new Database();
+    const { transactions, logs: generateLogs } = await database.generateSql();
+    const logs: SqlLog[] = [...generateLogs];
 
     if (action === "executeSql") {
       logger.info({
@@ -366,7 +369,9 @@ class FileController {
         message: `Initiating Folio and Transaction update (updateAll: ${updateAll}).`,
       });
       const { result, summary } = await database.updateFolioAndTransaction(
-        updateAll
+        updateAll,
+        transactions,
+        logs
       );
       if (result === "success") {
         logger.debug({
@@ -460,7 +465,13 @@ class FileController {
         message: `Initiating standalone Folio and Transaction update (updateAll: ${updateAll}).`,
       });
       const processor = new Database();
-      const result = await processor.updateFolioAndTransaction(updateAll);
+      const { transactions, logs: generateLogs } = await processor.generateSql();
+      const logs: SqlLog[] = [...generateLogs];
+      const result = await processor.updateFolioAndTransaction(
+        updateAll,
+        transactions,
+        logs
+      );
       logger.debug({
         category: "responses",
         function: "updateFolioAndTransaction",

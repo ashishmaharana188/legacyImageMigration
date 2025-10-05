@@ -1,8 +1,10 @@
 // database.ts
 
-import ExcelJS from "exceljs";
+import { parse } from "csv-parse";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
+import * as ExcelJS from "exceljs";
 import { Pool, PoolClient } from "pg";
 import logger from "../utils/logger";
 import {
@@ -57,7 +59,7 @@ export class Database {
     params.forEach((param, index) => {
       // Replace $1, $2, etc., with the actual parameter value
       // Handle strings by quoting them, numbers directly
-      const replacement = typeof param === 'string' ? `'${param}'` : param;
+      const replacement = typeof param === "string" ? `'${param}'` : param;
       formattedQuery = formattedQuery.replace(`$${index + 1}`, replacement);
     });
     return formattedQuery;
@@ -103,7 +105,7 @@ export class Database {
       });
 
       const idAcnos: string[] = [];
-      worksheet.eachRow((row, rowNumber) => {
+      worksheet.eachRow((row: ExcelJS.Row, rowNumber: number) => {
         if (rowNumber === 1) return; // Skip header
         try {
           const idAcnoCell = row.getCell(5);
@@ -187,14 +189,7 @@ export class Database {
       const csvFullPath = path.join(csvPath, latestCsv);
       this.logger.info({
         function: "generateSql",
-        message: "Reading CSV file",
-      });
-
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = await workbook.csv.readFile(csvFullPath);
-      this.logger.info({
-        function: "generateSql",
-        message: "CSV loaded into workbook",
+        message: "Reading CSV file via streaming parser",
       });
 
       const transactions: {
@@ -206,32 +201,61 @@ export class Database {
         page_count: number | string;
       }[] = [];
 
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        try {
-          transactions.push({
-            id_fund: parseInt(row.getCell(1).text, 10),
-            id_trtype: row.getCell(2).text.trim(),
-            id_ihno: parseInt(row.getCell(3).text, 10),
-            id_path: row.getCell(4).text.trim(),
-            id_acno: row.getCell(5).text.trim(),
-            page_count: isNaN(parseInt(row.getCell(6).text, 10))
-              ? row.getCell(6).text.trim()
-              : parseInt(row.getCell(6).text, 10),
+      await new Promise<void>((resolve, reject) => {
+        let rowNumber = 1; // Start from 1 for header, actual data from 2
+        fsSync
+          .createReadStream(csvFullPath)
+          .pipe(parse({ delimiter: ",", from_line: 2 })) // Skip header row
+          .on("data", (row: string[]) => {
+            rowNumber++;
+            try {
+              transactions.push({
+                id_fund: parseInt(row[0], 10),
+                id_trtype: row[1].trim(),
+                id_ihno: parseInt(row[2], 10),
+                id_path: row[3].trim(),
+                id_acno: row[4].trim(),
+                page_count: isNaN(parseInt(row[5], 10))
+                  ? row[5].trim()
+                  : parseInt(row[5], 10),
+              });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Unknown error";
+              this.logger.warn({
+                function: "generateSql",
+                message: `Parse error at row ${rowNumber}`,
+                error: msg,
+              });
+              logs.push({
+                row: rowNumber,
+                status: "error",
+                message: `Failed to parse row: ${msg}`,
+              });
+            }
+          })
+          .on("end", () => {
+            this.logger.info({
+              function: "generateSql",
+              message: `Finished parsing CSV. Total rows processed: ${
+                rowNumber - 1
+              }`,
+            });
+            resolve();
+          })
+          .on("error", (err: unknown) => {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            this.logger.error({
+              function: "generateSql",
+              message: `Error reading CSV stream: ${msg}`,
+              error: err,
+            });
+            logs.push({
+              row: 0,
+              status: "error",
+              message: `CSV stream error: ${msg}`,
+            });
+            reject(err);
           });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn({
-            function: "generateSql",
-            message: `Parse error at row ${rowNumber}`,
-            error: msg,
-          });
-          logs.push({
-            row: rowNumber,
-            status: "error",
-            message: `Failed to parse row: ${msg}`,
-          });
-        }
       });
 
       this.logger.info({
@@ -633,7 +657,18 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(updateAll: boolean): Promise<{
+  async updateFolioAndTransaction(
+    updateAll: boolean,
+    transactions: {
+      id_fund: number;
+      id_trtype: string;
+      id_ihno: number;
+      id_path: string;
+      id_acno: string;
+      page_count: number | string;
+    }[],
+    initialLogs: SqlLog[]
+  ): Promise<{
     result: string;
     logs: SqlLog[];
     summary: {
@@ -643,27 +678,30 @@ page_count, client_id
       badRowsFilePath: string | null;
     };
   }> {
+    const logs: SqlLog[] = [...initialLogs];
+
     this.logger.info(
       `Starting updateFolioAndTransaction with updateAll: ${updateAll}`
     );
-    const { transactions } = await this.generateSql();
 
     let processedFolioNumbers: string[] = [];
     if (!updateAll) {
-      processedFolioNumbers = await this.getProcessedFolioNumbers();
+      // Extract folio numbers from the provided transactions
+      processedFolioNumbers = [
+        ...new Set(transactions.map((tx) => tx.id_acno)),
+      ];
       if (processedFolioNumbers.length === 0) {
         this.logger.warn(
-          "updateFolioAndTransaction: No processed folio numbers found from processed CSV. Skipping updates."
+          "updateFolioAndTransaction: No processed folio numbers found from provided transactions. Skipping updates."
         );
+        logs.push({
+          row: 0,
+          status: "error",
+          message: "No processed folio numbers found to update.",
+        });
         return {
           result: "failed",
-          logs: [
-            {
-              row: 0,
-              status: "error",
-              message: "No processed folio numbers found to update.",
-            },
-          ],
+          logs,
           summary: {
             updatedFolioRows: 0,
             updatedTransactionRows: 0,
@@ -687,7 +725,6 @@ page_count, client_id
       initialTransactionIdentifiers.add(`${tx.id_ihno}-${tx.id_acno}`);
     });
 
-    const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
     const updatedTransactionIdentifiers = new Set<string>();
 
@@ -703,6 +740,49 @@ page_count, client_id
 
       await client.query("BEGIN");
       this.logger.info("updateFolioAndTransaction: BEGIN started");
+
+      // Create a temporary table for transaction data
+      await client.query(`
+        CREATE TEMPORARY TABLE temp_transaction_data (
+          id_ihno TEXT NOT NULL,
+          id_acno TEXT NOT NULL
+        ) ON COMMIT DROP;
+      `);
+      this.logger.info(
+        "updateFolioAndTransaction: temp_transaction_data table created."
+      );
+
+      const transactionDataToInsert = transactions.map((tx) => ({
+        id_ihno: tx.id_ihno.toString(),
+        id_acno: tx.id_acno,
+      }));
+      const insertChunkSize = 1000; // Define a suitable chunk size for inserts
+
+      for (
+        let i = 0;
+        i < transactionDataToInsert.length;
+        i += insertChunkSize
+      ) {
+        const chunk = transactionDataToInsert.slice(i, i + insertChunkSize);
+        const valueStrings = chunk.map(
+          (data, idx) => `($${idx * 2 + 1}, $${idx * 2 + 2})`
+        );
+        const valueParams = chunk.flatMap((data) => [
+          data.id_ihno,
+          data.id_acno,
+        ]);
+
+        if (valueStrings.length > 0) {
+          const insertQuery = `
+            INSERT INTO temp_transaction_data (id_ihno, id_acno)
+            VALUES ${valueStrings.join(", ")};
+          `;
+          await client.query(insertQuery, valueParams);
+        }
+      }
+      this.logger.info(
+        `updateFolioAndTransaction: Inserted ${transactionDataToInsert.length} rows into temp_transaction_data.`
+      );
 
       // Query 1: Delete from temp_images_1
       const deleteQuery = `
@@ -751,22 +831,27 @@ SELECT DISTINCT
         `updateFolioAndTransaction: inserted ${insertResult.rowCount} temp rows`
       );
 
-      // Query 3: Update folio_id using id_acno
+      // Query 3: Update folio_id using id_acno and temp_transaction_data
       const updateFolioQuery = `
-      WITH client_folio AS (
-        SELECT folio_number,id,client_id,
-        (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
-    )
-    UPDATE investor.aif_document_details AS d
-      SET folio_id = f.id
-    FROM client_folio AS f
-    JOIN fund.client_master cm on f.client_id=cm.id
-      LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
-    WHERE (d.user_attr2 = f.folio_number
-        OR d.transaction_reference_id = t.ihno)
-      ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
-    RETURNING d.user_attr1, d.user_attr2;
-`;
+        WITH client_folio AS (
+          SELECT folio_number, id, client_id,
+          (SELECT cm.client_code FROM fund.client_master cm WHERE cm.id = client_id) AS client_code
+          FROM investor.aif_folio
+        )
+        UPDATE investor.aif_document_details AS d
+        SET folio_id = cf.id
+        FROM client_folio AS cf
+        WHERE d.client_id = cf.client_id
+          AND d.user_attr2 = cf.folio_number
+          AND d.created_by = 'system'
+          AND EXISTS (
+            SELECT 1
+            FROM temp_transaction_data AS ttd
+            WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno
+          )
+          ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
+        RETURNING d.user_attr1, d.user_attr2;
+      `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
       const updateFolioResult = await client.query(
         updateFolioQuery,
@@ -787,31 +872,31 @@ SELECT DISTINCT
         `updateFolioAndTransaction: updated folio_id rows=${updateFolioResult.rowCount}`
       );
 
-      // Query 4: Update transaction_reference_id
+      // Query 4: Update transaction_reference_id using temp_transaction_data
       const updateTransactionQuery = `
-UPDATE investor.aif_document_details AS d
-SET transaction_reference_id = ts.transaction_number
-FROM trxn.aif_transaction_summary AS ts
-WHERE ts.client_id = d.client_id
-  AND ts.folio_id = d.folio_id
-  AND ts.user_attr5 = d.user_attr1
-  AND d.created_by = 'system'
-  ${
-    updateAll
-      ? ""
-      : "AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))"
-  }
-  ${updateAll ? "" : "AND d.user_attr2 = ANY($2::text[])"}
-  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-  AND ts.created_by = 'aifappendersvc'
-RETURNING d.user_attr1, d.user_attr2;
-`;
+        UPDATE investor.aif_document_details AS d
+        SET transaction_reference_id = ts.transaction_number
+        FROM trxn.aif_transaction_summary AS ts
+        WHERE ts.client_id = d.client_id
+          AND ts.folio_id = d.folio_id
+          AND ts.user_attr5 = d.user_attr1
+          AND d.created_by = 'system'
+          AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
+          AND ts.created_by = 'aifappendersvc'
+          AND EXISTS (
+            SELECT 1
+            FROM temp_transaction_data AS ttd
+            WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno
+          )
+          ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
+        RETURNING d.user_attr1, d.user_attr2;
+      `;
       this.logger.info(
         "updateFolioAndTransaction: updating transaction_reference_id"
       );
       const updateTransactionResult = await client.query(
         updateTransactionQuery,
-        updateAll ? [] : [uniqueClientCodes, processedFolioNumbers]
+        updateAll ? [] : [processedFolioNumbers]
       );
       updateTransactionResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(
@@ -1456,7 +1541,9 @@ RETURNING d.user_attr1, d.user_attr2;
     this.logger.info("New PostgreSQL pool created and warmed up manually.");
   }
 
-  public async getClientIdByCode(clientCode: string): Promise<{ id: number } | undefined> {
+  public async getClientIdByCode(
+    clientCode: string
+  ): Promise<{ id: number } | undefined> {
     let client: PoolClient | null = null;
     try {
       client = await this.getPool().connect();
@@ -1466,7 +1553,9 @@ RETURNING d.user_attr1, d.user_attr2;
       );
       logger.info({
         category: "task-steps",
-        message: `Fetched client ID for code ${clientCode}: ${res.rows[0]?.id || 'Not Found'}`,
+        message: `Fetched client ID for code ${clientCode}: ${
+          res.rows[0]?.id || "Not Found"
+        }`,
         clientCode: clientCode,
         clientIdFound: res.rows[0]?.id || "N/A",
       });
@@ -1491,7 +1580,8 @@ RETURNING d.user_attr1, d.user_attr2;
       if (processedFolioNumbers.length === 0) {
         logger.warn({
           category: "task-steps",
-          message: "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo",
+          message:
+            "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo",
         });
         return [];
       }
