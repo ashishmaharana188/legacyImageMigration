@@ -520,6 +520,7 @@ export class Splitting {
     let totalOriginalFilesProcessed = 0;
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
+    let totalExpectedSplits = 0; // Initialize totalExpectedSplits
 
     this.logger.info("Starting file splitting with MuPDF");
 
@@ -569,6 +570,7 @@ export class Splitting {
                     fileName,
                     this.logger
                   );
+                  totalExpectedSplits += splitFilePaths.length; // Assuming splitFilePaths.length is the splitCount
                   
                   splitFilePaths.forEach((splitPath) => {
                     createdSplitFiles.push({
@@ -583,6 +585,7 @@ export class Splitting {
                     JSON.stringify({
                       type: "splitProgressUpdate",
                       totalOriginalFilesProcessed,
+                      totalExpectedSplits, // Include totalExpectedSplits
                       totalSplitFilesGenerated,
                       splitErrors,
                       currentlySplittingFiles: fileName,
@@ -598,6 +601,7 @@ export class Splitting {
                     JSON.stringify({
                       type: "splitProgressUpdate",
                       totalOriginalFilesProcessed,
+                      totalExpectedSplits, // Include totalExpectedSplits
                       totalSplitFilesGenerated,
                       splitErrors,
                       currentlySplittingFiles: fileName,
@@ -624,6 +628,7 @@ export class Splitting {
       JSON.stringify({
         type: "splitProgressComplete",
         totalOriginalFilesProcessed,
+        totalExpectedSplits, // Include totalExpectedSplits
         totalSplitFilesGenerated,
         splitErrors,
         totalExpectedPagesFromCsv,
@@ -636,7 +641,7 @@ export class Splitting {
       splitFiles: createdSplitFiles,
       summary: {
         totalOriginalFilesProcessed,
-        totalExpectedSplits: 0, // Not calculated in this flow
+        totalExpectedSplits, // Include totalExpectedSplits in summary
         totalSplitFilesGenerated,
         splitErrors,
         totalExpectedPagesFromCsv,

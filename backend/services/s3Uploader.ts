@@ -131,6 +131,7 @@ async function performIterativeUpload(
   bucket: string,
   prefix: string
 ) {
+  console.log(`S3 upload process initiated for ${localDir}. Progress will be shown via WebSocket.`);
   console.log(`[performIterativeUpload] Starting for localDir: ${localDir}, prefix: ${prefix}`);
 
   let totalDirectories = 0;

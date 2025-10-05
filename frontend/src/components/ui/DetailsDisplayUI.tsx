@@ -22,7 +22,22 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
   };
 
   const renderContent = () => {
-    if (log.splitSummary) {
+    if (log.message) {
+      const statusText =
+        log.status && log.status !== "in-progress" ? ` (${log.status})` : "";
+      const statusColor =
+        log.status === "success"
+          ? "text-black"
+          : log.status === "failed"
+          ? "text-black"
+          : "text-black";
+      return (
+        <div className={`${statusColor} font-bold text-lg`}>
+          {log.message}
+          {statusText}
+        </div>
+      );
+    } else if (log.splitSummary) {
       return null; // Handled by ProgressTrackingUI
     } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
       return (
@@ -188,39 +203,17 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
               Total Failed: {log.badRows !== undefined ? log.badRows : "N/A"}
             </p>
           </table>
-          {log.badRowsFilePath && log.badRows > 0 && (
-            <>
-              <button
-                onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
-                }
-              >
-                {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
-              </button>
-              {expandedLogId === logKey && parsedBadRows && (
-                <div className="bg-gray-100 p-2 rounded mt-2">
-                  {/* ... bad rows table ... */}
-                </div>
-              )}
-            </>
-          )}
         </div>
       );
     } else if (log.duplicates && Array.isArray(log.duplicates)) {
       return (
         <div>
           <h5 className="font-semibold">MongoDB Duplicate Check Summary:</h5>
-          <p>Total unique duplicate entries found: {log.duplicates.length}</p>
-          {log.duplicates.length > 0 && (
-            <button onClick={toggleExpansion}>
-              {isExpanded ? "Hide Details" : "Show Details"}
-            </button>
-          )}
-          {isExpanded && log.duplicates.length > 0 && (
-            <div className="bg-gray-100 p-2 rounded mt-2">
-              {/* ... duplicate details table ... */}
-            </div>
-          )}
+          <p>
+            Total Duplicate Documents:{" "}
+            {log.totalDuplicateDocuments - log.totalDuplicateGroups}
+          </p>
+          <p>Total documents after Cuttoff: {log.totalDuplicateGroups}</p>
         </div>
       );
     } else if (log.updatedDocuments) {

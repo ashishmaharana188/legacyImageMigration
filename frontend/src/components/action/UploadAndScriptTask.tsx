@@ -74,12 +74,21 @@ interface FileResponse {
   updatedFolioRows?: number;
   updatedTransactionRows?: number;
   badRows?: number;
+  successfulFilesCount?: number;
+  failedFilesCount?: number;
+}
+
+interface SplitFileResponse extends FileResponse {
+  splitFiles: SplitFile[];
+  message: string;
 }
 
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
   clearTaskLog: (task: string) => void;
-  setSummaryData: React.Dispatch<React.SetStateAction<{ [key: string]: any[] }>>;
+  setSummaryData: React.Dispatch<
+    React.SetStateAction<{ [key: string]: any[] }>
+  >;
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }
 
@@ -159,13 +168,18 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
           const otherStatuses = prevStatuses.filter(
             (s) => s.fileName !== "s3_upload_progress"
           );
-          const progress = message.totalDirectories > 0 ? (message.completedDirectories / message.totalDirectories) * 100 : 0;
+          const progress =
+            message.totalDirectories > 0
+              ? (message.completedDirectories / message.totalDirectories) * 100
+              : 0;
           return [
             ...otherStatuses,
             {
               fileName: "s3_upload_progress",
               status:
-                message.completedDirectories === message.totalDirectories ? "Done" : `Uploading ${message.currentDirectory}...`,
+                message.completedDirectories === message.totalDirectories
+                  ? "Done"
+                  : `Uploading ${message.currentDirectory}...`,
               progress: progress,
               totalFiles: message.totalDirectories,
               processedFiles: message.completedDirectories,
@@ -217,8 +231,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     }
     clearTaskLog("uploadAndScript");
     setLoading(true);
+    const uploadLogId = "upload-status";
     setUploadMessage("Uploading");
-    updateTaskLog("uploadAndScript", "Uploading");
+    updateTaskLog("uploadAndScript", {
+      id: uploadLogId,
+      message: "Uploading...",
+      status: "in-progress",
+    });
     const formData = new FormData();
     formData.append("excel", selectedFile);
 
@@ -233,13 +252,44 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         }
       );
       setUploadMessage(res.data.message || "Upload successful");
-      updateTaskLog("uploadAndScript", res.data);
+      const { summary, ...restData } = res.data;
+      const totalRows = summary?.totalRows || 0;
+      const successfulRows = summary?.successfulRows || 0;
+      const badRows = summary?.errors || 0; // Assuming 'errors' in summary corresponds to badRows
+
+      let finalMessage = res.data.message || "Upload successful";
+      let finalStatus: "success" | "failed" | "in-progress" = "success";
+
+      if (badRows > 0) {
+        finalMessage = `Upload completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
+        finalStatus = "failed";
+      } else if (totalRows > 0) {
+        finalMessage = `Upload successful. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
+        finalStatus = "success";
+      } else {
+        finalMessage = res.data.message || "No rows processed.";
+        finalStatus = "success";
+      }
+
+      updateTaskLog("uploadAndScript", {
+        id: uploadLogId,
+        message: finalMessage,
+        status: finalStatus,
+        totalRows: totalRows,
+        successfulRows: successfulRows,
+        badRows: badRows,
+        ...restData,
+      });
     } catch (error: any) {
       const errorMessage = `Upload failed: ${
         error.response?.data?.message || error.message
       }`;
       setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", { message: errorMessage });
+      updateTaskLog("uploadAndScript", {
+        id: uploadLogId,
+        message: errorMessage,
+        status: "failed",
+      });
     } finally {
       setLoading(false);
     }
@@ -253,8 +303,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     clearTaskLog("uploadAndScript");
     setUploadStatuses([]); // Clear previous upload progress
     setLoading(true);
+    const splitLogId = "splitting-status";
     setSplitMessage("Splitting files");
-    updateTaskLog("uploadAndScript", "Splitting files");
+    updateTaskLog("uploadAndScript", {
+      id: splitLogId,
+      message: "Splitting files...",
+      status: "in-progress",
+    });
 
     // Initialize splitting progress status
     setUploadStatuses((prevStatuses) => {
@@ -272,7 +327,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     });
 
     try {
-      const res = await axios.post<FileResponse>(
+      const res = await axios.post<SplitFileResponse>(
         "http://localhost:3000/split-files",
         {
           filename: selectedFile.name,
@@ -280,19 +335,22 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       );
       setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || "Splitting successful");
-      updateTaskLog("uploadAndScript", res.data);
-    } catch (error: any) {
-      const errorMessage = `Splitting failed: ${
-        error.response?.data?.message || error.message
-      }`;
-      setSplitMessage(errorMessage);
-      updateTaskLog("uploadAndScript", { message: errorMessage });
+      const { message: resMessage, ...restData } = res.data;
+      updateTaskLog("uploadAndScript", {
+        id: splitLogId,
+        message: "Splitting Successful!",
+        status: "success",
+        ...restData,
+      });
       setUploadStatuses((prevStatuses) =>
-        prevStatuses.map((s) =>
-          s.fileName === "splitting_progress"
+        prevStatuses.map((s) => {
+          if (!s || typeof s.fileName !== "string") {
+            return s; // Return item as is if it's not a valid UploadStatus
+          }
+          return s.fileName === "splitting_progress"
             ? { ...s, status: "Failed", progress: 0 }
-            : s
-        )
+            : s;
+        })
       );
     } finally {
       setLoading(false);
@@ -302,20 +360,75 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const handleUploadToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");
     setLoading(true);
+    const s3UploadLogId = "s3-upload-status";
     setUploadMessage("Uploading to S3");
-    updateTaskLog("uploadAndScript", "Initiating S3 upload...");
+    updateTaskLog("uploadAndScript", {
+      id: s3UploadLogId,
+      message: "Initiating S3 upload...",
+      status: "in-progress",
+    });
     setUploadStatuses([
-      { fileName: "s3_upload_progress", status: "Starting", progress: 0, totalFiles: 1, processedFiles: 0 },
+      {
+        fileName: "s3_upload_progress",
+        status: "Starting",
+        progress: 0,
+        totalFiles: 1,
+        processedFiles: 0,
+      },
     ]);
 
     try {
-      await axios.post<FileResponse>("http://localhost:3000/upload-to-s3");
+      const res = await axios.post<FileResponse>(
+        "http://localhost:3000/upload-to-s3"
+      );
+      const {
+        successfulFilesCount = 0,
+        failedFilesCount = 0,
+        message: resMessage,
+      } = res.data;
+
+      let finalMessage = resMessage || "S3 upload completed.";
+
+      if (failedFilesCount > 0 && successfulFilesCount > 0) {
+        finalMessage = `S3 upload completed: ${successfulFilesCount} Successful - ${failedFilesCount} Failed.`;
+      } else if (successfulFilesCount > 0 || failedFilesCount == 0) {
+        finalMessage = `S3 upload completed successfully. Total files uploaded: ${successfulFilesCount}.`;
+      } else {
+        finalMessage = resMessage || "No files found to upload.";
+        // Or 'info' if available, assuming no error if no files
+      }
+
+      setUploadMessage(finalMessage);
+      updateTaskLog("uploadAndScript", {
+        id: s3UploadLogId,
+        message: finalMessage,
+
+        ...res.data,
+      });
+
+      setUploadStatuses((prevStatuses) =>
+        prevStatuses.map((s) =>
+          s.fileName === "s3_upload_progress"
+            ? {
+                ...s,
+
+                progress: 100,
+                successfulFiles: successfulFilesCount,
+                errorFiles: failedFilesCount,
+              }
+            : s
+        )
+      );
     } catch (error: any) {
       const errorMessage = `Upload to S3 failed: ${
         error.response?.data?.message || error.message
       }`;
       setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", { message: errorMessage });
+      updateTaskLog("uploadAndScript", {
+        id: s3UploadLogId,
+        message: errorMessage,
+        status: "failed",
+      });
     } finally {
       setLoading(false);
     }
@@ -324,22 +437,73 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const handleUploadSplitFilesToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");
     setLoading(true);
+    const splitS3UploadLogId = "split-s3-upload-status";
     setSplitMessage("Uploading split files to S3");
-    updateTaskLog("uploadAndScript", "Initiating split file S3 upload...");
+    updateTaskLog("uploadAndScript", {
+      id: splitS3UploadLogId,
+      message: "Initiating split file S3 upload...",
+      status: "in-progress",
+    });
     setUploadStatuses([
-      { fileName: "s3_upload_progress", status: "Starting", progress: 0, totalFiles: 1, processedFiles: 0 },
+      {
+        fileName: "s3_upload_progress",
+        status: "Starting",
+        progress: 0,
+        totalFiles: 1,
+        processedFiles: 0,
+      },
     ]);
     try {
-      await axios.post<FileResponse>(
+      const res = await axios.post<FileResponse>(
         "http://localhost:3000/upload-split-to-s3",
         {}
+      );
+      const {
+        successfulFilesCount = 0,
+        failedFilesCount = 0,
+        message: resMessage,
+      } = res.data;
+
+      let finalMessage = resMessage || "S3 split files upload completed.";
+
+      if (failedFilesCount > 0) {
+        finalMessage = `S3 split files upload completed: ${successfulFilesCount} Successful and ${failedFilesCount} Failed`;
+      } else if (successfulFilesCount > 0) {
+        finalMessage = `S3 split files upload completed successfully. Total files uploaded: ${successfulFilesCount}.`;
+      } else {
+        finalMessage = resMessage || "No split files found to upload.";
+      }
+
+      setSplitMessage(finalMessage);
+      updateTaskLog("uploadAndScript", {
+        id: splitS3UploadLogId,
+        message: finalMessage,
+
+        ...res.data,
+      });
+
+      setUploadStatuses((prevStatuses) =>
+        prevStatuses.map((s) =>
+          s.fileName === "s3_upload_progress"
+            ? {
+                ...s,
+                progress: 100,
+                successfulFiles: successfulFilesCount,
+                errorFiles: failedFilesCount,
+              }
+            : s
+        )
       );
     } catch (error: any) {
       const errorMessage = `Upload of split files to S3 failed: ${
         error.response?.data?.message || error.message
       }`;
       setSplitMessage(errorMessage);
-      updateTaskLog("uploadAndScript", { message: errorMessage });
+      updateTaskLog("uploadAndScript", {
+        id: splitS3UploadLogId,
+        message: errorMessage,
+        status: "failed",
+      });
     } finally {
       setLoading(false);
     }
@@ -352,8 +516,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     }
     clearTaskLog("uploadAndScript");
     setLoading(true);
+    const fallbackLogId = "fallback-status";
     setUploadMessage("Running fallback...");
-    updateTaskLog("uploadAndScript", "Running fallback...");
+    updateTaskLog("uploadAndScript", {
+      id: fallbackLogId,
+      message: "Running fallback...",
+      status: "in-progress",
+    });
     const formData = new FormData();
     formData.append("excel", selectedFile);
 
@@ -368,13 +537,44 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         }
       );
       setUploadMessage(res.data.message || "Fallback successful");
-      updateTaskLog("uploadAndScript", res.data);
+      const { summary, ...restData } = res.data;
+      const totalRows = summary?.totalRows || 0;
+      const successfulRows = summary?.successfulRows || 0;
+      const badRows = summary?.errors || 0; // Assuming 'errors' in summary corresponds to badRows
+
+      let finalMessage = res.data.message || "Fallback successful";
+      let finalStatus: "success" | "failed" | "in-progress" = "success";
+
+      if (badRows > 0) {
+        finalMessage = `Fallback completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
+        finalStatus = "failed";
+      } else if (totalRows > 0) {
+        finalMessage = `Fallback successful. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
+        finalStatus = "success";
+      } else {
+        finalMessage = res.data.message || "No rows processed during fallback.";
+        finalStatus = "success";
+      }
+
+      updateTaskLog("uploadAndScript", {
+        id: fallbackLogId,
+        message: finalMessage,
+        status: finalStatus,
+        totalRows: totalRows,
+        successfulRows: successfulRows,
+        badRows: badRows,
+        ...restData,
+      });
     } catch (error: any) {
       const errorMessage = `Fallback failed: ${
         error.response?.data?.message || error.message
       }`;
       setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", { message: errorMessage });
+      updateTaskLog("uploadAndScript", {
+        id: fallbackLogId,
+        message: errorMessage,
+        status: "failed",
+      });
     } finally {
       setLoading(false);
     }
@@ -388,8 +588,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     clearTaskLog("uploadAndScript");
     setUploadStatuses([]); // Clear previous upload progress
     setLoading(true);
+    const mupdfSplitLogId = "mupdf-splitting-status";
     setSplitMessage("Splitting files with MuPDF");
-    updateTaskLog("uploadAndScript", "Splitting files with MuPDF");
+    updateTaskLog("uploadAndScript", {
+      id: mupdfSplitLogId,
+      message: "Splitting files with MuPDF...",
+      status: "in-progress",
+    });
 
     // Initialize splitting progress status
     setUploadStatuses((prevStatuses) => {
@@ -406,24 +611,37 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     });
 
     try {
-      const res = await axios.post<FileResponse>(
+      const res = await axios.post<SplitFileResponse>(
         "http://localhost:3000/split-mupdf"
       );
       setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || "Splitting successful");
-      updateTaskLog("uploadAndScript", res.data);
+      const { message: resMessage, ...restData } = res.data;
+      updateTaskLog("uploadAndScript", {
+        id: mupdfSplitLogId,
+        message: "Splitting with MuPDF Successful!",
+        status: "success",
+        ...restData,
+      });
     } catch (error: any) {
       const errorMessage = `Splitting failed: ${
-        error.response?.data?.message || error.message
+        error.response?.data?.message || error.message || "Unknown error"
       }`;
       setSplitMessage(errorMessage);
-      updateTaskLog("uploadAndScript", { message: errorMessage });
+      updateTaskLog("uploadAndScript", {
+        id: mupdfSplitLogId,
+        message: errorMessage,
+        status: "failed",
+      });
       setUploadStatuses((prevStatuses) =>
-        prevStatuses.map((s) =>
-          s.fileName === "splitting_progress"
+        prevStatuses.map((s) => {
+          if (!s || typeof s.fileName !== "string") {
+            return s; // Return item as is if it's not a valid UploadStatus
+          }
+          return s.fileName === "splitting_progress"
             ? { ...s, status: "Failed", progress: 0 }
-            : s
-        )
+            : s;
+        })
       );
     } finally {
       setLoading(false);

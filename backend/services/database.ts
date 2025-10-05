@@ -1,12 +1,24 @@
 // database.ts
 
-import ExcelJS from "exceljs";
+import { parse } from "csv-parse";
 import fs from "fs/promises";
+import fsSync from "fs";
 import path from "path";
+import * as ExcelJS from "exceljs";
 import { Pool, PoolClient } from "pg";
 import logger from "../utils/logger";
-import { getPgPool, reconnectPgPool, warmupPgPool } from "../controllers/dbConnect";
-import { SqlLog, SanityCheckRow, DryRunResultRow, ImperfectDuplicateRow } from "../types/database";
+import {
+  getPgPool,
+  reconnectPgPool,
+  warmupPgPool,
+} from "../controllers/dbConnect";
+import Cursor from "pg-cursor";
+import {
+  SqlLog,
+  SanityCheckRow,
+  DryRunResultRow,
+  ImperfectDuplicateRow,
+} from "../types/database";
 
 export class Database {
   private readonly trxnMap: Record<string, string> = {
@@ -28,8 +40,8 @@ export class Database {
     await reconnectPgPool();
   }
 
-  public getPool(): Pool {
-    return getPgPool();
+  public async getPool(): Promise<Pool> {
+    return await getPgPool();
   }
 
   public async warmup() {
@@ -40,6 +52,17 @@ export class Database {
 
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";
+  }
+
+  private formatQuery(query: string, params: any[]): string {
+    let formattedQuery = query;
+    params.forEach((param, index) => {
+      // Replace $1, $2, etc., with the actual parameter value
+      // Handle strings by quoting them, numbers directly
+      const replacement = typeof param === "string" ? `'${param}'` : param;
+      formattedQuery = formattedQuery.replace(`$${index + 1}`, replacement);
+    });
+    return formattedQuery;
   }
 
   private async getProcessedFolioNumbers(): Promise<string[]> {
@@ -82,7 +105,7 @@ export class Database {
       });
 
       const idAcnos: string[] = [];
-      worksheet.eachRow((row, rowNumber) => {
+      worksheet.eachRow((row: ExcelJS.Row, rowNumber: number) => {
         if (rowNumber === 1) return; // Skip header
         try {
           const idAcnoCell = row.getCell(5);
@@ -166,14 +189,7 @@ export class Database {
       const csvFullPath = path.join(csvPath, latestCsv);
       this.logger.info({
         function: "generateSql",
-        message: "Reading CSV file",
-      });
-
-      const workbook = new ExcelJS.Workbook();
-      const worksheet = await workbook.csv.readFile(csvFullPath);
-      this.logger.info({
-        function: "generateSql",
-        message: "CSV loaded into workbook",
+        message: "Reading CSV file via streaming parser",
       });
 
       const transactions: {
@@ -185,32 +201,61 @@ export class Database {
         page_count: number | string;
       }[] = [];
 
-      worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber === 1) return;
-        try {
-          transactions.push({
-            id_fund: parseInt(row.getCell(1).text, 10),
-            id_trtype: row.getCell(2).text.trim(),
-            id_ihno: parseInt(row.getCell(3).text, 10),
-            id_path: row.getCell(4).text.trim(),
-            id_acno: row.getCell(5).text.trim(),
-            page_count: isNaN(parseInt(row.getCell(6).text, 10))
-              ? row.getCell(6).text.trim()
-              : parseInt(row.getCell(6).text, 10),
+      await new Promise<void>((resolve, reject) => {
+        let rowNumber = 1; // Start from 1 for header, actual data from 2
+        fsSync
+          .createReadStream(csvFullPath)
+          .pipe(parse({ delimiter: ",", from_line: 2 })) // Skip header row
+          .on("data", (row: string[]) => {
+            rowNumber++;
+            try {
+              transactions.push({
+                id_fund: parseInt(row[0], 10),
+                id_trtype: row[1].trim(),
+                id_ihno: parseInt(row[2], 10),
+                id_path: row[3].trim(),
+                id_acno: row[4].trim(),
+                page_count: isNaN(parseInt(row[5], 10))
+                  ? row[5].trim()
+                  : parseInt(row[5], 10),
+              });
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Unknown error";
+              this.logger.warn({
+                function: "generateSql",
+                message: `Parse error at row ${rowNumber}`,
+                error: msg,
+              });
+              logs.push({
+                row: rowNumber,
+                status: "error",
+                message: `Failed to parse row: ${msg}`,
+              });
+            }
+          })
+          .on("end", () => {
+            this.logger.info({
+              function: "generateSql",
+              message: `Finished parsing CSV. Total rows processed: ${
+                rowNumber - 1
+              }`,
+            });
+            resolve();
+          })
+          .on("error", (err: unknown) => {
+            const msg = err instanceof Error ? err.message : "Unknown error";
+            this.logger.error({
+              function: "generateSql",
+              message: `Error reading CSV stream: ${msg}`,
+              error: err,
+            });
+            logs.push({
+              row: 0,
+              status: "error",
+              message: `CSV stream error: ${msg}`,
+            });
+            reject(err);
           });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Unknown error";
-          this.logger.warn({
-            function: "generateSql",
-            message: `Parse error at row ${rowNumber}`,
-            error: msg,
-          });
-          logs.push({
-            row: rowNumber,
-            status: "error",
-            message: `Failed to parse row: ${msg}`,
-          });
-        }
       });
 
       this.logger.info({
@@ -370,8 +415,7 @@ page_count, client_id
         };
       }
 
-      this.logger.info("executeSql: attempting pool.connect()");
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       this.logger.info("executeSql: pool.connect() successful");
 
       client.on("error", (err) => {
@@ -456,7 +500,7 @@ page_count, client_id
             this.logger.warn(
               `executeSql: client_id not found for id_fund: ${
                 data.id_fund
-              } at row ${originalIndex + 2}`
+              } at row ${originalIndex + 2}. Skipping row.`
             );
             logs.push({
               row: originalIndex + 2,
@@ -467,7 +511,7 @@ page_count, client_id
               id_ihno: data.id_ihno,
               reason: `Client ID not found for id_fund: ${data.id_fund}`,
             });
-            continue;
+            continue; // Skip this row entirely from valueParams and valueStrings
           }
 
           const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
@@ -612,7 +656,18 @@ page_count, client_id
     }
   }
 
-  async updateFolioAndTransaction(updateAll: boolean): Promise<{
+  async updateFolioAndTransaction(
+    updateAll: boolean,
+    transactions: {
+      id_fund: number;
+      id_trtype: string;
+      id_ihno: number;
+      id_path: string;
+      id_acno: string;
+      page_count: number | string;
+    }[],
+    initialLogs: SqlLog[]
+  ): Promise<{
     result: string;
     logs: SqlLog[];
     summary: {
@@ -622,27 +677,30 @@ page_count, client_id
       badRowsFilePath: string | null;
     };
   }> {
+    const logs: SqlLog[] = [...initialLogs];
+
     this.logger.info(
       `Starting updateFolioAndTransaction with updateAll: ${updateAll}`
     );
-    const { transactions } = await this.generateSql();
 
     let processedFolioNumbers: string[] = [];
     if (!updateAll) {
-      processedFolioNumbers = await this.getProcessedFolioNumbers();
+      // Extract folio numbers from the provided transactions
+      processedFolioNumbers = [
+        ...new Set(transactions.map((tx) => tx.id_acno)),
+      ];
       if (processedFolioNumbers.length === 0) {
         this.logger.warn(
-          "updateFolioAndTransaction: No processed folio numbers found from processed CSV. Skipping updates."
+          "updateFolioAndTransaction: No processed folio numbers found from provided transactions. Skipping updates."
         );
+        logs.push({
+          row: 0,
+          status: "error",
+          message: "No processed folio numbers found to update.",
+        });
         return {
           result: "failed",
-          logs: [
-            {
-              row: 0,
-              status: "error",
-              message: "No processed folio numbers found to update.",
-            },
-          ],
+          logs,
           summary: {
             updatedFolioRows: 0,
             updatedTransactionRows: 0,
@@ -666,13 +724,12 @@ page_count, client_id
       initialTransactionIdentifiers.add(`${tx.id_ihno}-${tx.id_acno}`);
     });
 
-    const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
     const updatedTransactionIdentifiers = new Set<string>();
 
     try {
       this.logger.info("updateFolioAndTransaction: attempting pool.connect()");
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       this.logger.info("updateFolioAndTransaction: pool.connect() successful");
       client.on("error", (err) =>
         this.logger.error(
@@ -682,6 +739,49 @@ page_count, client_id
 
       await client.query("BEGIN");
       this.logger.info("updateFolioAndTransaction: BEGIN started");
+
+      // Create a temporary table for transaction data
+      await client.query(`
+        CREATE TEMPORARY TABLE temp_transaction_data (
+          id_ihno TEXT NOT NULL,
+          id_acno TEXT NOT NULL
+        ) ON COMMIT DROP;
+      `);
+      this.logger.info(
+        "updateFolioAndTransaction: temp_transaction_data table created."
+      );
+
+      const transactionDataToInsert = transactions.map((tx) => ({
+        id_ihno: tx.id_ihno.toString(),
+        id_acno: tx.id_acno,
+      }));
+      const insertChunkSize = 1000; // Define a suitable chunk size for inserts
+
+      for (
+        let i = 0;
+        i < transactionDataToInsert.length;
+        i += insertChunkSize
+      ) {
+        const chunk = transactionDataToInsert.slice(i, i + insertChunkSize);
+        const valueStrings = chunk.map(
+          (data, idx) => `($${idx * 2 + 1}, $${idx * 2 + 2})`
+        );
+        const valueParams = chunk.flatMap((data) => [
+          data.id_ihno,
+          data.id_acno,
+        ]);
+
+        if (valueStrings.length > 0) {
+          const insertQuery = `
+            INSERT INTO temp_transaction_data (id_ihno, id_acno)
+            VALUES ${valueStrings.join(", ")};
+          `;
+          await client.query(insertQuery, valueParams);
+        }
+      }
+      this.logger.info(
+        `updateFolioAndTransaction: Inserted ${transactionDataToInsert.length} rows into temp_transaction_data.`
+      );
 
       // Query 1: Delete from temp_images_1
       const deleteQuery = `
@@ -730,22 +830,27 @@ SELECT DISTINCT
         `updateFolioAndTransaction: inserted ${insertResult.rowCount} temp rows`
       );
 
-      // Query 3: Update folio_id using id_acno
+      // Query 3: Update folio_id using id_acno and temp_transaction_data
       const updateFolioQuery = `
-      WITH client_folio AS (
-        SELECT folio_number,id,client_id,
-        (select cm.client_code from fund.client_master cm where cm.id=client_id) from investor.aif_folio
-    )
-    UPDATE investor.aif_document_details AS d
-      SET folio_id = f.id
-    FROM client_folio AS f
-    JOIN fund.client_master cm on f.client_id=cm.id
-      LEFT JOIN public.temp_images_1 AS t ON f.folio_number = t.folio_number AND t.client_code = cm.client_code
-    WHERE (d.user_attr2 = f.folio_number
-        OR d.transaction_reference_id = t.ihno)
-      ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
-    RETURNING d.user_attr1, d.user_attr2;
-`;
+        WITH client_folio AS (
+          SELECT folio_number, id, client_id,
+          (SELECT cm.client_code FROM fund.client_master cm WHERE cm.id = client_id) AS client_code
+          FROM investor.aif_folio
+        )
+        UPDATE investor.aif_document_details AS d
+        SET folio_id = cf.id
+        FROM client_folio AS cf
+        WHERE d.client_id = cf.client_id
+          AND d.user_attr2 = cf.folio_number
+          AND d.created_by = 'system'
+          AND EXISTS (
+            SELECT 1
+            FROM temp_transaction_data AS ttd
+            WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno
+          )
+          ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
+        RETURNING d.user_attr1, d.user_attr2;
+      `;
       this.logger.info("updateFolioAndTransaction: updating folio_id");
       const updateFolioResult = await client.query(
         updateFolioQuery,
@@ -766,31 +871,31 @@ SELECT DISTINCT
         `updateFolioAndTransaction: updated folio_id rows=${updateFolioResult.rowCount}`
       );
 
-      // Query 4: Update transaction_reference_id
+      // Query 4: Update transaction_reference_id using temp_transaction_data
       const updateTransactionQuery = `
-UPDATE investor.aif_document_details AS d
-SET transaction_reference_id = ts.transaction_number
-FROM trxn.aif_transaction_summary AS ts
-WHERE ts.client_id = d.client_id
-  AND ts.folio_id = d.folio_id
-  AND ts.user_attr5 = d.user_attr1
-  AND d.created_by = 'system'
-  ${
-    updateAll
-      ? ""
-      : "AND ts.client_id IN (SELECT id FROM fund.client_master WHERE client_code = ANY($1))"
-  }
-  ${updateAll ? "" : "AND d.user_attr2 = ANY($2::text[])"}
-  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-  AND ts.created_by = 'aifappendersvc'
-RETURNING d.user_attr1, d.user_attr2;
-`;
+        UPDATE investor.aif_document_details AS d
+        SET transaction_reference_id = ts.transaction_number
+        FROM trxn.aif_transaction_summary AS ts
+        WHERE ts.client_id = d.client_id
+          AND ts.folio_id = d.folio_id
+          AND ts.user_attr5 = d.user_attr1
+          AND d.created_by = 'system'
+          AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
+          AND ts.created_by = 'aifappendersvc'
+          AND EXISTS (
+            SELECT 1
+            FROM temp_transaction_data AS ttd
+            WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno
+          )
+          ${updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"}
+        RETURNING d.user_attr1, d.user_attr2;
+      `;
       this.logger.info(
         "updateFolioAndTransaction: updating transaction_reference_id"
       );
       const updateTransactionResult = await client.query(
         updateTransactionQuery,
-        updateAll ? [] : [uniqueClientCodes, processedFolioNumbers]
+        updateAll ? [] : [processedFolioNumbers]
       );
       updateTransactionResult.rows.forEach((row) => {
         updatedTransactionIdentifiers.add(
@@ -978,7 +1083,7 @@ RETURNING d.user_attr1, d.user_attr2;
     let client: PoolClient | null = null;
 
     try {
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       await client.query("BEGIN");
 
       let clientId: number | null = null;
@@ -1155,7 +1260,9 @@ RETURNING d.user_attr1, d.user_attr2;
         groups_with_only_imperfect_duplicates AS (
             SELECT d.client_id, ${keyExpr("d")} AS k
             FROM investor.aif_document_details d
-            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr("d")} = kac.k
+            JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND ${keyExpr(
+              "d"
+            )} = kac.k
             WHERE d.created_by = 'system' ${clientFilter("d")}
             GROUP BY d.client_id, ${keyExpr("d")}
             HAVING COUNT(*) > 1
@@ -1166,9 +1273,13 @@ RETURNING d.user_attr1, d.user_attr2;
             FROM (
                 SELECT
                     d.id,
-                    ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr("d")} ORDER BY d.creation_date DESC, d.id DESC) as rn
+                    ROW_NUMBER() OVER (PARTITION BY d.client_id, ${keyExpr(
+                      "d"
+                    )} ORDER BY d.creation_date DESC, d.id DESC) as rn
                 FROM investor.aif_document_details d
-                JOIN groups_with_only_imperfect_duplicates gwoid ON d.client_id = gwoid.client_id AND ${keyExpr("d")} = gwoid.k
+                JOIN groups_with_only_imperfect_duplicates gwoid ON d.client_id = gwoid.client_id AND ${keyExpr(
+                  "d"
+                )} = gwoid.k
                 WHERE d.created_by = 'system' ${clientFilter("d")}
             ) ranked
             WHERE rn > 1
@@ -1228,7 +1339,12 @@ RETURNING d.user_attr1, d.user_attr2;
           let wouldBeDeleted = false;
           let reason = "";
 
-          const isPerfectRow = (row.folio_id !== null && row.transaction_reference_id !== null && row.user_attr1 !== null && row.user_attr2 !== null && row.client_id !== null);
+          const isPerfectRow =
+            row.folio_id !== null &&
+            row.transaction_reference_id !== null &&
+            row.user_attr1 !== null &&
+            row.user_attr2 !== null &&
+            row.client_id !== null;
 
           if (row.perfect_rows_in_group > 0) {
             if (!isPerfectRow) {
@@ -1238,16 +1354,19 @@ RETURNING d.user_attr1, d.user_attr2;
             } else {
               reason = "Perfect row, kept.";
             }
-          } else if (row.total_rows_in_group > 1) { // New condition for imperfect duplicates
+          } else if (row.total_rows_in_group > 1) {
+            // New condition for imperfect duplicates
             if (row.rn_desc > 1) {
               wouldBeDeleted = true;
               reason =
                 "Would be deleted: Older imperfect row in an all-imperfect duplicate group.";
             } else {
-              reason = "Kept: Newest imperfect row in an all-imperfect duplicate group.";
+              reason =
+                "Kept: Newest imperfect row in an all-imperfect duplicate group.";
             }
           } else {
-            reason = "No action: Group contains no perfect rows and no duplicates.";
+            reason =
+              "No action: Group contains no perfect rows and no duplicates.";
           }
 
           // This covers the case where a group might have perfect rows, but also multiple perfect rows.
@@ -1323,9 +1442,10 @@ RETURNING d.user_attr1, d.user_attr2;
         message: `Rule 2 (Older Perfects) deleted ${delOlderPerfectRes.rowCount} rows.`,
       });
 
-      const delImperfectDuplicatesRes = await client.query(deleteImperfectDuplicatesSql, [
-        cutoffTms,
-      ]);
+      const delImperfectDuplicatesRes = await client.query(
+        deleteImperfectDuplicatesSql,
+        [cutoffTms]
+      );
       logs.push({
         row: 0,
         status: "updated",
@@ -1420,19 +1540,53 @@ RETURNING d.user_attr1, d.user_attr2;
     this.logger.info("New PostgreSQL pool created and warmed up manually.");
   }
 
-  public async getAifDocumentDetails(): Promise<any[]> {
+  public async getClientIdByCode(
+    clientCode: string
+  ): Promise<{ id: number } | undefined> {
+    let client: PoolClient | null = null;
+    try {
+      client = await (await this.getPool()).connect();
+      const res = await client.query(
+        "SELECT id FROM fund.client_master WHERE client_code = $1",
+        [clientCode]
+      );
+      logger.info({
+        category: "task-steps",
+        message: `Fetched client ID for code ${clientCode}: ${
+          res.rows[0]?.id || "Not Found"
+        }`,
+        clientCode: clientCode,
+        clientIdFound: res.rows[0]?.id || "N/A",
+      });
+      return res.rows[0];
+    } catch (error) {
+      logger.error({
+        category: "task-steps",
+        message: `Error fetching client ID for code ${clientCode}: ${error}`,
+        clientCode: clientCode,
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+      throw error;
+    } finally {
+      if (client) client.release();
+    }
+  }
+
+  public async getAifDocumentDetails(clientId?: number): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
       const processedFolioNumbers = await this.getProcessedFolioNumbers();
       if (processedFolioNumbers.length === 0) {
-        this.logger.warn(
-          "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo"
-        );
+        logger.warn({
+          category: "task-steps",
+          message:
+            "getAifDocumentDetails: No processed folio numbers found by query from processed CSV for transferToMongo",
+        });
         return [];
       }
 
-      client = await this.getPool().connect();
-      const query = `
+      client = await (await this.getPool()).connect();
+      let query = `
         SELECT
           add.document_process,
           add.document_activity,
@@ -1468,12 +1622,31 @@ RETURNING d.user_attr1, d.user_attr2;
           cm.client_code
         FROM investor.aif_document_details add
         JOIN fund.client_master cm ON add.client_id = cm.id
-        WHERE add.user_attr2 = ANY($1::text[]);
+        WHERE add.user_attr2 = ANY($1::text[])
       `;
-      const res = await client.query(query, [processedFolioNumbers]);
-      this.logger.info(
-        `Fetched ${res.rows.length} rows from aif_document_details based on ${processedFolioNumbers.length} processed folios.`
-      );
+      const queryParams: any[] = [processedFolioNumbers];
+
+      if (clientId) {
+        queryParams.push(clientId);
+        query += ` AND add.client_id = ${queryParams.length}`;
+      }
+
+      query += `;`;
+
+      logger.info({
+        category: "task-steps",
+        message: `Executing getAifDocumentDetails query.`,
+        clientId: clientId || "N/A",
+        query: query,
+        queryParams: JSON.stringify(queryParams),
+      });
+
+      const res = await client.query(query, queryParams);
+      logger.info({
+        category: "task-steps",
+        message: `Fetched ${res.rows.length} rows from aif_document_details.`,
+        rowsFetched: res.rows.length,
+      });
       return res.rows;
     } catch (error) {
       this.logger.error(`Error fetching aif_document_details: ${error}`);
@@ -1486,7 +1659,7 @@ RETURNING d.user_attr1, d.user_attr2;
   public async getUpdateDetails(): Promise<any[]> {
     let client: PoolClient | null = null;
     try {
-      client = await this.getPool().connect();
+      client = await (await this.getPool()).connect();
       const query = `
         SELECT
           cm.client_code,
@@ -1505,6 +1678,87 @@ RETURNING d.user_attr1, d.user_attr2;
       throw error;
     } finally {
       if (client) client.release();
+    }
+  }
+
+  public async streamUpdateDetails(
+    batchSize: number,
+    processBatch: (batch: any[]) => Promise<void>,
+    clientId?: number
+  ): Promise<void> {
+    let client: PoolClient | null = null;
+    try {
+      client = await (await this.getPool()).connect();
+      let query = `
+        SELECT
+          cm.client_code,
+          add.user_attr1,
+          add.transaction_reference_id
+        FROM investor.aif_document_details add
+        JOIN fund.client_master cm ON add.client_id = cm.id
+        WHERE add.created_by = 'system'
+      `;
+      const queryParams: any[] = [];
+
+      if (clientId) {
+        queryParams.push(clientId);
+        query += ` AND add.client_id = $${queryParams.length}`;
+      }
+
+      query += `;`; // Ensure the query ends with a semicolon
+
+      logger.info({
+        category: "task-steps",
+        message: `Executing streamUpdateDetails query.`,
+        clientId: clientId || "N/A",
+        query: query,
+        queryParams: JSON.stringify(queryParams),
+        interpolatedQuery: this.formatQuery(query, queryParams),
+      });
+
+      const cursor = client.query(new Cursor(query, queryParams));
+
+      let batch: any[] = [];
+      let rows;
+      do {
+        rows = await new Promise<any[]>((resolve, reject) => {
+          cursor.read(batchSize, (err: Error | undefined, rows: any[]) => {
+            if (err) {
+              logger.error({
+                category: "task-steps",
+                message: `Error reading from PostgreSQL cursor in streamUpdateDetails: ${err.message}`,
+                error: err.message,
+              });
+              return reject(err);
+            }
+            logger.info({
+              category: "task-steps",
+              message: `Read ${rows.length} rows from PostgreSQL cursor.`,
+              rowsReadFromCursor: rows.length,
+            });
+            resolve(rows);
+          });
+        });
+
+        if (rows.length > 0) {
+          batch = rows;
+          logger.info({
+            category: "task-steps",
+            message: `Processing a batch of ${batch.length} rows from PostgreSQL.`,
+            batchSize: batch.length,
+          });
+          await processBatch(batch);
+        }
+      } while (rows.length > 0);
+
+      logger.info("Finished streaming all data from PostgreSQL.");
+    } catch (error) {
+      this.logger.error(`Error streaming details from PostgreSQL: ${error}`);
+      throw error;
+    } finally {
+      if (client) {
+        client.release();
+      }
     }
   }
 }

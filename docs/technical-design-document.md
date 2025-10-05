@@ -70,7 +70,103 @@ This enhancement allows for a more robust and complete sanity check process. By 
 - **Mitigate Duplicates:** Empower users to effectively reduce redundant imperfect data, streamlining the process of identifying and fixing remaining imperfect records.
 - **Improved Data Quality:** Contribute to overall better data quality by systematically removing unnecessary duplicate entries, even in complex imperfect scenarios.
 
-### 4.3. S3 Browser Refactoring with TanStack Query
+### 4.4. MongoDB Performance Optimization: Compound Indexing for `updateMongoTransactions`
+
+**Problem:**
+
+The `updateMongoTransactions` function in `backend/services/mongoDatabase.ts` currently performs `find` operations on the MongoDB collection using a combination of `clientId` and `transactionNo` within an `$or` query. Without a suitable index, these queries result in full collection scans, leading to significant performance bottlenecks, especially with large datasets (e.g., 50,000 documents or more). This severely impacts the speed of the `updateMongoTransactions` process.
+
+The relevant query pattern is:
+
+```typescript
+const uniqueFilters = pgData.map((data) => ({
+  clientId: data.client_code,
+  transactionNo: data.user_attr1,
+}));
+
+const mongoDocs = await this.model
+  .find({ $or: uniqueFilters })
+  .lean();
+```
+
+**Solution:**
+
+To drastically improve the performance of these MongoDB `find` operations, a compound index should be created on the `clientId` and `transactionNo` fields of the relevant MongoDB collection.
+
+**Implementation Details:**
+
+1.  **Identify the Target Collection:** Determine the MongoDB collection that corresponds to `this.model` in `mongoDatabase.ts`. This is typically the collection storing your transaction documents.
+
+2.  **Create a Compound Index:**
+    The recommended index is a compound index on `clientId` and `transactionNo`. The order of fields in a compound index matters for query efficiency. For queries that filter on both `clientId` and `transactionNo`, `{"clientId": 1, "transactionNo": 1}` is generally optimal.
+
+    **Using MongoDB Shell:**
+    Connect to your MongoDB instance and execute the following command:
+
+    ```javascript
+    db.your_collection_name.createIndex({ clientId: 1, transactionNo: 1 });
+    ```
+    Replace `your_collection_name` with the actual name of your MongoDB collection.
+
+    **Using Mongoose (if applicable in your `mongoDatabase.ts` model definition):**
+    If your `mongoDatabase.ts` uses Mongoose or a similar ODM, you can define the index directly in your schema:
+
+    ```typescript
+    import { Schema, model } from 'mongoose';
+
+    interface ITransaction {
+      clientId: string;
+      transactionNo: string;
+      // other fields
+    }
+
+    const transactionSchema = new Schema<ITransaction>({
+      clientId: { type: String, required: true },
+      transactionNo: { type: String, required: true },
+      // other field definitions
+    });
+
+    // Add the compound index
+    transactionSchema.index({ clientId: 1, transactionNo: 1 });
+
+    const TransactionModel = model<ITransaction>('Transaction', transactionSchema);
+    ```
+    This approach ensures the index is created when your application connects to MongoDB and the model is defined.
+
+**Benefit:**
+
+Implementing this compound index will allow MongoDB to efficiently use the index to locate documents matching the `clientId` and `transactionNo` criteria, avoiding full collection scans. This will lead to a significant reduction in query execution time for the `updateMongoTransactions` process, improving overall application performance and responsiveness.
+
+### 4.5. Granular MongoDB Transaction Updates
+
+**Problem:**
+
+The `updateMongoTransactions` function previously performed a global update, fetching all relevant PostgreSQL data and then attempting to match and update MongoDB documents. This approach lacked granularity, making it inefficient for scenarios where updates needed to be restricted to specific `clientId` values or to documents created by a particular source (e.g., 'system'). This could lead to unnecessary data processing and potential performance overhead when only a subset of data required synchronization.
+
+**Solution:**
+
+To enhance efficiency and control, the `updateMongoTransactions` process has been refined to allow for `clientId`-specific updates and to filter PostgreSQL data based on the `created_by = 'system'` field. This ensures that only relevant data is streamed from PostgreSQL and processed for MongoDB updates, aligning with the `sourceUser: 'system'` field in MongoDB.
+
+**Implementation Details:**
+
+1.  **`backend/services/database.ts` - `streamUpdateDetails` function:**
+    *   **`clientId` Parameter:** An optional `clientId` parameter was added to the function signature.
+    *   **SQL Query Filtering:** The PostgreSQL query within `streamUpdateDetails` was modified to include a `WHERE add.created_by = 'system'` clause. Additionally, if a `clientId` is provided, an `AND add.client_id = $X` clause is dynamically appended to the query, and the `clientId` is passed as a parameter to the `pg-cursor` for efficient filtering at the database level.
+
+2.  **`backend/services/mongoDatabase.ts` - `updateMongoTransactions` function:**
+    *   **`clientId` Parameter:** An optional `clientId` parameter was added to the function signature.
+    *   **Stream Call Update:** The `database.streamUpdateDetails` call now passes the `clientId` parameter, ensuring that PostgreSQL streams only the data relevant to the specified client.
+    *   **MongoDB Query Filtering:** The MongoDB `find` query was updated to include `sourceUser: 'system'` as a mandatory filter. If a `clientId` is provided, `clientId: clientId` is also added to the MongoDB query, ensuring that only MongoDB documents belonging to the specified client and created by 'system' are considered for updates.
+
+**Benefit:**
+
+These enhancements provide several key benefits:
+
+-   **Improved Performance:** By filtering data at the source (both PostgreSQL and MongoDB) based on `created_by = 'system'` and `clientId`, the amount of data processed is significantly reduced, leading to faster execution times for `updateMongoTransactions`.
+-   **Enhanced Granularity:** The ability to specify a `clientId` allows for targeted updates, which is crucial for managing large datasets and ensuring that only the intended data is modified.
+-   **Data Consistency:** The explicit filtering by `created_by = 'system'` and `sourceUser: 'system'` ensures that the synchronization process between PostgreSQL and MongoDB is consistent for system-generated entries.
+-   **Reduced Resource Consumption:** Less data transfer and processing lead to lower CPU, memory, and network resource utilization on both the database servers and the application backend.
+
 
 **Problem:**
 
@@ -102,6 +198,68 @@ To address these issues, the component was refactored to use `@tanstack/react-qu
 **Benefit:**
 
 This refactoring resulted in a more robust, maintainable, and performant S3 Browser. The code is now simpler and more declarative, and the user experience is greatly improved due to automatic caching and efficient, synchronized data fetching.
+
+### 4.6. Batch Update Optimization for `updateFolioAndTransaction`
+
+**Problem:**
+
+The `updateFolioAndTransaction` function in `backend/services/database.ts` previously suffered from performance bottlenecks due to:
+1.  **Redundant CSV Parsing:** It re-parsed the CSV file to generate transactions, even when this data was already available from a preceding `generateSql` call.
+2.  **Inefficient `ANY` Clauses:** Update queries relied on `ANY($1::text[])` clauses with potentially large arrays of `processedFolioNumbers` and `uniqueClientCodes`. While better than individual updates, these could still become inefficient with very large datasets, leading to slower execution times for batch updates.
+
+**Solution:**
+
+To significantly improve the efficiency of `updateFolioAndTransaction`, the process was refactored to:
+1.  **Reuse Parsed Data:** Accept `transactions` and `logs` directly as parameters, eliminating redundant CSV parsing and SQL generation.
+2.  **Utilize Temporary Tables for Joins:** Introduce a temporary table (`temp_transaction_data`) to stage `id_ihno` and `id_acno` values, enabling more efficient join-based updates instead of large `ANY` clauses.
+
+**Implementation Details:**
+
+-   **`backend/services/database.ts` - `updateFolioAndTransaction` function:**
+    -   The function signature was updated to accept `transactions` (an array of parsed transaction objects) and `logs` (an array of `SqlLog` entries) as parameters.
+    -   A temporary table named `temp_transaction_data` is created at the beginning of the transaction. This table stores `id_ihno` and `id_acno` for all transactions relevant to the current update batch.
+    -   Data from the `transactions` array is inserted into `temp_transaction_data` in chunks (e.g., 1000 rows per chunk) to optimize database writes.
+    -   The `updateFolioQuery` (Query 3) and `updateTransactionQuery` (Query 4) were modified to join with `temp_transaction_data` on `d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno`. This replaces the less efficient `ANY` clause filtering for these specific conditions.
+    -   The `processedFolioNumbers` array is now derived directly from the `id_acno` values within the provided `transactions` array when `updateAll` is false.
+-   **`backend/controllers/fileController.ts` - `processSqlMongo` and `updateFolioAndTransaction` endpoints:**
+    -   Both endpoints now call `database.generateSql()` once to obtain the `transactions` and `logs` data.
+    -   These `transactions` and `logs` are then passed as arguments to `database.updateFolioAndTransaction`, ensuring that the data is processed only once.
+
+**Benefit:**
+
+These optimizations lead to a substantial improvement in the performance of batch updates within `updateFolioAndTransaction`:
+-   **Reduced Processing Overhead:** Eliminating redundant CSV parsing saves significant CPU cycles and I/O operations.
+-   **Faster Database Operations:** Using a temporary table for joins allows the PostgreSQL query planner to execute updates much more efficiently, especially with large numbers of records (e.g., 20,000 updates within 1 minute).
+-   **Improved Scalability:** The chunked insertion into the temporary table and the optimized join queries make the update process more scalable for larger datasets.
+-   **Consistent Data Flow:** Ensures that the `updateFolioAndTransaction` logic operates on the same, already-parsed transaction data as other SQL operations.
+
+### 4.7. Streaming CSV Parsing for `generateSql`
+
+**Problem:**
+
+The original implementation of the `generateSql` function in `backend/services/database.ts` used `ExcelJS` to read entire CSV files into memory. For very large CSV files, this approach was inefficient, leading to high memory consumption and increased initial latency as the application had to wait for the entire file to be loaded and parsed before processing could begin.
+
+**Solution:**
+
+To address these inefficiencies, the `generateSql` function was refactored to use a streaming CSV parsing approach. This allows the application to process CSV data in chunks, significantly reducing memory footprint and improving responsiveness for large files.
+
+**Implementation Details:**
+
+-   **`backend/services/database.ts` - `generateSql` function:**
+    -   The dependency on `ExcelJS` for CSV reading was replaced with `fs.createReadStream` and the `parse` function from the `csv-parse` library.
+    -   A readable stream is created from the CSV file and piped directly to the `csv-parse` parser.
+    -   The parser is configured to skip the header row (`from_line: 2`).
+    -   As data chunks are parsed, individual rows are emitted via the 'data' event and collected into the `transactions` array.
+    -   Error handling for parsing issues (e.g., invalid data in a row) and stream errors (e.g., file read errors) is maintained, logging details and pushing errors to the `logs` array.
+    -   A `Promise` is used to await the completion of the streaming process before proceeding with SQL generation.
+
+**Benefit:**
+
+This streaming CSV parsing optimization provides several key benefits:
+-   **Reduced Memory Consumption:** The application no longer needs to load the entire CSV file into memory, making it highly efficient for processing very large datasets without risking out-of-memory errors.
+-   **Lower Initial Latency:** Processing of CSV data begins as soon as the first chunks are read, reducing the initial wait time and improving the responsiveness of the application.
+-   **Improved Scalability:** The streaming approach allows the system to handle CSV files of virtually any size, enhancing the overall scalability and robustness of the data ingestion process.
+-   **Consistent Performance:** Provides a more consistent performance profile, as processing occurs incrementally rather than in a large, upfront operation.
 
 ## 5. Conclusion
 

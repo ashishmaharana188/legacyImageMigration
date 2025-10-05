@@ -2,8 +2,8 @@ import { useState } from "react";
 import Sidebar from "./components/ui/Sidebar";
 import SummaryDisplay from "./components/ui/SummaryDisplay";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
-import { Outlet } from '@tanstack/react-router';
-import { useTaskLog } from './contexts/TaskLogContext';
+import { Outlet } from "@tanstack/react-router";
+import { useTaskLog } from "./contexts/TaskLogContext";
 
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);

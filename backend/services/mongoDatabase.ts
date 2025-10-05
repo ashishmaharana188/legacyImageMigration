@@ -35,27 +35,37 @@ export class MongoDatabase {
   public async testConnectionAndQuery(): Promise<any[]> {
     try {
       if (mongoose.connection.readyState !== 1) {
-        logger.warn("MongoDB not connected. Attempting to connect...");
+        logger.warn({
+          category: "app-flow",
+          message: "MongoDB not connected. Attempting to connect...",
+        });
         await this.connect();
       }
       const db = this.getDb();
       if (!db) {
-        logger.error("Database connection is not available.");
+        logger.error({
+          category: "app-flow",
+          message: "Database connection is not available.",
+        });
         return [];
       }
 
       const result = await this.model.find({}).limit(1).lean();
-      logger.info(
-        `MongoDB connection test successful. Found ${result.length} document(s).`
-      );
+      logger.info({
+        category: "app-flow",
+        message: `MongoDB connection test successful. Found ${result.length} document(s).`,
+      });
       return result;
     } catch (error) {
-      logger.error(`MongoDB connection test failed: ${error}`);
+      logger.error({
+        category: "app-flow",
+        message: `MongoDB connection test failed: ${error}`,
+      });
       throw error;
     }
   }
 
-  public async transferDataFromPostgres(): Promise<{
+  public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
     documents?: any[]; // Added to return the documents
   }> {
@@ -64,8 +74,29 @@ export class MongoDatabase {
       await this.connect();
       const db = this.getDb();
       if (!db) {
-        logger.error("Database connection is not available.");
+        logger.error({
+          category: "task-steps",
+          message: "Database connection is not available.",
+        });
         return { transferredCount: 0 };
+      }
+
+      let pgClientId: number | undefined;
+      if (clientCode) {
+        const clientRes = await database.getClientIdByCode(clientCode);
+        if (clientRes) {
+          pgClientId = clientRes.id;
+          logger.info({
+            category: "task-steps",
+            message: `Found PostgreSQL client_id: ${pgClientId} for client_code: ${clientCode}`,
+          });
+        } else {
+          logger.warn({
+            category: "task-steps",
+            message: `Client code '${clientCode}' not found in PostgreSQL. Aborting transfer.`,
+          });
+          return { transferredCount: 0 };
+        }
       }
 
       const transactionsMap: Record<string, string> = {
@@ -73,7 +104,17 @@ export class MongoDatabase {
         NCT: "NCTP",
       };
 
-      const pgData = await database.getAifDocumentDetails();
+      const pgData = await database.getAifDocumentDetails(pgClientId);
+      logger.info({
+        category: "task-steps",
+        message: `Fetched ${
+          pgData.length
+        } documents from PostgreSQL for transfer. (pgClientId: ${
+          pgClientId || "N/A"
+        })`,
+        pgClientId: pgClientId || "N/A",
+        pgDataCount: pgData.length,
+      });
       const documentsToInsert = [];
 
       for (const data of pgData) {
@@ -122,7 +163,10 @@ export class MongoDatabase {
       await this.disconnect();
       return { transferredCount: pgData.length, documents: documentsToInsert };
     } catch (error) {
-      logger.error(`Data transfer error: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Data transfer error: ${error}`,
+      });
       throw error;
     }
   }
@@ -131,28 +175,42 @@ export class MongoDatabase {
     try {
       await this.model.insertMany(documents);
     } catch (error) {
-      logger.error(`Error inserting documents: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Error inserting documents: ${error}`,
+      });
       throw error;
     }
   }
 
-  public async updateMongoTransactions(): Promise<{
+  public async updateMongoTransactions(clientId?: number): Promise<{
     updatedCount: number;
     syncedCount: number;
     updatedDocuments: any[];
     syncedDocuments: any[];
   }> {
-    let updatedCount = 0;
-    let syncedCount = 0;
-    const updatedDocuments = [];
-    const syncedDocuments = [];
+    let totalUpdatedCount = 0;
+    let totalSyncedCount = 0;
+    const allUpdatedDocuments: any[] = [];
+    const allSyncedDocuments: any[] = [];
+
+    logger.info({
+      category: "task-steps",
+      message: `Initiating updateMongoTransactions for clientId: ${
+        clientId || "all"
+      }`,
+      clientId: clientId || "N/A",
+    });
 
     try {
       const database = new (await import("./database.js")).Database();
       await this.connect();
       const db = this.getDb();
       if (!db) {
-        logger.error("Database connection is not available.");
+        logger.error({
+          category: "task-steps",
+          message: "Database connection is not available.",
+        });
         return {
           updatedCount: 0,
           syncedCount: 0,
@@ -161,43 +219,113 @@ export class MongoDatabase {
         };
       }
 
-      const pgData = await database.getUpdateDetails();
+      const processBatch = async (pgData: any[]) => {
+        logger.info({
+          category: "task-steps",
+          message: `Processing batch of ${pgData.length} PostgreSQL documents.`,
+          pgDataSample: pgData.slice(0, 2), // Log first 2 items for brevity
+          pgDataCount: pgData.length,
+        });
+        const bulkOperations = [];
+        const documentsToUpdate = [];
+        const documentsToSync = [];
 
-      for (const data of pgData) {
-        const filter = {
-          clientId: data.client_code,
+        const uniqueFilters = pgData.map((data) => ({
+          clientId: data.client_code, // Use client_code (string) from PostgreSQL
           transactionNo: data.user_attr1,
-        };
+        }));
 
-        const mongoDoc = await this.model.findOne(filter);
+        if (uniqueFilters.length === 0) {
+          logger.warn({
+            category: "task-steps",
+            message:
+              "No unique filters generated from PostgreSQL data. Skipping batch.",
+          });
+          return;
+        }
 
-        if (mongoDoc) {
-          if (mongoDoc.transactionNo !== data.transaction_reference_id) {
-            await this.model.updateOne(filter, {
-              $set: { transactionNo: data.transaction_reference_id },
-            });
-            updatedCount++;
-            updatedDocuments.push({
-              clientId: data.client_code,
-              oldTransactionNo: mongoDoc.transactionNo,
-              newTransactionNo: data.transaction_reference_id,
-              documentType: mongoDoc.documentType,
-              processCode: mongoDoc.processCode,
-            });
-          } else {
-            syncedCount++;
-            syncedDocuments.push({
-              clientId: data.client_code,
-              transactionNo: mongoDoc.transactionNo,
-            });
+        const mongoQuery: any = { $or: uniqueFilters, sourceUser: "system" };
+        // The clientId filter is already part of the uniqueFilters if clientId was provided to streamUpdateDetails
+        // No need to add it again as a top-level AND condition.
+
+        logger.info({
+          category: "task-steps",
+          message: "Fetching MongoDB documents with query.",
+          mongoQuery: JSON.stringify(mongoQuery),
+          uniqueFilters: JSON.stringify(uniqueFilters), // Log uniqueFilters as well
+        });
+        const mongoDocs = await this.model.find(mongoQuery).lean();
+        logger.info({
+          category: "task-steps",
+          message: `Fetched ${mongoDocs.length} documents from MongoDB.`,
+          mongoDocsCount: mongoDocs.length,
+        });
+        const mongoDocMap = new Map<string, any>();
+        mongoDocs.forEach((doc) => {
+          mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
+        });
+
+        for (const data of pgData) {
+          const key = `${data.client_code}-${data.user_attr1}`;
+          const mongoDoc = mongoDocMap.get(key);
+
+          if (mongoDoc) {
+            if (mongoDoc.transactionNo !== data.transaction_reference_id) {
+              bulkOperations.push({
+                updateOne: {
+                  filter: { _id: mongoDoc._id },
+                  update: {
+                    $set: {
+                      transactionNo: data.transaction_reference_id,
+                    },
+                  },
+                },
+              });
+              documentsToUpdate.push({
+                clientId: data.client_code,
+                oldTransactionNo: mongoDoc.transactionNo,
+                newTransactionNo: data.transaction_reference_id,
+                documentType: mongoDoc.documentType,
+                processCode: mongoDoc.processCode,
+              });
+            } else {
+              documentsToSync.push({
+                clientId: data.client_code,
+                transactionNo: mongoDoc.transactionNo,
+              });
+            }
           }
         }
-      }
+
+        if (bulkOperations.length > 0) {
+          const bulkWriteResult = await this.model.bulkWrite(bulkOperations);
+          totalUpdatedCount += bulkWriteResult.modifiedCount;
+          allUpdatedDocuments.push(...documentsToUpdate);
+        }
+
+        totalSyncedCount += documentsToSync.length;
+        allSyncedDocuments.push(...documentsToSync);
+      };
+
+      await database.streamUpdateDetails(1000, processBatch, clientId);
+
+      logger.info({
+        category: "task-steps",
+        message: `Mongo transaction update process completed. Updated: ${totalUpdatedCount}, Synced: ${totalSyncedCount}`,
+      });
 
       await this.disconnect();
-      return { updatedCount, syncedCount, updatedDocuments, syncedDocuments };
+      return {
+        updatedCount: totalUpdatedCount,
+        syncedCount: totalSyncedCount,
+        updatedDocuments: allUpdatedDocuments,
+        syncedDocuments: allSyncedDocuments,
+      };
     } catch (error) {
-      logger.error(`Mongo transaction update error: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Mongo transaction update error: ${error}`,
+      });
       throw error;
     }
   }
@@ -207,12 +335,18 @@ export class MongoDatabase {
       // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
       const date = new Date(cutoffTms);
       if (isNaN(date.getTime())) {
-        logger.error(`Invalid cutoffTms date string: ${cutoffTms}`);
+        logger.error({
+          category: "task-steps",
+          message: `Invalid cutoffTms date string: ${cutoffTms}`,
+        });
         return null;
       }
       return date;
     } catch (error) {
-      logger.error(`Error converting cutoffTms to Date: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Error converting cutoffTms to Date: ${error}`,
+      });
       return null;
     }
   }
@@ -249,7 +383,10 @@ export class MongoDatabase {
       await this.disconnect();
       return documents;
     } catch (error) {
-      logger.error(`Error fetching documents by date: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `Error fetching documents by date: ${error}`,
+      });
       throw error;
     }
   }
@@ -257,6 +394,7 @@ export class MongoDatabase {
   public async sanityCheckMongoDuplicates(params: {
     dryRun?: boolean;
     cutoffTms?: string;
+    clientId?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
@@ -266,12 +404,12 @@ export class MongoDatabase {
     logs: any[];
   }> {
     const logs: any[] = [];
-    const { dryRun = true, cutoffTms: cutoffDateString } = params;
+    const { dryRun = true, cutoffTms: cutoffDateString, clientId } = params;
     let cutoffDate: Date | null = null;
 
     if (cutoffDateString) {
       // Parse cutoffDateString (e.g., "9/5/2025") into a Date object at 00:00:00 AM
-      const [month, day, year] = cutoffDateString.split("/").map(Number);
+      const [day, month, year] = cutoffDateString.split("/").map(Number);
       // Month is 0-indexed in JavaScript Date objects
       cutoffDate = new Date(year, month - 1, day, 0, 0, 0, 0);
 
@@ -290,17 +428,22 @@ export class MongoDatabase {
           logs,
         };
       }
-      logger.info(
-        `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`
-      );
+      logger.debug({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`,
+      });
     }
 
-    logger.info(`sanityCheckMongoDuplicates: Received dryRun: ${dryRun}`);
+    logger.debug({
+      category: "task-steps",
+      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}, clientId: ${clientId || 'N/A'}`,
+    });
 
     try {
       await this.connect();
 
       const pipeline: any[] = [
+        ...(clientId ? [{ $match: { clientId: clientId } }] : []),
         {
           $addFields: {
             // Split by comma and space to get date and time parts
@@ -323,8 +466,8 @@ export class MongoDatabase {
         },
         {
           $addFields: {
-            day: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is first in M/D/YYYY
-            month: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is second in M/D/YYYY
+            day: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is first in D/M/YYYY
+            month: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is second in D/M/YYYY
             year: { $toInt: { $arrayElemAt: ["$dateComponents", 2] } },
             timeOnly: { $arrayElemAt: ["$timeComponents", 0] }, // e.g., "10:49:51"
             ampm: { $arrayElemAt: ["$timeComponents", 1] }, // e.g., "AM"
@@ -414,9 +557,9 @@ export class MongoDatabase {
               sourceUser: "$sourceUser",
             },
             count: { $sum: 1 },
-            documentIds: { $push: "$_id" },
-            // Add other fields here if you want to see them in the dry run output
-            // e.g., firstDocument: { $first: "$$ROOT" }
+            documents: {
+              $push: { _id: "$_id", createdOnDate: "$createdOnDate" },
+            }, // Correctly populate documents array
           },
         },
         {
@@ -425,6 +568,24 @@ export class MongoDatabase {
           },
         },
       ];
+
+      // Log the count of documents after the cutoff date filter
+      const documentsAfterCutoff = await this.model
+        .aggregate([
+          ...pipeline.slice(
+            0,
+            pipeline.findIndex((stage) => "$group" in stage)
+          ), // Get stages up to the group stage
+          { $count: "count" },
+        ])
+        .exec();
+
+      logger.info({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${
+          documentsAfterCutoff[0]?.count || 0
+        }`,
+      });
 
       const duplicates = await this.model
         .aggregate<MongoDuplicateCheckResult>(pipeline)
@@ -436,41 +597,50 @@ export class MongoDatabase {
         0
       );
 
-      logger.info(
-        `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`
-      );
+      logger.info({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`,
+      });
 
       if (!dryRun) {
-        logger.info(
-          "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates."
-        );
+        logger.info({
+          category: "task-steps",
+          message:
+            "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates.",
+        });
+        const allDocumentsToDeleteIds: mongoose.Types.ObjectId[] = [];
         for (const dupGroup of duplicates) {
           if (dupGroup.documents.length > 1) {
-            // Sort documents by createdOnDate in ascending order (oldest first)
-            dupGroup.documents.sort(
-              (a, b) => a.createdOnDate.getTime() - b.createdOnDate.getTime()
-            );
+            dupGroup.documents.sort((a, b) => {
+              const dateComparison =
+                a.createdOnDate.getTime() - b.createdOnDate.getTime();
+              if (dateComparison !== 0) {
+                return dateComparison;
+              }
+              return (
+                a._id.getTimestamp().getTime() - b._id.getTimestamp().getTime()
+              );
+            });
 
-            // Keep the newest document, delete all others
             const documentsToDeleteIds = dupGroup.documents
               .slice(0, -1)
               .map((doc) => doc._id);
-
-            if (documentsToDeleteIds.length > 0) {
-              const deleteResult = await this.model.deleteMany({
-                _id: { $in: documentsToDeleteIds },
-                clientId: dupGroup._id.clientId,
-                transactionNo: dupGroup._id.transactionNo,
-              });
-              logs.push({
-                status: "info",
-                message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`,
-              });
-              logger.info(
-                `Deleted ${deleteResult.deletedCount} oldest duplicate documents for clientId: ${dupGroup._id.clientId}, transactionNo: ${dupGroup._id.transactionNo}`
-              );
-            }
+            allDocumentsToDeleteIds.push(...documentsToDeleteIds);
           }
+        }
+
+        if (allDocumentsToDeleteIds.length > 0) {
+          const deleteResult = await this.model.deleteMany({
+            _id: { $in: allDocumentsToDeleteIds },
+          });
+          logs.push({
+            status: "info",
+            message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
+          });
+          logger.debug({
+            category: "task-steps",
+            message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
+          });
         }
         logs.push({
           status: "info",
@@ -489,7 +659,10 @@ export class MongoDatabase {
         logs,
       };
     } catch (error) {
-      logger.error(`sanityCheckMongoDuplicates failed: ${error}`);
+      logger.error({
+        category: "task-steps",
+        message: `sanityCheckMongoDuplicates failed: ${error}`,
+      });
       logs.push({
         status: "error",
         message: `sanityCheckMongoDuplicates failed: ${error}`,
