@@ -41,6 +41,14 @@ interface UploadStatus {
   currentlySplittingFiles?: string;
 }
 
+interface UploadProgressResponse {
+  totalRows: number;
+  processedRows: number;
+  successfulRows: number;
+  errors: number;
+  notFound: number;
+}
+
 interface FileResponse {
   statusCode?: number;
   message?: string;
@@ -103,6 +111,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   const [splitMessage, setSplitMessage] = useState<string>("");
   const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
 
   // Refs for throttling
   const splitProgressLatestRef = useRef<any | null>(null);
@@ -212,6 +221,49 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     };
   }, [applyThrottledUpdates, setUploadStatuses]);
 
+  useEffect(() => {
+    let interval: NodeJS.Timeout | null = null;
+
+    if (isUploading) {
+      interval = setInterval(async () => {
+        try {
+          const res = await axios.get<UploadProgressResponse>(
+            "http://localhost:3000/upload-progress"
+          );
+          const { totalRows, processedRows, successfulRows, errors, notFound } =
+            res.data;
+
+          setUploadStatuses((prev) =>
+            prev.map((s) =>
+              s.fileName === "excel_upload_progress"
+                ? {
+                    ...s,
+                    progress:
+                      totalRows > 0 ? (processedRows / totalRows) * 100 : 0,
+                    totalFiles: totalRows,
+                    processedFiles: processedRows,
+                    successfulFiles: successfulRows,
+                    errorFiles: errors,
+                    notFoundFiles: notFound,
+                  }
+                : s
+            )
+          );
+        } catch (error) {
+          console.error("Failed to fetch upload progress:", error);
+        }
+      }, 5000); // Poll every 5 seconds
+    } else if (interval) {
+      clearInterval(interval);
+    }
+
+    return () => {
+      if (interval) {
+        clearInterval(interval);
+      }
+    };
+  }, [isUploading, setUploadStatuses]);
+
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
       if (event.target.files && event.target.files[0]) {
@@ -231,6 +283,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     }
     clearTaskLog("uploadAndScript");
     setLoading(true);
+    setIsUploading(true); // Set uploading status to true
     const uploadLogId = "upload-status";
     setUploadMessage("Uploading");
     updateTaskLog("uploadAndScript", {
@@ -238,6 +291,21 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       message: "Uploading...",
       status: "in-progress",
     });
+
+    // Initialize upload status for the excel file
+    setUploadStatuses((prev) => {
+      const newStatuses = prev.filter(
+        (s) => s.fileName !== "excel_upload_progress"
+      );
+      newStatuses.push({
+        fileName: "excel_upload_progress",
+        status: "Uploading",
+        progress: 0,
+        isDirectory: false,
+      });
+      return newStatuses;
+    });
+
     const formData = new FormData();
     formData.append("excel", selectedFile);
 
@@ -280,6 +348,24 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         badRows: badRows,
         ...restData,
       });
+
+      // Update upload statuses with detailed summary
+      setUploadStatuses((prev) =>
+        prev.map((s) =>
+          s.fileName === "excel_upload_progress"
+            ? {
+                ...s,
+                status: finalStatus === "success" ? "Done" : "Failed",
+                progress: (successfulRows / totalRows) * 100 || 0,
+                totalFiles: totalRows,
+                processedFiles: successfulRows + badRows,
+                successfulFiles: successfulRows,
+                errorFiles: badRows,
+                notFoundFiles: summary?.notFound || 0,
+              }
+            : s
+        )
+      );
     } catch (error: any) {
       const errorMessage = `Upload failed: ${
         error.response?.data?.message || error.message
@@ -290,8 +376,16 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         message: errorMessage,
         status: "failed",
       });
+      setUploadStatuses((prev) =>
+        prev.map((s) =>
+          s.fileName === "excel_upload_progress"
+            ? { ...s, status: "Failed", progress: 0, errorFiles: 1 }
+            : s
+        )
+      );
     } finally {
       setLoading(false);
+      setIsUploading(false); // Set uploading status to false
     }
   }, [selectedFile, updateTaskLog, clearTaskLog]);
 

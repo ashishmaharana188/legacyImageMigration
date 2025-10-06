@@ -89,7 +89,7 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
             )}
             {processed !== undefined && (
               <p>
-                <strong>Processed:</strong> {processed}
+                <strong>Processing:</strong> {processed}
               </p>
             )}
             {successful !== undefined && (

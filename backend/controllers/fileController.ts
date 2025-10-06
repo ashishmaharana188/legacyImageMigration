@@ -21,6 +21,7 @@ import {
   searchFolders,
 } from "../services/s3Manager";
 import logger from "../utils/logger";
+import { uploadProgress } from "../app"; // Import uploadProgress
 
 class FileController {
   async processExcelFile(req: Request, res: Response) {

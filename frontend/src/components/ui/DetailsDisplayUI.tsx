@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import ProgressTrackingUI from "./ProgressTrackingUI";
 
 interface DetailsDisplayUIProps {
   log: any;
@@ -37,14 +38,33 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
           {statusText}
         </div>
       );
+    } else if (
+      log.fileName === "excel_upload_progress" &&
+      log.totalFiles !== undefined
+    ) {
+      // This condition is for the excel upload progress
+      return (
+        <ProgressTrackingUI
+          title={`Upload Progress for Excel File`}
+          progress={log.progress}
+          total={log.totalFiles}
+          processed={log.processedFiles}
+          successful={log.successfulFiles}
+          errors={log.errorFiles || 0}
+          notFound={log.notFoundFiles || 0}
+          unit="rows"
+        />
+      );
     } else if (log.splitSummary) {
       return null; // Handled by ProgressTrackingUI
     } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
       return (
         <div>
           <h5 className="font-semibold">File Upload Summary:</h5>
-          <p>Original File: {log.originalFile}</p>
-          <p>Processed File: {log.processedFile}</p>
+          <div className="flex flex-wrap items-center">
+            <p className="mr-4">Original File: {log.originalFile}</p> │
+            <p className="mr-4">Processed File: {log.processedFile}</p> │
+          </div>
           <button onClick={toggleExpansion}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>

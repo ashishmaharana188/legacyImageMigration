@@ -39,6 +39,15 @@ import { initWebSocket } from "./services/webSocketService";
 import { verifyS3Connection } from "./services/s3Manager";
 import { connectMongo, disconnectMongo, warmupPgPool } from "./controllers/dbConnect";
 
+// Global object to store upload progress
+export const uploadProgress = {
+  totalRows: 0,
+  processedRows: 0,
+  successfulRows: 0,
+  errors: 0,
+  notFound: 0,
+};
+
 // Graceful shutdown and error handling
 process.on("unhandledRejection", (reason, promise) => {
   console.error("Unhandled Rejection at:", promise, "reason:", reason);
@@ -124,6 +133,10 @@ app.get("/", (req, res) => {
 
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
+app.get("/upload-progress", (req, res) => {
+  res.json(uploadProgress);
 });
 
 app.post(
