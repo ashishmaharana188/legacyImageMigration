@@ -59,7 +59,7 @@ process.on("uncaughtException", (error) => {
 });
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.NODE_ENV === 'production' ? 3000 : 3001;
 
 app.use(cors());
 app.use(express.json());
