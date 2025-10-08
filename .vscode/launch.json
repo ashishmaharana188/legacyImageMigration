@@ -2,11 +2,19 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Launch chrome with Custom Directory",
+      "name": "Launch Chrome (Dev)",
       "type": "chrome",
       "request": "launch",
-      "url": "http://localhost:5174", // Your app URL or server address
-      "webRoot": "${workspaceFolder}",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend",
+      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+    },
+    {
+      "name": "Launch Chrome (Prod)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5174",
+      "webRoot": "${workspaceFolder}/frontend",
       "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
     }
   ]
