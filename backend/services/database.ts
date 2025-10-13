@@ -514,6 +514,22 @@ page_count, client_id
             continue; // Skip this row entirely from valueParams and valueStrings
           }
 
+          if (typeof data.page_count !== 'number') {
+            this.logger.warn(
+              `executeSql: row ${originalIndex + 2} has a non-numeric page_count: "${data.page_count}". Skipping row.`
+            );
+            logs.push({
+              row: originalIndex + 2,
+              status: "error",
+              message: `Non-numeric page_count: "${data.page_count}" for id_ihno: ${data.id_ihno}`,
+            });
+            badRows.push({
+              id_ihno: data.id_ihno,
+              reason: `Non-numeric page_count: "${data.page_count}"`,
+            });
+            continue;
+          }
+
           const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
           const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
           const mime = mimeType[ext.replace(".", "")] || "Unknown";
