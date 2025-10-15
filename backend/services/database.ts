@@ -514,9 +514,13 @@ page_count, client_id
             continue; // Skip this row entirely from valueParams and valueStrings
           }
 
-          if (typeof data.page_count !== 'number') {
+          if (typeof data.page_count !== "number") {
             this.logger.warn(
-              `executeSql: row ${originalIndex + 2} has a non-numeric page_count: "${data.page_count}". Skipping row.`
+              `executeSql: row ${
+                originalIndex + 2
+              } has a non-numeric page_count: "${
+                data.page_count
+              }". Skipping row.`
             );
             logs.push({
               row: originalIndex + 2,
@@ -1638,7 +1642,7 @@ SELECT DISTINCT
           cm.client_code
         FROM investor.aif_document_details add
         JOIN fund.client_master cm ON add.client_id = cm.id
-        WHERE add.user_attr2 = ANY($1::text[])
+        WHERE add.user_attr2 = ANY($1::text[]) and created_by = 'system'
       `;
       const queryParams: any[] = [processedFolioNumbers];
 
