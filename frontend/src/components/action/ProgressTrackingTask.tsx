@@ -1,26 +1,7 @@
-import React, { useState, useEffect } from "react";
-import ProgressTrackingUI from "../ui/ProgressTrackingUI";
-
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  totalFiles?: number;
-  processedFiles?: number;
-  successfulFiles?: number;
-  errorFiles?: number;
-  notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
-}
+import React from "react";
+import { useUploadProgressSummary } from "../../api/uploadProcessor/uploadProcessorHook";
+import { UploadProgressDisplay, SplitSummaryDisplay } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
+import { UploadStatus } from "../../api/uploadProcessor/uploadProcessorType";
 
 interface ProgressTrackingTaskProps {
   uploadStatuses: UploadStatus[];
@@ -31,35 +12,15 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
   uploadStatuses,
   taskLogs,
 }) => {
-  const [excelProcessingStatus, setExcelProcessingStatus] =
-    useState<UploadStatus | null>(null);
-  const [splitSummary, setSplitSummary] = useState<any | null>(null);
-  const [s3UploadStatus, setS3UploadStatus] = useState<UploadStatus | null>(
-    null
-  );
-
-  useEffect(() => {
-    const excelStatus = uploadStatuses.find(
-      (s) => s.fileName === "excel_upload_progress"
-    );
-    setExcelProcessingStatus(excelStatus || null);
-    const splitLog = taskLogs.uploadAndScript?.find((log) => log.splitSummary);
-    if (splitLog) {
-      setSplitSummary(splitLog.splitSummary);
-    } else {
-      setSplitSummary(null);
-    }
-
-    const s3Status = uploadStatuses.find(
-      (s) => s.fileName === "s3_upload_progress"
-    );
-    setS3UploadStatus(s3Status || null);
-  }, [uploadStatuses, taskLogs]);
+  const { excelProcessingStatus, splitSummary, s3UploadStatus } = useUploadProgressSummary({
+    uploadStatuses,
+    taskLogs,
+  });
 
   return (
     <div>
       {s3UploadStatus && (
-        <ProgressTrackingUI
+        <UploadProgressDisplay
           title="S3 Upload Progress"
           displayType="aggregate"
           progress={s3UploadStatus.progress}
@@ -69,7 +30,7 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
         />
       )}
       {excelProcessingStatus && (
-        <ProgressTrackingUI
+        <UploadProgressDisplay
           title="Excel Processing Progress"
           progress={excelProcessingStatus.progress}
           total={excelProcessingStatus.totalFiles}
@@ -81,19 +42,9 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
         />
       )}
       {splitSummary && (
-        <ProgressTrackingUI
+        <SplitSummaryDisplay
           title="File Splitting Progress"
-          progress={
-            splitSummary.totalExpectedSplits > 0
-              ? (splitSummary.totalSplitFilesGenerated /
-                  splitSummary.totalExpectedSplits) *
-                100
-              : 0
-          }
-          total={splitSummary.totalExpectedSplits}
-          processed={splitSummary.totalSplitFilesGenerated}
-          errors={splitSummary.splitErrors}
-          currentlySplitting={splitSummary.currentlySplittingFiles}
+          splitSummary={splitSummary}
         />
       )}
     </div>

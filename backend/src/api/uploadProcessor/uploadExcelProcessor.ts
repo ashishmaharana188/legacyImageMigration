@@ -1,16 +1,16 @@
+/* eslint-disable no-useless-escape */
+import {
+  ProcessedRow,
+  ProcessExcelRowsResult,
+  SplitCount,
+} from "../uploadProcessor/uploadProcessorTypes";
+import { buildDestinationFilePath } from "./uploadProcessorUtil";
 import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
 import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
-
-import { buildDestinationFilePath } from "./uploadProcessorUtil";
-import {
-  ProcessedFile,
-  ProcessedRow,
-  ProcessExcelRowsResult,
-} from "../uploadProcessor/uploadProcessorTypes";
 
 export async function processExcelRows(
   worksheet: ExcelJS.Worksheet,
@@ -20,11 +20,11 @@ export async function processExcelRows(
   getFileExtension: (filePath: string) => string
 ): Promise<ProcessExcelRowsResult> {
   let totalRows = 0;
-  let successfulRows = 0;
+  const successfulRows = 0;
   let errors = 0;
-  let notFound = 0;
-  const files: ProcessedFile[] = [];
+  const notFound = 0;
   const processedRows: ProcessedRow[] = [];
+  const splitCount: SplitCount[] = [];
 
   const lastRow = worksheet.rowCount;
   logger.info("Total rows to process:", { lastRow });
@@ -38,7 +38,7 @@ export async function processExcelRows(
 
     totalRows++;
     logger.info(`Processing row ${rowNumber}`);
-    const currentProcessedRows = rowNumber - 1;
+
 
     // Update global upload progress
 
@@ -207,7 +207,7 @@ export async function processExcelRows(
         logger.info(`Row ${rowNumber}: Reading file: ${sourceFilePath}`);
         const sourceData = await fs.readFile(sourceFilePath);
 
-        let destinationFilePath: string;
+        let destinationFilePath: string = "";
         try {
           destinationFilePath = await buildDestinationFilePath(
             trxn,
@@ -255,15 +255,14 @@ export async function processExcelRows(
           });
           if (typeof pageCount === "number") {
 
-            files.push({
+            splitCount.push({
               row: rowNumber,
               sourcePath: sourceFilePath,
               destinationPath: destinationFilePath,
               pageCount,
             });
-          } else {
-
           }
+
         } catch (err) {
           logger.error(`Row ${rowNumber}: Page count error`, {
             error: err,
@@ -314,7 +313,8 @@ export async function processExcelRows(
     successfulRows,
     errors,
     notFound,
-    files,
+    splitCount,
     processedRows,
   };
 }
+/* eslint-enable no-useless-escape */

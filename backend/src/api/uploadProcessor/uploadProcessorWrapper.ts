@@ -102,7 +102,7 @@ export async function processExcelFile(
 
   return {
     outputFileName,
-    files: result.files,
+    splitCount: result.splitCount,
     processedRows: result.processedRows,
     summary: summary, // Not [summary]
   };

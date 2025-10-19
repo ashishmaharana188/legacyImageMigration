@@ -37,7 +37,7 @@ class UploadProcessorController {
         processedFile: result.outputFileName,
         summary: result.summary,
         downloadUrl: `/download/${result.outputFileName}`,
-        fileUrls: result.files.map((file) => ({
+        fileUrls: result.splitCount.map((file) => ({
           row: file.row,
           url: `/download-file/${encodeURIComponent(file.destinationPath)}`,
           pageCount: file.pageCount,

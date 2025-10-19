@@ -1,4 +1,4 @@
-import { UploadStatus } from "./uploadProcessorType";
+import { UploadStatus, FileResponse, FileResponseSummary } from "./uploadProcessorType";
 
 type UpdateTaskLogFunction = (task: string, log: unknown) => void;
 type ClearTaskLogFunction = (task: string) => void;
@@ -19,8 +19,8 @@ export const logUploadSuccess = (
   updateTaskLog: UpdateTaskLogFunction,
   operationName: string,
   logId: string,
-  summary: any, // Adjust type as needed
-  restData: any // Adjust type as needed
+  summary: FileResponseSummary | undefined,
+  restData: Omit<FileResponse, 'summary'>
 ) => {
   const totalRows = summary?.totalRows || 0;
   const successfulRows = summary?.successfulRows || 0;
@@ -68,9 +68,8 @@ export const clearUploadLogs = (clearTaskLog: ClearTaskLogFunction) => {
 
 export const updateUploadStatuses = (
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>,
-  operationName: string,
   finalStatus: "success" | "failed" | "in-progress",
-  summary: any, // Adjust type as needed
+  summary: FileResponseSummary | undefined,
   errorMessage?: string
 ) => {
   if (setUploadStatuses) {

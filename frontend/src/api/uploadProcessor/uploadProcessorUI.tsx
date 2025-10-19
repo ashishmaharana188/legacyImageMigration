@@ -1,5 +1,5 @@
 import React from "react";
-import { UploadStatus } from "./uploadProcessorType";
+
 
 interface UploadProgressUIProps {
   selectedFile: File | null;

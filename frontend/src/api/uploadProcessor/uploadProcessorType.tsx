@@ -3,10 +3,11 @@ export interface SummaryItem {
   status: string;
 }
 
-export interface SplitFile {
-  originalPath: string;
-  url: string;
-  page: number;
+export interface SplitCount {
+  row: number;
+  sourcePath: string;
+  destinationPath: string;
+  pageCount: number | string;
 }
 
 export interface UploadStatus {
@@ -34,6 +35,7 @@ export interface UploadStatus {
   splitErrors?: number;
   totalExpectedPagesFromCsv?: number;
   currentlySplittingFiles?: string;
+  errorMessage?: string;
 }
 
 export interface UploadProgressResponse {
@@ -44,32 +46,35 @@ export interface UploadProgressResponse {
   notFound: number;
 }
 
+export interface FileResponseSummary {
+  totalRows: number;
+  successfulRows: number;
+  errors: number;
+  notFound: number;
+  successfulInserts: number;
+  unsuccessfulCount: number;
+  totalPageCount: number;
+  totalSplitImages: number;
+}
+
 export interface FileResponse {
   statusCode?: number;
   message?: string;
   originalFile?: string;
   processedFile?: string;
   nextContinuationToken?: string;
-  summary?: {
-    totalRows: number;
-    successfulRows: number;
-    errors: number;
-    notFound: number;
-    successfulInserts: number;
-    unsuccessfulCount: number;
-    totalPageCount: number;
-    totalSplitImages: number;
-  };
+  summary?: FileResponseSummary;
   splitSummary?: {
     totalOriginalFilesProcessed: number;
     totalExpectedSplits: number;
     totalSplitFilesGenerated: number;
     splitErrors: number;
     totalExpectedPagesFromCsv: number;
+    currentlySplittingFiles?: string;
   };
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitFiles?: SplitFile[];
+  splitCount?: SplitCount[];
   error?: string;
   directories?: string[];
   files?: unknown[];
@@ -81,10 +86,6 @@ export interface FileResponse {
   failedFilesCount?: number;
 }
 
-export interface SplitFileResponse extends FileResponse {
-  splitFiles: SplitFile[];
-  message: string;
-}
 
 export interface RequestConfig {
   endpoint: string;
@@ -96,4 +97,56 @@ export interface RequestConfig {
   operationName: string;
   setUploadStatuses?: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
   setIsUploading?: React.Dispatch<React.SetStateAction<boolean>>;
+}
+
+export interface TaskLogEntry {
+  id: string;
+  message: string;
+  status: "success" | "failed" | "in-progress";
+  totalRows?: number;
+  successfulRows?: number;
+  badRows?: number;
+  splitSummary?: FileResponse['splitSummary'];
+  // Add other properties from FileResponse if they are logged
+  originalFile?: string;
+  processedFile?: string;
+  downloadUrl?: string;
+  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
+  splitCount?: SplitCount[];
+  error?: string;
+  directories?: string[];
+  files?: unknown[];
+  badRowsFilePath?: string | null;
+  updatedFolioRows?: number;
+  updatedTransactionRows?: number;
+  successfulFilesCount?: number;
+  failedFilesCount?: number;
+}
+
+export interface BadRow {
+  rowNumber: string;
+  id_fund: string;
+  id_trtype: string;
+  id_ihno: string;
+  id_path: string;
+  id_acno: string;
+  page_count_status: string;
+}
+export interface UseUploadProcessorProps {
+  updateTaskLog: (task: string, log: unknown) => void;
+  clearTaskLog: (task: string) => void;
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
+}
+
+export interface UploadProgressDisplayProps {
+  title: string;
+  progress?: number;
+  total?: number;
+  processed?: number;
+  successful?: number;
+  errors?: number;
+  notFound?: number;
+  badRowsDetails?: UploadStatus['badRowsDetails'];
+  displayType?: "aggregate" | "default";
+  unit?: string;
 }

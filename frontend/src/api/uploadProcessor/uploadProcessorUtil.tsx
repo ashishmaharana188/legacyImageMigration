@@ -34,7 +34,9 @@ const _executeRequest = async ({
   if (setIsUploading) setIsUploading(true);
   setUploadMessage(`${operationName}...`);
   logUploadStart(updateTaskLog, operationName, logId);
-  updateUploadStatuses(setUploadStatuses, operationName, "in-progress", {});
+  if (setUploadStatuses) {
+    updateUploadStatuses(setUploadStatuses, "in-progress", undefined);
+  }
 
 
 
@@ -50,7 +52,6 @@ const _executeRequest = async ({
     setUploadMessage(resData.message || `${operationName} successful`);
     const { summary, ...restData } = resData;
     const totalRows = summary?.totalRows || 0;
-    const successfulRows = summary?.successfulRows || 0;
     const badRows = summary?.errors || 0;
 
     let finalStatus: "success" | "failed" | "in-progress" = "success";
@@ -63,13 +64,17 @@ const _executeRequest = async ({
     }
 
     logUploadSuccess(updateTaskLog, operationName, logId, summary, restData);
-    updateUploadStatuses(setUploadStatuses, operationName, finalStatus, summary);
+    if (setUploadStatuses) {
+      updateUploadStatuses(setUploadStatuses, finalStatus, summary);
+    }
   } catch (error: unknown) {
     const errorMessage =
       (error as Error).message;
     setUploadMessage(`${operationName} failed: ${errorMessage}`);
     logUploadFailure(updateTaskLog, operationName, logId, errorMessage);
-    updateUploadStatuses(setUploadStatuses, operationName, "failed", {}, errorMessage);
+    if (setUploadStatuses) {
+      updateUploadStatuses(setUploadStatuses, "failed", undefined, errorMessage);
+    }
   } finally {
     setLoading(false);
     if (setIsUploading) setIsUploading(true);

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import ProgressTrackingUI from "./ProgressTrackingUI";
+import { UploadProgressDisplay, BadRowsDetailsTable } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
 
 interface DetailsDisplayUIProps {
   log: any;
@@ -44,7 +44,7 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
     ) {
       // This condition is for the excel upload progress
       return (
-        <ProgressTrackingUI
+        <UploadProgressDisplay
           title={`Upload Progress for Excel File`}
           progress={log.progress}
           total={log.totalFiles}
@@ -168,12 +168,7 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
               {expandedLogId === logKey && parsedBadRows && (
-                <div className="bg-gray-100 p-2 rounded mt-2">
-                  <h5 className="font-semibold">Bad Rows Details:</h5>
-                  <table className="w-full text-sm text-left">
-                    {/* ... bad rows table ... */}
-                  </table>
-                </div>
+                <BadRowsDetailsTable parsedBadRows={parsedBadRows} />
               )}
             </>
           )}
