@@ -29,12 +29,6 @@ export interface UploadStatus {
     id_acno: string;
     page_count_status: string | number;
   }>;
-  totalOriginalFilesProcessed?: number;
-  totalExpectedSplits?: number;
-  totalSplitFilesGenerated?: number;
-  splitErrors?: number;
-  totalExpectedPagesFromCsv?: number;
-  currentlySplittingFiles?: string;
   errorMessage?: string;
 }
 
@@ -54,7 +48,6 @@ export interface FileResponseSummary {
   successfulInserts: number;
   unsuccessfulCount: number;
   totalPageCount: number;
-  totalSplitImages: number;
 }
 
 export interface FileResponse {
@@ -64,14 +57,6 @@ export interface FileResponse {
   processedFile?: string;
   nextContinuationToken?: string;
   summary?: FileResponseSummary;
-  splitSummary?: {
-    totalOriginalFilesProcessed: number;
-    totalExpectedSplits: number;
-    totalSplitFilesGenerated: number;
-    splitErrors: number;
-    totalExpectedPagesFromCsv: number;
-    currentlySplittingFiles?: string;
-  };
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
   splitCount?: SplitCount[];
@@ -103,10 +88,6 @@ export interface TaskLogEntry {
   id: string;
   message: string;
   status: "success" | "failed" | "in-progress";
-  totalRows?: number;
-  successfulRows?: number;
-  badRows?: number;
-  splitSummary?: FileResponse['splitSummary'];
   // Add other properties from FileResponse if they are logged
   originalFile?: string;
   processedFile?: string;
@@ -117,8 +98,6 @@ export interface TaskLogEntry {
   directories?: string[];
   files?: unknown[];
   badRowsFilePath?: string | null;
-  updatedFolioRows?: number;
-  updatedTransactionRows?: number;
   successfulFilesCount?: number;
   failedFilesCount?: number;
 }
