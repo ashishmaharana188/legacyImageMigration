@@ -1,95 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import axios from "axios";
 import UploadAndScriptUI from "../ui/UploadAndScriptUI";
 import { webSocketService } from "../../services/webSocketService";
 
-interface SummaryItem {
-  fileName: string;
-  status: string;
-}
 
-interface SplitFile {
-  originalPath: string;
-  url: string;
-  page: number;
-}
-
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  totalFiles?: number;
-  processedFiles?: number;
-  successfulFiles?: number;
-  errorFiles?: number;
-  notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
-  totalOriginalFilesProcessed?: number;
-  totalExpectedSplits?: number;
-  totalSplitFilesGenerated?: number;
-  splitErrors?: number;
-  totalExpectedPagesFromCsv?: number;
-  currentlySplittingFiles?: string;
-}
-
-interface UploadProgressResponse {
-  totalRows: number;
-  processedRows: number;
-  successfulRows: number;
-  errors: number;
-  notFound: number;
-}
-
-interface FileResponse {
-  statusCode?: number;
-  message?: string;
-  originalFile?: string;
-  processedFile?: string;
-  nextContinuationToken?: string;
-  summary?: {
-    totalRows: number;
-    successfulRows: number;
-    errors: number;
-    notFound: number;
-    successfulInserts: number;
-    unsuccessfulCount: number;
-    totalPageCount: number;
-    totalSplitImages: number;
-  };
-  splitSummary?: {
-    totalOriginalFilesProcessed: number;
-    totalExpectedSplits: number;
-    totalSplitFilesGenerated: number;
-    splitErrors: number;
-    totalExpectedPagesFromCsv: number;
-  };
-  downloadUrl?: string;
-  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitFiles?: SplitFile[];
-  error?: string;
-  directories?: string[];
-  files?: any[];
-  badRowsFilePath?: string | null;
-  updatedFolioRows?: number;
-  updatedTransactionRows?: number;
-  badRows?: number;
-  successfulFilesCount?: number;
-  failedFilesCount?: number;
-}
-
-interface SplitFileResponse extends FileResponse {
-  splitFiles: SplitFile[];
-  message: string;
-}
 
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
@@ -266,127 +179,27 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
 
   const handleFileChange = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      if (event.target.files && event.target.files[0]) {
-        setSelectedFile(event.target.files[0]);
-        setUploadMessage("");
-        setSplitMessage("");
-        setSplitFiles([]);
-      }
+      handleFileChangeUtil(
+        event,
+        setSelectedFile,
+        setUploadMessage,
+        setSplitMessage,
+        setSplitFiles
+      );
     },
     []
   );
 
   const handleUpload = useCallback(async () => {
-    if (!selectedFile) {
-      setUploadMessage("Please select a file first.");
-      return;
-    }
-    clearTaskLog("uploadAndScript");
-    setLoading(true);
-    setIsUploading(true); // Set uploading status to true
-    const uploadLogId = "upload-status";
-    setUploadMessage("Uploading");
-    updateTaskLog("uploadAndScript", {
-      id: uploadLogId,
-      message: "Uploading...",
-      status: "in-progress",
-    });
-
-    // Initialize upload status for the excel file
-    setUploadStatuses((prev) => {
-      const newStatuses = prev.filter(
-        (s) => s.fileName !== "excel_upload_progress"
-      );
-      newStatuses.push({
-        fileName: "excel_upload_progress",
-        status: "Uploading",
-        progress: 0,
-        isDirectory: false,
-      });
-      return newStatuses;
-    });
-
-    const formData = new FormData();
-    formData.append("excel", selectedFile);
-
-    try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-excel",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-type",
-          },
-        }
-      );
-      setUploadMessage(res.data.message || "Upload successful");
-      const { summary, ...restData } = res.data;
-      const totalRows = summary?.totalRows || 0;
-      const successfulRows = summary?.successfulRows || 0;
-      const badRows = summary?.errors || 0; // Assuming 'errors' in summary corresponds to badRows
-
-      let finalMessage = res.data.message || "Upload successful";
-      let finalStatus: "success" | "failed" | "in-progress" = "success";
-
-      if (badRows > 0) {
-        finalMessage = `Upload completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
-        finalStatus = "failed";
-      } else if (totalRows > 0) {
-        finalMessage = `Upload successful. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
-        finalStatus = "success";
-      } else {
-        finalMessage = res.data.message || "No rows processed.";
-        finalStatus = "success";
-      }
-
-      updateTaskLog("uploadAndScript", {
-        id: uploadLogId,
-        message: finalMessage,
-        status: finalStatus,
-        totalRows: totalRows,
-        successfulRows: successfulRows,
-        badRows: badRows,
-        ...restData,
-      });
-
-      // Update upload statuses with detailed summary
-      setUploadStatuses((prev) =>
-        prev.map((s) =>
-          s.fileName === "excel_upload_progress"
-            ? {
-                ...s,
-                status: finalStatus === "success" ? "Done" : "Failed",
-                progress: (successfulRows / totalRows) * 100 || 0,
-                totalFiles: totalRows,
-                processedFiles: successfulRows + badRows,
-                successfulFiles: successfulRows,
-                errorFiles: badRows,
-                notFoundFiles: summary?.notFound || 0,
-              }
-            : s
-        )
-      );
-    } catch (error: any) {
-      const errorMessage = `Upload failed: ${
-        error.response?.data?.message || error.message
-      }`;
-      setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", {
-        id: uploadLogId,
-        message: errorMessage,
-        status: "failed",
-      });
-      setUploadStatuses((prev) =>
-        prev.map((s) =>
-          s.fileName === "excel_upload_progress"
-            ? { ...s, status: "Failed", progress: 0, errorFiles: 1 }
-            : s
-        )
-      );
-    } finally {
-      setLoading(false);
-      setIsUploading(false); // Set uploading status to false
-    }
+    handleUploadUtil(
+      selectedFile,
+      updateTaskLog,
+      clearTaskLog,
+      setUploadMessage,
+      setLoading,
+      setIsUploading,
+      setUploadStatuses
+    );
   }, [selectedFile, updateTaskLog, clearTaskLog]);
 
   const handleSplitFiles = useCallback(async () => {
@@ -604,74 +417,13 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   }, [updateTaskLog, clearTaskLog, setUploadStatuses]);
 
   const handleFallback = useCallback(async () => {
-    if (!selectedFile) {
-      setUploadMessage("Please select a file first.");
-      return;
-    }
-    clearTaskLog("uploadAndScript");
-    setLoading(true);
-    const fallbackLogId = "fallback-status";
-    setUploadMessage("Running fallback...");
-    updateTaskLog("uploadAndScript", {
-      id: fallbackLogId,
-      message: "Running fallback...",
-      status: "in-progress",
-    });
-    const formData = new FormData();
-    formData.append("excel", selectedFile);
-
-    try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/run-fallback",
-        formData,
-        {
-          headers: {
-            "Content-Type": "multipart/form-data",
-          },
-        }
-      );
-      setUploadMessage(res.data.message || "Fallback successful");
-      const { summary, ...restData } = res.data;
-      const totalRows = summary?.totalRows || 0;
-      const successfulRows = summary?.successfulRows || 0;
-      const badRows = summary?.errors || 0; // Assuming 'errors' in summary corresponds to badRows
-
-      let finalMessage = res.data.message || "Fallback successful";
-      let finalStatus: "success" | "failed" | "in-progress" = "success";
-
-      if (badRows > 0) {
-        finalMessage = `Fallback completed: ${successfulRows} Successful, ${badRows} Failed out of ${totalRows} rows.`;
-        finalStatus = "failed";
-      } else if (totalRows > 0) {
-        finalMessage = `Fallback successful. Total rows: ${totalRows}, Successful: ${successfulRows}.`;
-        finalStatus = "success";
-      } else {
-        finalMessage = res.data.message || "No rows processed during fallback.";
-        finalStatus = "success";
-      }
-
-      updateTaskLog("uploadAndScript", {
-        id: fallbackLogId,
-        message: finalMessage,
-        status: finalStatus,
-        totalRows: totalRows,
-        successfulRows: successfulRows,
-        badRows: badRows,
-        ...restData,
-      });
-    } catch (error: any) {
-      const errorMessage = `Fallback failed: ${
-        error.response?.data?.message || error.message
-      }`;
-      setUploadMessage(errorMessage);
-      updateTaskLog("uploadAndScript", {
-        id: fallbackLogId,
-        message: errorMessage,
-        status: "failed",
-      });
-    } finally {
-      setLoading(false);
-    }
+    handleFallbackUtil(
+      selectedFile,
+      updateTaskLog,
+      clearTaskLog,
+      setUploadMessage,
+      setLoading
+    );
   }, [selectedFile, updateTaskLog, clearTaskLog]);
 
   const handleSplitFilesWithMuPDF = useCallback(async () => {

@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { PDFDocument } from "pdf-lib";
 import winston from "winston";
 import { broadcast } from "./webSocketService";
-import { uploadProgress } from "../app";
+
 
 interface ProcessingResult {
   outputFileName: string;
@@ -163,11 +163,7 @@ export class PdfProcessing {
       const currentProcessedRows = rowNumber - 1;
 
       // Update global upload progress
-      uploadProgress.totalRows = lastRow - 1;
-      uploadProgress.processedRows = currentProcessedRows;
-      uploadProgress.successfulRows = successfulRows;
-      uploadProgress.errors = errors + notFound; // Combined errors and notFound
-      uploadProgress.notFound = notFound; // Still track notFound separately if needed elsewhere
+
 
       try { // Re-added try block
         const serverId =
@@ -269,9 +265,7 @@ export class PdfProcessing {
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: "Missing serverId",
             });
-            errors++;
-            uploadProgress.errors = errors;
-            this.logger.info(`Row ${rowNumber}: Missing serverId`);
+
             isValidSmbPath = false;
           }
           if (isValidSmbPath && !drivePath) {
@@ -283,9 +277,7 @@ export class PdfProcessing {
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: "Missing drivePath",
             });
-            errors++;
-            uploadProgress.errors = errors;
-            this.logger.info(`Row ${rowNumber}: Missing drivePath`);
+
             isValidSmbPath = false;
           }
           if (isValidSmbPath && !pathVal) {
@@ -297,9 +289,7 @@ export class PdfProcessing {
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
               page_count: "Missing pathVal",
             });
-            errors++;
-            uploadProgress.errors = errors;
-            this.logger.info(`Row ${rowNumber}: Missing pathVal`);
+
             isValidSmbPath = false;
           }
 
@@ -357,11 +347,7 @@ export class PdfProcessing {
               id_ihno: ihNo,
               id_path: resolvedPathVal,
               id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
-              page_count: "Path Error",
-            });
-            errors++;
-            uploadProgress.errors = errors;
-            continue;
+
           }
           this.logger.info(
             `Row ${rowNumber}: Copying to: ${destinationFilePath}`
@@ -394,9 +380,7 @@ export class PdfProcessing {
               page_count: pageCount,
             });
             if (typeof pageCount === "number") {
-              successfulRows++;
-              uploadProgress.successfulRows = successfulRows;
-              this.logger.info(`Row ${rowNumber}: ${pageCount} pages`);
+
               files.push({
                 row: rowNumber,
                 sourcePath: sourceFilePath,
@@ -404,9 +388,7 @@ export class PdfProcessing {
                 pageCount,
               });
             } else {
-              errors++;
-              uploadProgress.errors = errors;
-              this.logger.info(`Row ${rowNumber}: Unsupported file type`);
+
             }
           } catch (err) {
             this.logger.error(`Row ${rowNumber}: Page count error`, {
@@ -434,8 +416,7 @@ export class PdfProcessing {
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: "Not Found",
           });
-          notFound++;
-          uploadProgress.notFound = notFound;
+
         }
       } catch (err) { // This catch now correctly closes the try block from line 190
         this.logger.error(`Error processing row ${rowNumber}`, { error: err });
