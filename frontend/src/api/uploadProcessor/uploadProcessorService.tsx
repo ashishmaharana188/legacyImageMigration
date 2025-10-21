@@ -1,23 +1,26 @@
 import axios from "axios";
 import { FileResponse } from "./uploadProcessorType";
-import dotenv from "dotenv";
-import os from "os";
-import path from "path";
-import * as fs from "fs";
 
-const userConfigDir = path.join(os.homedir(), ".appConfig");
-const envPath = path.join(userConfigDir);
+let API_BASE_URL: string | undefined;
 
-if (fs.existsSync(envPath)) {
-  dotenv.config({ path: envPath });
-  console.log(`Running UploadProcess on ${process.env.REACT_APP_API_BASE_UR}`);
-}
-const API_BASE_URL = process.env.REACT_APP_API_BASE_URL;
+const initConfiguration = async () => {
+  try {
+    const response = await axios.get<{ apiBaseUrl: string }>("/config");
+    API_BASE_URL = response.data.apiBaseUrl;
+    console.log(`Frontend using API_BASE_URL: ${API_BASE_URL}`);
+  } catch (error) {
+    console.error("Failed to fetch configuration:", error);
+    // Fallback or error handling if config cannot be loaded
+  }
+};
+
+const configPromise = initConfiguration();
 
 export const uploadExcelFile = async (
   endpoint: string,
   selectedFile: File
 ): Promise<FileResponse> => {
+  await configPromise; // Ensure configuration is loaded
   const formData = new FormData();
   formData.append("excel", selectedFile);
 
@@ -37,6 +40,7 @@ export const runFallbackCheck = async (
   endpoint: string,
   selectedFile: File
 ): Promise<FileResponse> => {
+  await configPromise; // Ensure configuration is loaded
   const formData = new FormData();
   formData.append("excel", selectedFile);
 

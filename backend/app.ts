@@ -46,6 +46,10 @@ const port = process.env.NODE_ENV === 'production' ? 3000 : 3001;
 app.use(cors());
 app.use(express.json());
 
+app.get("/config", (req, res) => {
+  res.json({ apiBaseUrl: process.env.REACT_APP_API_BASE_URL });
+});
+
 app.use(uploadProcessRouter);
 
 const startServer = async () => {
