@@ -33,10 +33,12 @@ import express from "express";
 import uploadProcessRouter from "./src/api/uploadProcessor/UploadProcessApp";
 import cors from "cors";
 import { startSshTunnel } from "./services/tunnel";
-import { connectMongo, disconnectMongo } from "./services/mongoDatabase";
-import { warmupPgPool } from "./services/database";
+import { connectMongo, disconnectMongo } from "./controllers/dbConnect"
+import { warmupPgPool } from "./controllers/dbConnect";
 import { verifyS3Connection } from "./services/s3Manager";
 import { initWebSocket } from "./services/webSocketService";
+
+import { Server } from "net";
 
 const app = express();
 const port = process.env.NODE_ENV === 'production' ? 3000 : 3001;
@@ -47,7 +49,7 @@ app.use(express.json());
 app.use(uploadProcessRouter);
 
 const startServer = async () => {
-  let pgServer: unknown;
+  let pgServer: Server | undefined;
 
   if (process.env.USE_SSH_TUNNEL === "true") {
     pgServer = await startSshTunnel();

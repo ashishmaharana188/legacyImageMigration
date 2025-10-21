@@ -41,3 +41,4 @@ temp.txt
 *.njsproj
 *.sln
 *.sw?
+.zed/helium-debug-profile
