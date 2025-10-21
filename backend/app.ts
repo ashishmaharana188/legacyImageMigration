@@ -41,13 +41,19 @@ import { initWebSocket } from "./services/webSocketService";
 import { Server } from "net";
 
 const app = express();
-const port = process.env.NODE_ENV === 'production' ? 3000 : 3001;
+const port = process.env.NODE_ENV === 'production' ? 3000 : 3000;
 
-app.use(cors());
+app.use(cors({
+  origin: process.env.API_FRONTEND_URL || "http://localhost:5173", // Allow requests from frontend
+  credentials: true,
+}));
 app.use(express.json());
 
 app.get("/config", (req, res) => {
-  res.json({ apiBaseUrl: process.env.REACT_APP_API_BASE_URL });
+  res.json({
+    apiBaseUrl: process.env.APP_BACKEND_URL,
+    frontendUrl: process.env.API_FRONTEND_URL,
+  });
 });
 
 app.use(uploadProcessRouter);

@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import UploadAndScriptUI from "../ui/UploadAndScriptUI";
 import { webSocketService } from "../../services/webSocketService";
+import { API_BASE_URL, configPromise } from "../../api/uploadProcessor/uploadProcessorService";
 
 
 
@@ -140,8 +141,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     if (isUploading) {
       interval = setInterval(async () => {
         try {
+          await configPromise;
           const res = await axios.get<UploadProgressResponse>(
-            "http://localhost:3000/upload-progress"
+            `${API_BASE_URL}/upload-progress`
           );
           const { totalRows, processedRows, successfulRows, errors, notFound } =
             res.data;
@@ -234,8 +236,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     });
 
     try {
+      await configPromise;
       const res = await axios.post<SplitFileResponse>(
-        "http://localhost:3000/split-files",
+        `${API_BASE_URL}/split-files`,
         {
           filename: selectedFile.name,
         }
@@ -285,8 +288,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     ]);
 
     try {
+      await configPromise;
       const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-to-s3"
+        `${API_BASE_URL}/upload-to-s3`
       );
       const {
         successfulFilesCount = 0,
@@ -361,8 +365,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       },
     ]);
     try {
+      await configPromise;
       const res = await axios.post<FileResponse>(
-        "http://localhost:3000/upload-split-to-s3",
+        `${API_BASE_URL}/upload-split-to-s3`,
         {}
       );
       const {
@@ -457,8 +462,9 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     });
 
     try {
+      await configPromise;
       const res = await axios.post<SplitFileResponse>(
-        "http://localhost:3000/split-mupdf"
+        `${API_BASE_URL}/split-mupdf`
       );
       setSplitFiles(res.data.splitFiles || []);
       setSplitMessage(res.data.message || "Splitting successful");

@@ -4,13 +4,10 @@ import {
   handleUpload as utilHandleUpload,
   handleFallback as utilHandleFallback,
 } from "./uploadProcessorUtil";
-import { UploadStatus, FileResponse } from "./uploadProcessorType";
+import { UploadStatus } from "./uploadProcessorType";
 import { parseBadRowsCsv } from "./uploadProcessorSumamry";
 import axios from "axios";
 import { TaskLogEntry, UseUploadProcessorProps, BadRow } from "./uploadProcessorType";
-
-
-
 
 export const useUploadProcessorHook = ({
   updateTaskLog,
@@ -70,10 +67,6 @@ export const useUploadProgressSummary = ({
 }: UseUploadProgressSummaryProps) => {
   const [excelProcessingStatus, setExcelProcessingStatus] =
     useState<UploadStatus | null>(null);
-  const [splitSummary, setSplitSummary] = useState<FileResponse['splitSummary'] | null>(null);
-  const [s3UploadStatus, setS3UploadStatus] = useState<UploadStatus | null>(
-    null
-  );
 
   useEffect(() => {
     const excelStatus = uploadStatuses.find(
@@ -81,23 +74,10 @@ export const useUploadProgressSummary = ({
     );
     setExcelProcessingStatus(excelStatus || null);
 
-    const splitLog = taskLogs.uploadAndScript?.find((log) => log.splitSummary);
-    if (splitLog) {
-      setSplitSummary(splitLog.splitSummary);
-    } else {
-      setSplitSummary(null);
-    }
-
-    const s3Status = uploadStatuses.find(
-      (s) => s.fileName === "s3_upload_progress"
-    );
-    setS3UploadStatus(s3Status || null);
   }, [uploadStatuses, taskLogs]);
 
   return {
     excelProcessingStatus,
-    splitSummary,
-    s3UploadStatus,
   };
 };
 

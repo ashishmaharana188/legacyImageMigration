@@ -6,10 +6,10 @@ import { useUploadProcessorHook } from '../api/uploadProcessor/uploadProcessorHo
 
 export const Route = createFileRoute('/upload-script')({
   component: () => {
-    const { updateTaskLog, clearTaskLog, setUploadStatuses } = useTaskLog();
+    const { updateTaskLog, onClearLogs, setUploadStatuses } = useTaskLog();
     const { selectedFile, uploadMessage, loading, isUploading, handleFileChange, handleUpload, handleFallback } = useUploadProcessorHook({
       updateTaskLog,
-      clearTaskLog,
+      clearTaskLog: onClearLogs,
       setUploadStatuses,
     });
 
