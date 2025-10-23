@@ -101,7 +101,7 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
       </DrawerHeader>
       <Divider />
       <List>
-        <Link to="/upload-script" onClick={() => onSelectTask("upload-script")}>
+        <Link to="/upload-processor" onClick={() => onSelectTask("upload-processor")}>
           <SidebarItem
             icon={<UploadFileIcon />}
             text="Upload and Script"

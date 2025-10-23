@@ -5,7 +5,7 @@ import { useUploadProcessorHook } from '../api/uploadProcessor/uploadProcessorHo
 
 
 
-function UploadScriptComponent() {
+function UploadProcessorComponent() {
   const { updateTaskLog, onClearLogs, setUploadStatuses } = useTaskLog();
   const { selectedFile, uploadMessage, loading, isUploading, handleFileChange, handleUpload, handleFallback } = useUploadProcessorHook({
     updateTaskLog,
@@ -28,5 +28,5 @@ function UploadScriptComponent() {
 
 //tanstack setup
 export const Route = createFileRoute('/upload-script')({
-  component: UploadScriptComponent,
+  component: UploadProcessorComponent,
 });

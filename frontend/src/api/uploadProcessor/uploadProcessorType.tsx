@@ -130,6 +130,12 @@ export interface UploadProgressDisplayProps {
   unit?: string;
 }
 
+export interface SummaryDisplayProps {
+  taskLogs: { [key: string]: LogEntry[] };
+  uploadStatuses: UploadStatus[];
+  onClearLogs: (taskKey: string) => void;
+}
+
 export interface UseUploadProgressSummaryProps {
   uploadStatuses: UploadStatus[];
   taskLogs: { [key: string]: LogEntry[] };

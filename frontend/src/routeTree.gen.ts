@@ -9,15 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UploadScriptRouteImport } from './routes/upload-script'
+import { Route as UploadProcessorRouteImport } from './routes/uploadProcessor'
 import { Route as SqlMongoRouteImport } from './routes/sql-mongo'
 import { Route as SanityCheckRouteImport } from './routes/sanity-check'
 import { Route as S3BrowserRouteImport } from './routes/s3-browser'
 import { Route as IndexRouteImport } from './routes/index'
 
-const UploadScriptRoute = UploadScriptRouteImport.update({
-  id: '/upload-script',
-  path: '/upload-script',
+const UploadProcessorRoute = UploadProcessorRouteImport.update({
+  id: '/upload-processor',
+  path: '/upload-processor',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SqlMongoRoute = SqlMongoRouteImport.update({
@@ -87,16 +87,16 @@ export interface RootRouteChildren {
   S3BrowserRoute: typeof S3BrowserRoute
   SanityCheckRoute: typeof SanityCheckRoute
   SqlMongoRoute: typeof SqlMongoRoute
-  UploadScriptRoute: typeof UploadScriptRoute
+  UploadScriptRoute: typeof UploadProcessorRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/upload-script': {
+    '/upload-processor': {
       id: '/upload-script'
       path: '/upload-script'
       fullPath: '/upload-script'
-      preLoaderRoute: typeof UploadScriptRouteImport
+      preLoaderRoute: typeof UploadProcessorRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sql-mongo': {
@@ -135,7 +135,7 @@ const rootRouteChildren: RootRouteChildren = {
   S3BrowserRoute: S3BrowserRoute,
   SanityCheckRoute: SanityCheckRoute,
   SqlMongoRoute: SqlMongoRoute,
-  UploadScriptRoute: UploadScriptRoute,
+  UploadProcessorRoute: UploadProcessorRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

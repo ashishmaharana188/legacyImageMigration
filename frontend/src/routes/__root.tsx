@@ -1,4 +1,4 @@
-import { createRootRoute, Outlet } from '@tanstack/react-router';
+import { createRootRoute } from '@tanstack/react-router';
 import { WebSocketProvider } from '../contexts/WebSocketContext';
 import { TaskLogProvider } from '../contexts/TaskLogContext';
 import App from '../App';

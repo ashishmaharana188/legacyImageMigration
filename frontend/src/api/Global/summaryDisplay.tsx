@@ -1,12 +1,9 @@
 import React from "react";
-import { UploadStatus, LogEntry } from "../uploadProcessor/uploadProcessorType";
+import {SummaryDisplayProps } from "../uploadProcessor/uploadProcessorType";
 import { useUploadProgressSummary } from "../uploadProcessor/uploadProcessorHook";
 import { UploadProgressDisplay } from "../uploadProcessor/uploadProcessorSummaryUI";
 
-interface SummaryDisplayProps {
-  taskLogs: { [key: string]: LogEntry[] };
-  uploadStatuses: UploadStatus[];
-}
+
 
 export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
