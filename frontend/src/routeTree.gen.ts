@@ -46,14 +46,14 @@ export interface FileRoutesByFullPath {
   '/s3-browser': typeof S3BrowserRoute
   '/sanity-check': typeof SanityCheckRoute
   '/sql-mongo': typeof SqlMongoRoute
-  '/upload-script': typeof UploadScriptRoute
+  '/upload-processor': typeof UploadScriptRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/s3-browser': typeof S3BrowserRoute
   '/sanity-check': typeof SanityCheckRoute
   '/sql-mongo': typeof SqlMongoRoute
-  '/upload-script': typeof UploadScriptRoute
+  '/upload-processor': typeof UploadScriptRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -61,7 +61,7 @@ export interface FileRoutesById {
   '/s3-browser': typeof S3BrowserRoute
   '/sanity-check': typeof SanityCheckRoute
   '/sql-mongo': typeof SqlMongoRoute
-  '/upload-script': typeof UploadScriptRoute
+  '/upload-processor': typeof UploadScriptRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -70,16 +70,16 @@ export interface FileRouteTypes {
     | '/s3-browser'
     | '/sanity-check'
     | '/sql-mongo'
-    | '/upload-script'
+    | '/upload-processor'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/s3-browser' | '/sanity-check' | '/sql-mongo' | '/upload-script'
+  to: '/' | '/s3-browser' | '/sanity-check' | '/sql-mongo' | '/upload-processor'
   id:
     | '__root__'
     | '/'
     | '/s3-browser'
     | '/sanity-check'
     | '/sql-mongo'
-    | '/upload-script'
+    | '/upload-processor'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -87,15 +87,15 @@ export interface RootRouteChildren {
   S3BrowserRoute: typeof S3BrowserRoute
   SanityCheckRoute: typeof SanityCheckRoute
   SqlMongoRoute: typeof SqlMongoRoute
-  UploadScriptRoute: typeof UploadProcessorRoute
+  UploadprocessorRoute: typeof UploadProcessorRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
     '/upload-processor': {
-      id: '/upload-script'
-      path: '/upload-script'
-      fullPath: '/upload-script'
+      id: '/upload-processor'
+      path: '/upload-processor'
+      fullPath: '/upload-processor'
       preLoaderRoute: typeof UploadProcessorRouteImport
       parentRoute: typeof rootRouteImport
     }
