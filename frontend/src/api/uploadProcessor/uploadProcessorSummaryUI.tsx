@@ -1,5 +1,5 @@
 import React from "react";
-import { FileResponse,UploadProgressDisplayProps, BadRow} from "./uploadProcessorType";
+import {UploadProgressDisplayProps} from "./uploadProcessorType";
 
 
 export const UploadProgressDisplay: React.FC<UploadProgressDisplayProps> = ({
@@ -107,109 +107,6 @@ export const UploadProgressDisplay: React.FC<UploadProgressDisplayProps> = ({
           </div>
         )}
       </div>
-    </div>
-  );
-};
-
-interface SplitSummaryDisplayProps {
-  title: string;
-  splitSummary: FileResponse['splitSummary'];
-}
-
-export const SplitSummaryDisplay: React.FC<SplitSummaryDisplayProps> = ({
-  title,
-  splitSummary,
-}) => {
-  if (!splitSummary) return null;
-
-  const progress = splitSummary.totalExpectedSplits > 0
-    ? (splitSummary.totalSplitFilesGenerated / splitSummary.totalExpectedSplits) * 100
-    : 0;
-  const percentage = Math.round(progress);
-
-  return (
-    <div className="mt-4">
-      <h5 className="font-semibold">{title}</h5>
-      <div className="bg-gray-100 p-2 rounded">
-        <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
-          <div
-            className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-            style={{ width: `${percentage}%` }}
-          >
-            {percentage}%
-          </div>
-        </div>
-        <div className="text-sm">
-          <p>
-            <strong>Total Expected Splits:</strong> {splitSummary.totalExpectedSplits}
-          </p>
-          <p>
-            <strong>Total Split Files Generated:</strong> {splitSummary.totalSplitFilesGenerated}
-          </p>
-          <p>
-            <strong>Split Errors:</strong> {splitSummary.splitErrors}
-          </p>
-          <p>
-            <strong>Currently Splitting:</strong> {splitSummary.currentlySplittingFiles}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-interface BadRowsDetailsTableProps {
-  parsedBadRows: BadRow[] | null;
-}
-
-export const BadRowsDetailsTable: React.FC<BadRowsDetailsTableProps> = ({
-  parsedBadRows,
-}) => {
-  if (!parsedBadRows || parsedBadRows.length === 0) return null;
-
-  return (
-    <div className="bg-gray-100 p-2 rounded mt-2">
-      <h5 className="font-semibold">Bad Rows Details:</h5>
-      <table className="w-full text-sm text-left">
-        <thead className="text-xs uppercase bg-gray-50">
-          <tr>
-            <th scope="col" className="px-2 py-1">
-              Row Number
-            </th>
-            <th scope="col" className="px-2 py-1">
-              ID Fund
-            </th>
-            <th scope="col" className="px-2 py-1">
-              ID Trtype
-            </th>
-            <th scope="col" className="px-2 py-1">
-              ID IHNO
-            </th>
-            <th scope="col" className="px-2 py-1">
-              ID Path
-            </th>
-            <th scope="col" className="px-2 py-1">
-              ID ACNO
-            </th>
-            <th scope="col" className="px-2 py-1">
-              Page Count Status
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {parsedBadRows.map((row, index) => (
-            <tr key={index} className="bg-white border-b">
-              <td className="px-2 py-1">{row.rowNumber}</td>
-              <td className="px-2 py-1">{row.id_fund}</td>
-              <td className="px-2 py-1">{row.id_trtype}</td>
-              <td className="px-2 py-1">{row.id_ihno}</td>
-              <td className="px-2 py-1">{row.id_path}</td>
-              <td className="px-2 py-1">{row.id_acno}</td>
-              <td className="px-2 py-1">{row.page_count_status}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 };

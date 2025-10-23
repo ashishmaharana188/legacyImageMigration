@@ -129,3 +129,14 @@ export interface UploadProgressDisplayProps {
   displayType?: "aggregate" | "default";
   unit?: string;
 }
+
+export interface UseUploadProgressSummaryProps {
+  uploadStatuses: UploadStatus[];
+  taskLogs: { [key: string]: LogEntry[] };
+}
+
+export type LogEntry =
+  | string
+  | TaskLogEntry
+  | FileResponse
+  | UploadProgressResponse

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import Sidebar from "./components/ui/Sidebar";
-import SummaryDisplay from "./components/ui/SummaryDisplay";
+import { SummaryDisplay } from "./api/Global/summaryDisplay";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Outlet } from "@tanstack/react-router";
 import { useTaskLog } from "./contexts/TaskLogContext";

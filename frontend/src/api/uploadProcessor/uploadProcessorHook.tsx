@@ -1,13 +1,11 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect} from "react";
 import {
   handleFileChange as utilHandleFileChange,
   handleUpload as utilHandleUpload,
   handleFallback as utilHandleFallback,
 } from "./uploadProcessorUtil";
 import { UploadStatus } from "./uploadProcessorType";
-import { parseBadRowsCsv } from "./uploadProcessorSumamry";
-import axios from "axios";
-import { TaskLogEntry, UseUploadProcessorProps, BadRow } from "./uploadProcessorType";
+import { UseUploadProcessorProps, UseUploadProgressSummaryProps} from "./uploadProcessorType";
 
 export const useUploadProcessorHook = ({
   updateTaskLog,
@@ -56,11 +54,6 @@ export const useUploadProcessorHook = ({
   };
 };
 
-interface UseUploadProgressSummaryProps {
-  uploadStatuses: UploadStatus[];
-  taskLogs: { [key: string]: TaskLogEntry[] };
-}
-
 export const useUploadProgressSummary = ({
   uploadStatuses,
   taskLogs,
@@ -78,34 +71,5 @@ export const useUploadProgressSummary = ({
 
   return {
     excelProcessingStatus,
-  };
-};
-
-
-export const useBadRowsDisplay = () => {
-  const [parsedBadRows, setParsedBadRows] = useState<BadRow[] | null>([]);
-  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
-
-  const toggleBadRowsDisplay = useCallback(async (filePath: string, currentLogId: string) => {
-    if (expandedLogId === currentLogId) {
-      setParsedBadRows(null);
-      setExpandedLogId(null);
-    } else {
-      try {
-        const res = await axios.get(`http://localhost:3000/download-generated-file/${filePath}`);
-        setParsedBadRows(parseBadRowsCsv(res.data));
-        setExpandedLogId(currentLogId);
-      } catch (error) {
-        console.error("Failed to fetch bad rows content:", error);
-        setParsedBadRows(null);
-        setExpandedLogId(currentLogId);
-      }
-    }
-  }, [expandedLogId]);
-
-  return {
-    parsedBadRows,
-    expandedLogId,
-    toggleBadRowsDisplay,
   };
 };

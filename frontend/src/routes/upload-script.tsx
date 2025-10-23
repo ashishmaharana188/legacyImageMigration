@@ -4,25 +4,29 @@ import { useTaskLog } from '../contexts/TaskLogContext';
 import { useUploadProcessorHook } from '../api/uploadProcessor/uploadProcessorHook';
 
 
-export const Route = createFileRoute('/upload-script')({
-  component: () => {
-    const { updateTaskLog, onClearLogs, setUploadStatuses } = useTaskLog();
-    const { selectedFile, uploadMessage, loading, isUploading, handleFileChange, handleUpload, handleFallback } = useUploadProcessorHook({
-      updateTaskLog,
-      clearTaskLog: onClearLogs,
-      setUploadStatuses,
-    });
 
-    return (
-      <UploadProcessorUI
-        selectedFile={selectedFile}
-        uploadMessage={uploadMessage}
-        loading={loading}
-        isUploading={isUploading}
-        handleFileChange={handleFileChange}
-        handleUpload={handleUpload}
-        handleFallback={handleFallback}
-      />
-    );
-  },
+function UploadScriptComponent() {
+  const { updateTaskLog, onClearLogs, setUploadStatuses } = useTaskLog();
+  const { selectedFile, uploadMessage, loading, isUploading, handleFileChange, handleUpload, handleFallback } = useUploadProcessorHook({
+    updateTaskLog,
+    clearTaskLog: onClearLogs,
+    setUploadStatuses,
+  });
+
+  return (
+    <UploadProcessorUI
+      selectedFile={selectedFile}
+      uploadMessage={uploadMessage}
+      loading={loading}
+      isUploading={isUploading}
+      handleFileChange={handleFileChange}
+      handleUpload={handleUpload}
+      handleFallback={handleFallback}
+    />
+  );
+}
+
+//tanstack setup
+export const Route = createFileRoute('/upload-script')({
+  component: UploadScriptComponent,
 });
