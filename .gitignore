@@ -10,6 +10,7 @@ lerna-debug.log*
 .gemini
 New folder
 error.txt
+.zed
 
 localFiles
 node_modules
