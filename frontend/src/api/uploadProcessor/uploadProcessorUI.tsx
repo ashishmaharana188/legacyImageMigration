@@ -1,17 +1,9 @@
 import React from "react";
+import {uploadProcessorUIProps} from "./uploadProcessorType"
 
 
-interface UploadProgressUIProps {
-  selectedFile: File | null;
-  uploadMessage: string;
-  loading: boolean;
-  isUploading: boolean;
-  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleUpload: () => Promise<void>;
-  handleFallback: () => Promise<void>;
-}
 
-const UploadProgressUI: React.FC<UploadProgressUIProps> = ({
+const UploadProcessorUI: React.FC<uploadProcessorUIProps> = ({
   selectedFile,
   uploadMessage,
   loading,
@@ -66,4 +58,4 @@ const UploadProgressUI: React.FC<UploadProgressUIProps> = ({
   );
 };
 
-export default UploadProgressUI;
+export default UploadProcessorUI;

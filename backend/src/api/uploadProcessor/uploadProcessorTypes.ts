@@ -23,24 +23,16 @@ export interface ProcessExcelRowsResult extends ProcessedSummary {
   processedRows: ProcessedRow[];
 }
 
-export interface SplitCount {
-  row: number;
-  sourcePath: string;
-  destinationPath: string;
-  pageCount: number | string;
-}
 
 export interface ProcessExcelRowsResult extends ProcessedSummary {
   // Added properties to match the required return from processExcelRows
   processedRows: ProcessedRow[];
-  splitCount: SplitCount[];
 }
 
 export interface ProcessedExcelFileResult {
   outputFileName: string;
   summary: ProcessedSummary;
   processedRows: ProcessedRow[];
-  splitCount: SplitCount[];
 }
 
 export interface RequestConfig {

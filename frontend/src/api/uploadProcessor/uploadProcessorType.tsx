@@ -1,14 +1,18 @@
+export interface uploadProcessorUIProps {
+  selectedFile: File | null;
+  uploadMessage: string;
+  loading: boolean;
+  isUploading: boolean;
+  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleUpload: () => Promise<void>;
+  handleFallback: () => Promise<void>;
+}
+
 export interface SummaryItem {
   fileName: string;
   status: string;
 }
 
-export interface SplitCount {
-  row: number;
-  sourcePath: string;
-  destinationPath: string;
-  pageCount: number | string;
-}
 
 export interface UploadStatus {
   fileName: string;
@@ -59,7 +63,6 @@ export interface FileResponse {
   summary?: FileResponseSummary;
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitCount?: SplitCount[];
   error?: string;
   directories?: string[];
   files?: unknown[];
@@ -93,7 +96,6 @@ export interface TaskLogEntry {
   processedFile?: string;
   downloadUrl?: string;
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  splitCount?: SplitCount[];
   error?: string;
   directories?: string[];
   files?: unknown[];
@@ -111,7 +113,7 @@ export interface BadRow {
   id_acno: string;
   page_count_status: string;
 }
-export interface UseUploadProcessorProps {
+export interface useUploadProcessorProps {
   updateTaskLog: (task: string, log: unknown) => void;
   clearTaskLog: (task: string) => void;
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
@@ -136,7 +138,7 @@ export interface SummaryDisplayProps {
   onClearLogs: (taskKey: string) => void;
 }
 
-export interface UseUploadProgressSummaryProps {
+export interface useUploadProgressSummaryProps {
   uploadStatuses: UploadStatus[];
   taskLogs: { [key: string]: LogEntry[] };
 }

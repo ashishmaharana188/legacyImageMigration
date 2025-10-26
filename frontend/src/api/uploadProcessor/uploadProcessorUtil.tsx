@@ -1,5 +1,4 @@
 import React from "react";
-
 import { UploadStatus, FileResponse, RequestConfig } from "./uploadProcessorType";
 import { uploadExcelFile, runFallbackCheck } from "./uploadProcessorService";
 import { logUploadStart, logUploadSuccess, logUploadFailure, updateUploadStatuses } from "./uploadProcessorLog";

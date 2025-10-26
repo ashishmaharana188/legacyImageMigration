@@ -9,11 +9,12 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UploadProcessorRouteImport } from './routes/uploadProcessor'
+import { Route as UploadProcessorRouteImport } from './routes/uploadProcessorRouter'
 import { Route as SqlMongoRouteImport } from './routes/sql-mongo'
 import { Route as SanityCheckRouteImport } from './routes/sanity-check'
 import { Route as S3BrowserRouteImport } from './routes/s3-browser'
 import { Route as IndexRouteImport } from './routes/index'
+import (Route as SplitProcessorRouterImport) "./routes/splitProcessorRouter"
 
 const UploadProcessorRoute = UploadProcessorRouteImport.update({
   id: '/upload-processor',

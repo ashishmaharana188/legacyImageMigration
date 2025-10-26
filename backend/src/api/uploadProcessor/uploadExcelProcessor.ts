@@ -2,7 +2,6 @@
 import {
   ProcessedRow,
   ProcessExcelRowsResult,
-  SplitCount,
 } from "../uploadProcessor/uploadProcessorTypes";
 import { buildDestinationFilePath } from "./uploadProcessorUtil";
 import ExcelJS from "exceljs";
@@ -24,7 +23,6 @@ export async function processExcelRows(
   let errors = 0;
   const notFound = 0;
   const processedRows: ProcessedRow[] = [];
-  const splitCount: SplitCount[] = [];
 
   const lastRow = worksheet.rowCount;
   logger.info("Total rows to process:", { lastRow });
@@ -253,15 +251,6 @@ export async function processExcelRows(
             id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
             page_count: pageCount,
           });
-          if (typeof pageCount === "number") {
-
-            splitCount.push({
-              row: rowNumber,
-              sourcePath: sourceFilePath,
-              destinationPath: destinationFilePath,
-              pageCount,
-            });
-          }
 
         } catch (err) {
           logger.error(`Row ${rowNumber}: Page count error`, {
@@ -302,8 +291,6 @@ export async function processExcelRows(
 
   }
 
-  //**Reset upload progress after completion
-
 
 
   }
@@ -313,7 +300,6 @@ export async function processExcelRows(
     successfulRows,
     errors,
     notFound,
-    splitCount,
     processedRows,
   };
 }

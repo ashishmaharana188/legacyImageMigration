@@ -14,15 +14,17 @@ function UploadProcessorComponent() {
   });
 
   return (
-    <UploadProcessorUI
-      selectedFile={selectedFile}
-      uploadMessage={uploadMessage}
-      loading={loading}
-      isUploading={isUploading}
-      handleFileChange={handleFileChange}
-      handleUpload={handleUpload}
-      handleFallback={handleFallback}
+
+     <UploadProcessorUI
+        selectedFile={selectedFile}
+        uploadMessage={uploadMessage}
+        loading={loading}
+        isUploading={isUploading}
+        handleFileChange={handleFileChange}
+        handleUpload={handleUpload}
+        handleFallback={handleFallback}
     />
+
   );
 }
 

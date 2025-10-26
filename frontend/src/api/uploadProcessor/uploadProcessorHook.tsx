@@ -5,13 +5,13 @@ import {
   handleFallback as utilHandleFallback,
 } from "./uploadProcessorUtil";
 import { UploadStatus } from "./uploadProcessorType";
-import { UseUploadProcessorProps, UseUploadProgressSummaryProps} from "./uploadProcessorType";
+import { useUploadProcessorProps, useUploadProgressSummaryProps} from "./uploadProcessorType";
 
 export const useUploadProcessorHook = ({
   updateTaskLog,
   clearTaskLog,
   setUploadStatuses,
-}: UseUploadProcessorProps) => {
+}: useUploadProcessorProps) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadMessage, setUploadMessage] = useState<string>("");
   const [loading, setLoading] = useState<boolean>(false);
@@ -57,7 +57,7 @@ export const useUploadProcessorHook = ({
 export const useUploadProgressSummary = ({
   uploadStatuses,
   taskLogs,
-}: UseUploadProgressSummaryProps) => {
+}: useUploadProgressSummaryProps) => {
   const [excelProcessingStatus, setExcelProcessingStatus] =
     useState<UploadStatus | null>(null);
 
