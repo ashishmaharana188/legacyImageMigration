@@ -4,10 +4,12 @@ import {
   DeleteObjectsCommand,
   ObjectIdentifier,
   ListBucketsCommand,
+  ListObjectsV2CommandOutput,
 } from "@aws-sdk/client-s3";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import https from "https";
 import { S3_BUCKET_NAME } from "../utils/s3Config";
+import logger from "../utils/logger";
 
 const agent = new https.Agent({
   maxSockets: 200,
@@ -244,4 +246,124 @@ export async function searchFolders(
       throw err;
     }
   }
+}
+
+export async function listAllFoldersAndFileCounts(
+  basePrefix: string
+): Promise<Map<string, number>> {
+  const folderFileCounts = new Map<string, number>();
+  const uniqueFolders = new Set<string>();
+  let continuationToken: string | undefined = undefined;
+
+  logger.debug({
+    category: "s3-operations",
+    function: "listAllFoldersAndFileCounts",
+    message: `Starting iterative listing for base prefix: ${basePrefix}`,
+  });
+
+  do {
+    logger.debug({
+      category: "s3-operations",
+      function: "listAllFoldersAndFileCounts",
+      message: `Fetching objects for prefix: ${basePrefix}, continuationToken: ${continuationToken || "none"}`,
+    });
+
+    const command = new ListObjectsV2Command({
+      Bucket: S3_BUCKET_NAME,
+      Prefix: basePrefix,
+      // No Delimiter here to get all objects (files and 'subfolders' as full keys)
+      ContinuationToken: continuationToken,
+      MaxKeys: 1000, // Fetch up to 1000 keys per request
+    });
+
+    try {
+      const response: ListObjectsV2CommandOutput = await s3.send(command);
+      const { Contents, CommonPrefixes, NextContinuationToken } = response;
+
+      logger.debug({
+        category: "s3-operations",
+        function: "listAllFoldersAndFileCounts",
+        message: `Received S3 response. Files: ${Contents?.length || 0}, CommonPrefixes: ${CommonPrefixes?.length || 0}`,
+      });
+
+      // Process files (Contents)
+      if (Contents) {
+        for (const content of Contents) {
+          if (content.Key && content.Key !== basePrefix) { // Exclude the base prefix itself if it's a 'file' representation
+            // Extract the parent folder for the file
+            const lastSlashIndex = content.Key.lastIndexOf('/');
+            let parentFolder = '';
+            if (lastSlashIndex > -1) {
+              parentFolder = content.Key.substring(0, lastSlashIndex + 1); // Include the trailing slash
+            } else {
+              // If no slash, it's a file directly under the basePrefix (root of the current listing)
+              parentFolder = basePrefix; // Or '' if you want to represent root as empty string
+            }
+
+            // Ensure the parent folder is in our unique set
+            if (parentFolder) {
+              uniqueFolders.add(parentFolder);
+            }
+
+            // Increment file count for the parent folder, but only if it's an actual file (not a folder marker)
+            if (!content.Key.endsWith('/')) { // Only count actual files
+              folderFileCounts.set(parentFolder, (folderFileCounts.get(parentFolder) || 0) + 1);
+            }
+          }
+        }
+      }
+
+      // Process common prefixes (explicitly listed directories if Delimiter was used, but we're not using it here)
+      // However, if S3 returns CommonPrefixes even without Delimiter (e.g., for empty folders), we should add them.
+      if (CommonPrefixes) {
+        for (const commonPrefix of CommonPrefixes) {
+          if (commonPrefix.Prefix) {
+            uniqueFolders.add(commonPrefix.Prefix);
+          }
+        }
+      }
+
+      continuationToken = NextContinuationToken;
+      logger.debug({
+        category: "s3-operations",
+        function: "listAllFoldersAndFileCounts",
+        message: `Next continuation token: ${continuationToken || "none"}`,
+      });
+
+    } catch (err: any) {
+      if (isAuthError(err)) {
+        logger.error({
+          category: "s3-operations",
+          function: "listAllFoldersAndFileCounts",
+          message: "S3 listAllFoldersAndFileCounts failed: Authentication token expired or invalid.",
+          error: err.message,
+        });
+        throw new Error("S3 operation failed due to expired or invalid credentials.");
+      } else {
+        logger.error({
+          category: "s3-operations",
+          function: "listAllFoldersAndFileCounts",
+          message: "S3 listAllFoldersAndFileCounts error during S3 API call.",
+          error: err.message,
+          stack: err.stack,
+        });
+        throw err; // Re-throw to be handled by controller
+      }
+    }
+  } while (continuationToken);
+
+  // Ensure all identified folders are in the map, even if they have 0 files
+  for (const folder of uniqueFolders) {
+    if (!folderFileCounts.has(folder)) {
+      folderFileCounts.set(folder, 0);
+    }
+  }
+
+  logger.debug({
+    category: "s3-operations",
+    function: "listAllFoldersAndFileCounts",
+    message: `Finished iterative listing for base prefix: ${basePrefix}. Total unique folders: ${uniqueFolders.size}, Total folders with counts: ${folderFileCounts.size}`,
+  });
+
+  return folderFileCounts;
 }

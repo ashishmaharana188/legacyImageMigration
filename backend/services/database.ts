@@ -1642,7 +1642,7 @@ SELECT DISTINCT
           cm.client_code
         FROM investor.aif_document_details add
         JOIN fund.client_master cm ON add.client_id = cm.id
-        WHERE add.user_attr2 = ANY($1::text[]) and created_by = 'system'
+        WHERE add.user_attr2 = ANY($1::text[])
       `;
       const queryParams: any[] = [processedFolioNumbers];
 

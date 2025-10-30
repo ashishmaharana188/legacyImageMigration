@@ -19,11 +19,112 @@ import {
   deleteFiles,
   searchFiles,
   searchFolders,
+  listAllFoldersAndFileCounts,
 } from "../services/s3Manager";
 import logger from "../utils/logger";
 import { uploadProgress } from "../app"; // Import uploadProgress
 
 class FileController {
+  async generateS3Report(req: Request, res: Response) {
+    try {
+      const { prefix } = req.body;
+      logger.info({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: `Initiating S3 report generation for prefix: ${prefix}`,
+      });
+
+      if (typeof prefix !== "string") {
+        logger.warn({
+          category: "api-calls",
+          function: "generateS3Report",
+          message: "Invalid prefix provided for S3 report generation.",
+        });
+        return res.status(400).json({
+          statusCode: 400,
+          error: "Invalid prefix provided. Prefix must be a string.",
+        });
+      }
+
+      logger.debug({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: `Calling listAllFoldersAndFileCounts for prefix: ${prefix}`,
+      });
+      const folderFileCounts = await listAllFoldersAndFileCounts(prefix);
+      logger.debug({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: `Received ${folderFileCounts.size} folders with file counts.`,
+      });
+
+      let csvContent = "Folder,File Count\n";
+      logger.debug({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: "Starting CSV content generation.",
+      });
+      folderFileCounts.forEach((count, folder) => {
+        csvContent += `${folder},${count}\n`;
+      });
+      logger.debug({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: "Finished CSV content generation.",
+      });
+
+      const reportFileName = `s3_report_${prefix.replace(/\//g, "_") || "root"}.csv`;
+      const logDirPath = path.join(__dirname, "..", "logs");
+      const reportFilePath = path.join(logDirPath, reportFileName);
+
+      // Ensure the logs directory exists
+      await fs.mkdir(logDirPath, { recursive: true });
+
+      // Save the CSV content to a file on the backend
+      await fs.writeFile(reportFilePath, csvContent);
+      logger.info({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: `S3 report saved to backend: ${reportFilePath}`,
+      });
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${reportFileName}"`);
+      logger.debug({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: `Sending S3 report CSV for prefix: ${prefix}, filename: ${reportFileName}`,
+        csvSize: csvContent.length, // Log the size of the CSV content
+      });
+      res.status(200).send(csvContent);
+
+      logger.info({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: `S3 report generated successfully for prefix: ${prefix}`,
+      });
+    } catch (error: any) {
+      const errorMessage =
+        error.message && error.message.includes("expired credentials")
+          ? "S3 report generation failed: Authentication token expired. Please refresh your credentials."
+          : error instanceof Error
+          ? error.message
+          : "Unknown error";
+      logger.error({
+        category: "api-calls",
+        function: "generateS3Report",
+        message: "Failed to generate S3 report",
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      res.status(500).json({
+        statusCode: 500,
+        error: "Failed to generate S3 report",
+        details: errorMessage,
+      });
+    }
+  }
+
   async processExcelFile(req: Request, res: Response) {
     try {
       logger.info({

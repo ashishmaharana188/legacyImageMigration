@@ -24,6 +24,7 @@ interface S3BrowserUIProps {
   handleDirectoryClick: (directoryKey: string) => void;
   handleBreadcrumbClick: (index: number) => void;
   handleReload: () => void;
+  handleGenerateReport: () => Promise<void>;
 }
 
 const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
@@ -44,6 +45,7 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   handleDirectoryClick,
   handleBreadcrumbClick,
   handleReload,
+  handleGenerateReport,
 }) => {
   return (
     <div className="mt-8 w-full">
@@ -58,6 +60,9 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
             className="btn"
           >
             {isFilterMode ? "Cancel Search" : "Search"}
+          </button>
+          <button onClick={handleGenerateReport} className="btn" disabled={isLoading}>
+            Generate Report
           </button>
         </div>
       </div>
