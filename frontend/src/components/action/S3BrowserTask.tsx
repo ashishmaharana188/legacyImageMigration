@@ -168,6 +168,49 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
     refetchS3Objects();
   }, [refetchS3Objects]);
 
+  const handleGenerateReport = useCallback(async () => {
+    updateTaskLog("s3Browser", { message: `Generating report for prefix: ${currentPrefix}` });
+    try {
+      const response = await axios.post("http://localhost:3000/s3-generate-report", {
+        prefix: currentPrefix,
+      }, {
+        responseType: 'blob', // Important for downloading files
+      });
+
+      // Create a blob from the response data
+      const blob = new Blob([response.data], { type: "text/csv" });
+
+      // Create a link element
+      const link = document.createElement('a');
+      link.href = window.URL.createObjectURL(blob);
+      link.download = `s3_report_${currentPrefix.replace(/\//g, "_") || "root"}.csv`;
+
+      // Append to the document body and click it to trigger the download
+      document.body.appendChild(link);
+      link.click();
+
+      // Clean up
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(link.href);
+
+      updateTaskLog("s3Browser", { message: "S3 report generated and downloaded successfully." });
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        updateTaskLog("s3Browser", {
+          message: `Failed to generate S3 report: ${
+            error.response?.data?.error || "An unknown error occurred."
+          }`,
+        });
+      } else {
+        updateTaskLog("s3Browser", {
+          message: `Failed to generate S3 report: An unknown error occurred.`,
+        });
+      }
+    } finally {
+      updateTaskLog("s3Browser", { message: "Report generation process finished." });
+    }
+  }, [currentPrefix, updateTaskLog]);
+
   return (
     <S3BrowserUI
       items={allS3Items}
@@ -187,6 +230,7 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
       handleDirectoryClick={handleDirectoryClick}
       handleBreadcrumbClick={handleBreadcrumbClick}
       handleReload={handleReload}
+      handleGenerateReport={handleGenerateReport}
     />
   );
 };

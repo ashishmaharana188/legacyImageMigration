@@ -1,13 +1,53 @@
 {
-  "version": "0.2.0",
-  "configurations": [
-    {
-      "name": "Launch chrome with Custom Directory",
-      "type": "chrome",
-      "request": "launch",
-      "url": "http://localhost:5174", // Your app URL or server address
-      "webRoot": "${workspaceFolder}",
-      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
-    }
-  ]
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Chrome (Dev)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/frontend",
+            "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+        },
+        {
+            "name": "Launch Chrome (Prod)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/frontend",
+            "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+        },
+        {
+            "name": "Launch Helium (Dev)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "C:\\Users\\Ashish Maharana\\AppData\\Local\\imput\\Helium\\Application\\chrome.exe",
+            "runtimeArgs": [
+                "--remote-debugging-port=9222",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--user-data-dir=${workspaceFolder}/.zed/helium-debug-profile"
+            ],
+            "userDataDir": false,
+            "sourceMaps": true
+        },
+        {
+            "name": "Launch Helium (Prod)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "C:\\Users\\Ashish Maharana\\AppData\\Local\\imput\\Helium\\Application\\chrome.exe",
+            "runtimeArgs": [
+                "--remote-debugging-port=9222",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--user-data-dir=${workspaceFolder}/.zed/helium-debug-profile"
+            ],
+            "userDataDir": false,
+            "sourceMaps": true
+        }
+    ]
 }

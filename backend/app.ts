@@ -169,6 +169,7 @@ app.get("/s3-list-objects", fileController.listS3Files);
 app.post("/s3-delete-object", fileController.deleteS3Files);
 app.get("/s3-search-files", fileController.searchS3Files);
 app.get("/s3-search-folders", fileController.searchS3Folders);
+app.post("/s3-generate-report", fileController.generateS3Report);
 app.post("/reconnect", fileController.reconnect);
 
 const startServer = async () => {

@@ -10,7 +10,9 @@ lerna-debug.log*
 .gemini
 New folder
 error.txt
+<<<<<<< HEAD
 queue db
+.zed
 localFiles
 node_modules
 dist

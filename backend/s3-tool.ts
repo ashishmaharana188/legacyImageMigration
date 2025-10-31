@@ -1,6 +1,7 @@
-import { listFiles, deleteFiles } from "./services/s3Manager";
+import { listFiles, deleteFiles, listAllFoldersAndFileCounts } from "./services/s3Manager";
 import * as readline from "readline";
 import "dotenv/config";
+import * as fs from "fs/promises";
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -10,7 +11,7 @@ const rl = readline.createInterface({
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 2) {
-    console.log("Usage: ts-node s3-tool.ts <list> <prefix>");
+    console.log("Usage: ts-node s3-tool.ts <list|report> <prefix>");
     process.exit(1);
   }
 
@@ -35,9 +36,26 @@ async function main() {
     }
 
     rl.close();
+  } else if (command === "report") {
+    console.log(`Generating report for prefix: ${prefix}`);
+    const folderFileCounts = await listAllFoldersAndFileCounts(prefix);
+
+    let csvContent = "Folder,File Count\n";
+    folderFileCounts.forEach((count, folder) => {
+      csvContent += `${folder},${count}\n`;
+    });
+
+    const reportFileName = `s3_report_${prefix.replace(/\//g, "_") || "root"}.csv`;
+    const reportFilePath = `./${reportFileName}`;
+
+    // Using fs.promises.writeFile for writing the file
+    const fs = require('fs').promises;
+    await fs.writeFile(reportFilePath, csvContent);
+    console.log(`Report successfully generated at ${reportFilePath}`);
+    rl.close();
   } else {
     console.log(`Unknown command: ${command}`);
-    console.log("Usage: ts-node s3-tool.ts <list> <prefix>");
+    console.log("Usage: ts-node s3-tool.ts <list|report> <prefix>");
     process.exit(1);
   }
 }
