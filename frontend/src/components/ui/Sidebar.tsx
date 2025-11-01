@@ -8,6 +8,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StorageIcon from "@mui/icons-material/Storage";
 import BugReportIcon from "@mui/icons-material/BugReport";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import CallSplitIcon from "@mui/icons-material/CallSplit"; // Added for Split Processor
 import SidebarItem from "./SidebarItem";
 import { Link } from "@tanstack/react-router";
 
@@ -104,7 +105,14 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
         <Link to="/uploadProcessorRouter" onClick={() => onSelectTask("upload-processor")}>
           <SidebarItem
             icon={<UploadFileIcon />}
-            text="Upload and Script"
+            text="Upload Processor"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link to="/splitProcessorRouter" onClick={() => onSelectTask("split-processor")}>
+          <SidebarItem
+            icon={<CallSplitIcon />}
+            text="Split Processor"
             isSidebarOpen={open}
           />
         </Link>
