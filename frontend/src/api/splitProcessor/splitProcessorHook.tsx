@@ -1,5 +1,9 @@
-import { useState, useEffect} from "react";
-import {useSplitProcessorProps} from "./splitProcessorType"
+import { useState} from "react";
+import {useSplitProcessorProps, SplitFile} from "./splitProcessorType"
+import {
+    handleSplitFiles as utilHandleSplitFiles,
+    handleSplitFilesWithMuPDF as utilHandleSplitFilesWithMuPDF
+} from "./splitProcessorUtil";
 
 
 export const useSplitProcessorHook = ({
@@ -10,18 +14,34 @@ export const useSplitProcessorHook = ({
     const [loading, setLoading] = useState<boolean>(false);
     const [splitMessage, setSplitMessage] = useState<string>("");
     const [isUploading, setIsUploading] = useState<boolean>(false);
+    const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
 
 
     const handleSplitFiles = async () => {
         await utilHandleSplitFiles(
-            setLoading: setLoading,
-            setSplitMessage: setLoading,
-            setIsUploading: setIsUploading,
+            selectedFile,
+            updateTaskLog,
+            clearTaskLog,
+            setSplitMessage,
+            setLoading,
+            setIsUploading,
+            setUploadStatuses,
+            setSplitFiles
         )
     };
 
     const handleSplitFilesWithMuPDF = async () => {
-
+        await utilHandleSplitFilesWithMuPDF(
+            selectedFile,
+            updateTaskLog,
+            clearTaskLog,
+            setSplitMessage,
+            setLoading,
+            setIsUploading,
+            setUploadStatuses,
+            setSplitFiles
+        )
     };
 
     return {
@@ -29,7 +49,10 @@ export const useSplitProcessorHook = ({
         splitMessage,
         isUploading,
         handleSplitFiles,
-        handleSplitFilesWithMuPDF
+        handleSplitFilesWithMuPDF,
+        selectedFile,
+        setSelectedFile,
+        splitFiles
 
     }
 };

@@ -1,73 +1,120 @@
 import React from "react";
-import { UploadStatus, FileResponse, RequestConfig } from "./splitProcessorType";
+import { UploadStatus, RequestConfig, SplitFileResponse, SplitFile } from "./splitProcessorType";
+import { splitFile, splitFileWithMuPDF } from "./splitProcessorService";
+import { logSplitStart, logSplitSuccess, logSplitFailure, updateSplitStatuses } from "./splitProcessorLog";
+
 
 const _executeRequest = async ({
   endpoint,
+  selectedFile,
   updateTaskLog,
-  setUploadMessage,
+  setSplitMessage,
   setLoading,
   logId,
   operationName,
+  setUploadStatuses,
+  setIsUploading,
+  setSplitFiles,
 }: RequestConfig) => {
   setLoading(true);
+  if (setIsUploading) setIsUploading(true);
+  setSplitMessage(`${operationName}...`);
+  logSplitStart(updateTaskLog, operationName, logId);
+  if (setUploadStatuses) {
+    updateSplitStatuses(setUploadStatuses, "in-progress", undefined);
+  }
+
   try {
-    let resData: FileResponse;
-    if (endpoint === "upload-excel") {
-      resData = await uploadExcelFile(endpoint, selectedFile);
-    } else if (endpoint === "run-fallback") {
-      resData = await runFallbackCheck(endpoint, selectedFile);
+    let resData: SplitFileResponse;
+    if (endpoint === "split-files") {
+      if (!selectedFile) {
+        throw new Error("No file selected for splitting.");
+      }
+      resData = await splitFile(endpoint, selectedFile);
+    } else if (endpoint === "split-mupdf") {
+      resData = await splitFileWithMuPDF(endpoint);
     } else {
       throw new Error(`Unknown endpoint: ${endpoint}`);
     }
-    setUploadMessage(resData.message || `${operationName} successful`);
-    const { summary, ...restData } = resData;
-    const totalRows = summary?.totalRows || 0;
-    const badRows = summary?.errors || 0;
-
-    let finalStatus: "success" | "failed" | "in-progress" = "success";
-    if (badRows > 0) {
-      finalStatus = "failed";
-    } else if (totalRows > 0) {
-      finalStatus = "success";
-    } else {
-      finalStatus = "success";
+    setSplitMessage(resData.message || `${operationName} successful`);
+    if (setSplitFiles && resData.splitFiles) {
+      setSplitFiles(resData.splitFiles);
     }
 
-    logUploadSuccess(updateTaskLog, operationName, logId, summary, restData);
+    logSplitSuccess(updateTaskLog, operationName, logId, resData);
     if (setUploadStatuses) {
-      updateUploadStatuses(setUploadStatuses, finalStatus, summary);
+      updateSplitStatuses(setUploadStatuses, "success", resData);
     }
   } catch (error: unknown) {
     const errorMessage =
       (error as Error).message;
-    setUploadMessage(`${operationName} failed: ${errorMessage}`);
-    logUploadFailure(updateTaskLog, operationName, logId, errorMessage);
+    setSplitMessage(`${operationName} failed: ${errorMessage}`);
+    logSplitFailure(updateTaskLog, operationName, logId, errorMessage);
     if (setUploadStatuses) {
-      updateUploadStatuses(setUploadStatuses, "failed", undefined, errorMessage);
+      updateSplitStatuses(setUploadStatuses, "failed", undefined, errorMessage);
     }
   } finally {
     setLoading(false);
-    if (setIsUploading) setIsUploading(true);
+    if (setIsUploading) setIsUploading(false);
   }
 };
 
-
-export const handleSplitFile = async(
-    updateTaskLog: (task: string, log: unknown) => void,
-    clearTaskLog: (task: string) => void,
-    setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
-    setLoading: React.Dispatch<React.SetStateAction<boolean>>,
-    setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
-    setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>
+export const handleSplitFiles = async (
+  selectedFile: File | null,
+  updateTaskLog: (task: string, log: unknown) => void,
+  clearTaskLog: (task: string) => void,
+  setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>,
+  setSplitFiles: React.Dispatch<React.SetStateAction<SplitFile[]>>
 ) => {
-        await _executeRequest({
-            endpoint: "split-excel",
-            updateTaskLog,
-            setSplitMessage,
-            setLoading,
-            logId: "upload-status",
-            operationName: "Uploading",
-            setUploadStatuses,
-            setIsUploading,
-        })
-}
+  if (!selectedFile) {
+    setSplitMessage("Please select a file first.");
+    return;
+  }
+  clearTaskLog("uploadAndScript");
+  setUploadStatuses([]); // Clear previous upload progress
+  await _executeRequest({
+    endpoint: "split-files",
+    selectedFile,
+    updateTaskLog,
+    setSplitMessage,
+    setLoading,
+    logId: "splitting-status",
+    operationName: "Splitting files",
+    setUploadStatuses,
+    setIsUploading,
+    setSplitFiles,
+  });
+};
+
+export const handleSplitFilesWithMuPDF = async (
+  selectedFile: File | null,
+  updateTaskLog: (task: string, log: unknown) => void,
+  clearTaskLog: (task: string) => void,
+  setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>,
+  setSplitFiles: React.Dispatch<React.SetStateAction<SplitFile[]>>
+) => {
+  if (!selectedFile) {
+    setSplitMessage("Please select a file first.");
+    return;
+  }
+  clearTaskLog("uploadAndScript");
+  setUploadStatuses([]); // Clear previous upload progress
+  await _executeRequest({
+    endpoint: "split-mupdf",
+    selectedFile,
+    updateTaskLog,
+    setSplitMessage,
+    setLoading,
+    logId: "mupdf-splitting-status",
+    operationName: "Splitting files with MuPDF",
+    setUploadStatuses,
+    setIsUploading,
+    setSplitFiles,
+  });
+};

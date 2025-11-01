@@ -9,21 +9,26 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as UploadProcessorRouteImport } from './routes/uploadProcessorRouter'
+import { Route as UploadProcessorRouterRouteImport } from './routes/uploadProcessorRouter'
 import { Route as SqlMongoRouteImport } from './routes/sql-mongo'
+import { Route as SplitProcessorRouterRouteImport } from './routes/splitProcessorRouter'
 import { Route as SanityCheckRouteImport } from './routes/sanity-check'
 import { Route as S3BrowserRouteImport } from './routes/s3-browser'
 import { Route as IndexRouteImport } from './routes/index'
-import (Route as SplitProcessorRouterImport) "./routes/splitProcessorRouter"
 
-const UploadProcessorRoute = UploadProcessorRouteImport.update({
-  id: '/upload-processor',
-  path: '/upload-processor',
+const UploadProcessorRouterRoute = UploadProcessorRouterRouteImport.update({
+  id: '/uploadProcessorRouter',
+  path: '/uploadProcessorRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SqlMongoRoute = SqlMongoRouteImport.update({
   id: '/sql-mongo',
   path: '/sql-mongo',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SplitProcessorRouterRoute = SplitProcessorRouterRouteImport.update({
+  id: '/splitProcessorRouter',
+  path: '/splitProcessorRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SanityCheckRoute = SanityCheckRouteImport.update({
@@ -46,23 +51,26 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/s3-browser': typeof S3BrowserRoute
   '/sanity-check': typeof SanityCheckRoute
+  '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sql-mongo': typeof SqlMongoRoute
-  '/upload-processor': typeof UploadScriptRoute
+  '/uploadProcessorRouter': typeof UploadProcessorRouterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/s3-browser': typeof S3BrowserRoute
   '/sanity-check': typeof SanityCheckRoute
+  '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sql-mongo': typeof SqlMongoRoute
-  '/upload-processor': typeof UploadScriptRoute
+  '/uploadProcessorRouter': typeof UploadProcessorRouterRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/s3-browser': typeof S3BrowserRoute
   '/sanity-check': typeof SanityCheckRoute
+  '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sql-mongo': typeof SqlMongoRoute
-  '/upload-processor': typeof UploadScriptRoute
+  '/uploadProcessorRouter': typeof UploadProcessorRouterRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -70,34 +78,43 @@ export interface FileRouteTypes {
     | '/'
     | '/s3-browser'
     | '/sanity-check'
+    | '/splitProcessorRouter'
     | '/sql-mongo'
-    | '/upload-processor'
+    | '/uploadProcessorRouter'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/s3-browser' | '/sanity-check' | '/sql-mongo' | '/upload-processor'
+  to:
+    | '/'
+    | '/s3-browser'
+    | '/sanity-check'
+    | '/splitProcessorRouter'
+    | '/sql-mongo'
+    | '/uploadProcessorRouter'
   id:
     | '__root__'
     | '/'
     | '/s3-browser'
     | '/sanity-check'
+    | '/splitProcessorRouter'
     | '/sql-mongo'
-    | '/upload-processor'
+    | '/uploadProcessorRouter'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   S3BrowserRoute: typeof S3BrowserRoute
   SanityCheckRoute: typeof SanityCheckRoute
+  SplitProcessorRouterRoute: typeof SplitProcessorRouterRoute
   SqlMongoRoute: typeof SqlMongoRoute
-  UploadprocessorRoute: typeof UploadProcessorRoute
+  UploadProcessorRouterRoute: typeof UploadProcessorRouterRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/upload-processor': {
-      id: '/upload-processor'
-      path: '/upload-processor'
-      fullPath: '/upload-processor'
-      preLoaderRoute: typeof UploadProcessorRouteImport
+    '/uploadProcessorRouter': {
+      id: '/uploadProcessorRouter'
+      path: '/uploadProcessorRouter'
+      fullPath: '/uploadProcessorRouter'
+      preLoaderRoute: typeof UploadProcessorRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sql-mongo': {
@@ -105,6 +122,13 @@ declare module '@tanstack/react-router' {
       path: '/sql-mongo'
       fullPath: '/sql-mongo'
       preLoaderRoute: typeof SqlMongoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/splitProcessorRouter': {
+      id: '/splitProcessorRouter'
+      path: '/splitProcessorRouter'
+      fullPath: '/splitProcessorRouter'
+      preLoaderRoute: typeof SplitProcessorRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/sanity-check': {
@@ -135,8 +159,9 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   S3BrowserRoute: S3BrowserRoute,
   SanityCheckRoute: SanityCheckRoute,
+  SplitProcessorRouterRoute: SplitProcessorRouterRoute,
   SqlMongoRoute: SqlMongoRoute,
-  UploadProcessorRoute: UploadProcessorRoute,
+  UploadProcessorRouterRoute: UploadProcessorRouterRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -8,7 +8,7 @@ export const logUploadStart = (
   operationName: string,
   logId: string
 ) => {
-  updateTaskLog("uploadAndScript", {
+  updateTaskLog("uploadFiles", {
     id: logId,
     message: `${operationName}...`,
     status: "in-progress",
@@ -38,7 +38,7 @@ export const logUploadSuccess = (
     finalMessage = `No rows processed during ${operationName}.`;
   }
 
-  updateTaskLog("uploadAndScript", {
+  updateTaskLog("uploadFiles", {
     id: logId,
     message: finalMessage,
     status: finalStatus,
@@ -55,7 +55,7 @@ export const logUploadFailure = (
   logId: string,
   errorMessage: string
 ) => {
-  updateTaskLog("uploadAndScript", {
+  updateTaskLog("uploadFiles", {
     id: logId,
     message: `${operationName} failed: ${errorMessage}`,
     status: "failed",
@@ -63,7 +63,7 @@ export const logUploadFailure = (
 };
 
 export const clearUploadLogs = (clearTaskLog: ClearTaskLogFunction) => {
-  clearTaskLog("uploadAndScript");
+  clearTaskLog("uploadFiles");
 };
 
 export const updateUploadStatuses = (

@@ -1,9 +1,11 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
-import UploadAndScriptUI from "../ui/UploadAndScriptUI";
+import UploadProcessorUI from "../../api/uploadProcessor/uploadProcessorUI";
+import SplitProcessorUI from "../../api/splitProcessor/splitProcessorUI";
 import { webSocketService } from "../../services/webSocketService";
 import { API_BASE_URL, configPromise } from "../../api/uploadProcessor/uploadProcessorService";
-
-
+import { useUploadProcessorHook } from "../../api/uploadProcessor/uploadProcessorHook";
+import { useSplitProcessorHook } from "../../api/splitProcessor/splitProcessorHook";
+import { UploadStatus, FileResponse, UploadProgressResponse, SplitFileResponse } from "../../api/uploadProcessor/uploadProcessorType";
 
 interface UploadAndScriptTaskProps {
   updateTaskLog: (task: string, log: any) => void;
@@ -20,12 +22,35 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
   setSummaryData,
   setUploadStatuses,
 }) => {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [uploadMessage, setUploadMessage] = useState<string>("");
-  const [splitMessage, setSplitMessage] = useState<string>("");
-  const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
-  const [isUploading, setIsUploading] = useState<boolean>(false);
+
+  const { 
+    selectedFile,
+    uploadMessage,
+    loading: uploadLoading,
+    isUploading,
+    handleFileChange,
+    handleUpload,
+    handleFallback,
+    setSelectedFile
+  } = useUploadProcessorHook({
+    updateTaskLog,
+    clearTaskLog,
+    setUploadStatuses,
+  });
+
+  const {
+    loading: splitLoading,
+    splitMessage,
+    handleSplitFiles,
+    handleSplitFilesWithMuPDF,
+    splitFiles
+  } = useSplitProcessorHook({
+    updateTaskLog,
+    clearTaskLog,
+    setUploadStatuses,
+  });
+
+  const loading = uploadLoading || splitLoading;
 
   // Refs for throttling
   const splitProgressLatestRef = useRef<any | null>(null);
@@ -179,99 +204,11 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     };
   }, [isUploading, setUploadStatuses]);
 
-  const handleFileChange = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      handleFileChangeUtil(
-        event,
-        setSelectedFile,
-        setUploadMessage,
-        setSplitMessage,
-        setSplitFiles
-      );
-    },
-    []
-  );
-
-  const handleUpload = useCallback(async () => {
-    handleUploadUtil(
-      selectedFile,
-      updateTaskLog,
-      clearTaskLog,
-      setUploadMessage,
-      setLoading,
-      setIsUploading,
-      setUploadStatuses
-    );
-  }, [selectedFile, updateTaskLog, clearTaskLog]);
-
-  const handleSplitFiles = useCallback(async () => {
-    if (!selectedFile) {
-      setSplitMessage("Please upload a file first.");
-      return;
-    }
-    clearTaskLog("uploadAndScript");
-    setUploadStatuses([]); // Clear previous upload progress
-    setLoading(true);
-    const splitLogId = "splitting-status";
-    setSplitMessage("Splitting files");
-    updateTaskLog("uploadAndScript", {
-      id: splitLogId,
-      message: "Splitting files...",
-      status: "in-progress",
-    });
-
-    // Initialize splitting progress status
-    setUploadStatuses((prevStatuses) => {
-      const splittingStatus: UploadStatus = {
-        fileName: "splitting_progress",
-        status: "Starting",
-        totalOriginalFilesProcessed: 0,
-        totalExpectedSplits: 0,
-        totalSplitFilesGenerated: 0,
-        splitErrors: 0,
-        currentlySplittingFiles: "",
-        progress: 0,
-      };
-      return [...prevStatuses, splittingStatus];
-    });
-
-    try {
-      await configPromise;
-      const res = await axios.post<SplitFileResponse>(
-        `${API_BASE_URL}/split-files`,
-        {
-          filename: selectedFile.name,
-        }
-      );
-      setSplitFiles(res.data.splitFiles || []);
-      setSplitMessage(res.data.message || "Splitting successful");
-      const { message: resMessage, ...restData } = res.data;
-      updateTaskLog("uploadAndScript", {
-        id: splitLogId,
-        message: "Splitting Successful!",
-        status: "success",
-        ...restData,
-      });
-      setUploadStatuses((prevStatuses) =>
-        prevStatuses.map((s) => {
-          if (!s || typeof s.fileName !== "string") {
-            return s; // Return item as is if it's not a valid UploadStatus
-          }
-          return s.fileName === "splitting_progress"
-            ? { ...s, status: "Failed", progress: 0 }
-            : s;
-        })
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedFile, updateTaskLog, clearTaskLog, setUploadStatuses]);
-
   const handleUploadToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");
-    setLoading(true);
     const s3UploadLogId = "s3-upload-status";
-    setUploadMessage("Uploading to S3");
+    // Removed setLoading(true) from here, it should be handled inside the util or hook
+    // setUploadMessage("Uploading to S3"); // This should be handled by the hook
     updateTaskLog("uploadAndScript", {
       id: s3UploadLogId,
       message: "Initiating S3 upload...",
@@ -309,7 +246,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         // Or 'info' if available, assuming no error if no files
       }
 
-      setUploadMessage(finalMessage);
+      // setUploadMessage(finalMessage); // This should be handled by the hook
       updateTaskLog("uploadAndScript", {
         id: s3UploadLogId,
         message: finalMessage,
@@ -334,22 +271,22 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       const errorMessage = `Upload to S3 failed: ${
         error.response?.data?.message || error.message
       }`;
-      setUploadMessage(errorMessage);
+      // setUploadMessage(errorMessage); // This should be handled by the hook
       updateTaskLog("uploadAndScript", {
         id: s3UploadLogId,
         message: errorMessage,
         status: "failed",
       });
     } finally {
-      setLoading(false);
+      // setLoading(false); // This should be handled by the hook or util
     }
-  }, [updateTaskLog, clearTaskLog, setSummaryData, setUploadStatuses]);
+  }, [updateTaskLog, clearTaskLog, setUploadStatuses]);
 
   const handleUploadSplitFilesToS3 = useCallback(async () => {
     clearTaskLog("uploadAndScript");
-    setLoading(true);
+    // setLoading(true); // This should be handled by the hook or util
     const splitS3UploadLogId = "split-s3-upload-status";
-    setSplitMessage("Uploading split files to S3");
+    // setSplitMessage("Uploading split files to S3"); // This should be handled by the hook
     updateTaskLog("uploadAndScript", {
       id: splitS3UploadLogId,
       message: "Initiating split file S3 upload...",
@@ -386,7 +323,7 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
         finalMessage = resMessage || "No split files found to upload.";
       }
 
-      setSplitMessage(finalMessage);
+      // setSplitMessage(finalMessage); // This should be handled by the hook
       updateTaskLog("uploadAndScript", {
         id: splitS3UploadLogId,
         message: finalMessage,
@@ -410,111 +347,40 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
       const errorMessage = `Upload of split files to S3 failed: ${
         error.response?.data?.message || error.message
       }`;
-      setSplitMessage(errorMessage);
+      // setSplitMessage(errorMessage); // This should be handled by the hook
       updateTaskLog("uploadAndScript", {
         id: splitS3UploadLogId,
         message: errorMessage,
         status: "failed",
       });
     } finally {
-      setLoading(false);
+      // setLoading(false); // This should be handled by the hook or util
     }
   }, [updateTaskLog, clearTaskLog, setUploadStatuses]);
 
-  const handleFallback = useCallback(async () => {
-    handleFallbackUtil(
-      selectedFile,
-      updateTaskLog,
-      clearTaskLog,
-      setUploadMessage,
-      setLoading
-    );
-  }, [selectedFile, updateTaskLog, clearTaskLog]);
-
-  const handleSplitFilesWithMuPDF = useCallback(async () => {
-    if (!selectedFile) {
-      setSplitMessage("Please upload a file first.");
-      return;
-    }
-    clearTaskLog("uploadAndScript");
-    setUploadStatuses([]); // Clear previous upload progress
-    setLoading(true);
-    const mupdfSplitLogId = "mupdf-splitting-status";
-    setSplitMessage("Splitting files with MuPDF");
-    updateTaskLog("uploadAndScript", {
-      id: mupdfSplitLogId,
-      message: "Splitting files with MuPDF...",
-      status: "in-progress",
-    });
-
-    // Initialize splitting progress status
-    setUploadStatuses((prevStatuses) => {
-      const splittingStatus: UploadStatus = {
-        fileName: "splitting_progress",
-        status: "Starting",
-        totalOriginalFilesProcessed: 0,
-        totalSplitFilesGenerated: 0,
-        splitErrors: 0,
-        currentlySplittingFiles: "",
-        progress: 0,
-      };
-      return [...prevStatuses, splittingStatus];
-    });
-
-    try {
-      await configPromise;
-      const res = await axios.post<SplitFileResponse>(
-        `${API_BASE_URL}/split-mupdf`
-      );
-      setSplitFiles(res.data.splitFiles || []);
-      setSplitMessage(res.data.message || "Splitting successful");
-      const { message: resMessage, ...restData } = res.data;
-      updateTaskLog("uploadAndScript", {
-        id: mupdfSplitLogId,
-        message: "Splitting with MuPDF Successful!",
-        status: "success",
-        ...restData,
-      });
-    } catch (error: any) {
-      const errorMessage = `Splitting failed: ${
-        error.response?.data?.message || error.message || "Unknown error"
-      }`;
-      setSplitMessage(errorMessage);
-      updateTaskLog("uploadAndScript", {
-        id: mupdfSplitLogId,
-        message: errorMessage,
-        status: "failed",
-      });
-      setUploadStatuses((prevStatuses) =>
-        prevStatuses.map((s) => {
-          if (!s || typeof s.fileName !== "string") {
-            return s; // Return item as is if it's not a valid UploadStatus
-          }
-          return s.fileName === "splitting_progress"
-            ? { ...s, status: "Failed", progress: 0 }
-            : s;
-        })
-      );
-    } finally {
-      setLoading(false);
-    }
-  }, [selectedFile, updateTaskLog, clearTaskLog, setUploadStatuses]);
 
   return (
-    <UploadAndScriptUI
-      selectedFile={selectedFile}
-      uploadMessage={uploadMessage}
-      splitMessage={splitMessage}
-      splitFiles={splitFiles}
-      loading={loading}
-      handleFileChange={handleFileChange}
-      handleUpload={handleUpload}
-      handleFallback={handleFallback}
-      handleSplitFiles={handleSplitFiles}
-      handleSplitFilesWithMuPDF={handleSplitFilesWithMuPDF}
-      handleUploadToS3={handleUploadToS3}
-      handleUploadSplitFilesToS3={handleUploadSplitFilesToS3}
-    />
+    <div>
+      <UploadProcessorUI
+        selectedFile={selectedFile}
+        uploadMessage={uploadMessage}
+        loading={loading}
+        isUploading={isUploading}
+        handleFileChange={handleFileChange}
+        handleUpload={handleUpload}
+        handleFallback={handleFallback}
+      />
+      <SplitProcessorUI
+        loading={loading}
+        splitMessage={splitMessage}
+        handleSplitFiles={handleSplitFiles}
+        handleSplitFilesWithMuPDF={handleSplitFilesWithMuPDF}
+        selectedFile={selectedFile}
+        setSelectedFile={setSelectedFile}
+        splitFiles={splitFiles}
+      />
+
+    </div>
   );
 };
 

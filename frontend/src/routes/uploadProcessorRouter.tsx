@@ -29,6 +29,6 @@ function UploadProcessorComponent() {
 }
 
 //tanstack setup
-export const Route = createFileRoute('/upload-processor')({
+export const Route = createFileRoute('/uploadProcessorRouter')({
   component: UploadProcessorComponent,
 });

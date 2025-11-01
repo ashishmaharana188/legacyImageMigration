@@ -1,5 +1,5 @@
 import axios from "axios";
-import { FileResponse } from "./splitProcessorType";
+import { SplitFileResponse } from "./splitProcessorType";
 
 let API_BASE_URL: string | undefined;
 
@@ -21,9 +21,28 @@ const initConfiguration = async () => {
 
 const configPromise = initConfiguration();
 
-export const pleaseSplitFile = async(
-    endpoint: string,
-):Promise<FileResponse> => {
-    await configPromise; // load base backend url
-    const
-}
+
+export const splitFile = async (
+  endpoint: string,
+  selectedFile: File
+): Promise<SplitFileResponse> => {
+  await configPromise; // Ensure configuration is loaded
+  const res = await axios.post<SplitFileResponse>(
+    `${API_BASE_URL}/${endpoint}`,
+    {
+      filename: selectedFile.name,
+    }
+  );
+  return res.data;
+};
+
+export const splitFileWithMuPDF = async (
+  endpoint: string
+): Promise<SplitFileResponse> => {
+  await configPromise; // Ensure configuration is loaded
+  const res = await axios.post<SplitFileResponse>(
+    `${API_BASE_URL}/${endpoint}`,
+    {}
+  );
+  return res.data;
+};
