@@ -1,5 +1,4 @@
 export interface splitProcessorUIProps {
-    splitMessage: string;
     loading: boolean;
     handleSplitFiles: () => Promise<void>;
     handleSplitFilesWithMuPDF: () => Promise<void>;
@@ -8,7 +7,6 @@ export interface splitProcessorUIProps {
 }
 
 export interface useSplitProcessorProps {
-    selectedFile: File | null;
     updateTaskLog: (task: string, log: unknown) => void;
     clearTaskLog: (task: string) => void;
     setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
@@ -64,4 +62,11 @@ export interface UploadStatus {
   status?: string;
   isDirectory?: boolean;
   errorMessage?: string;
+}
+
+export interface SplitProgressMessage {
+  type: "splitProgressUpdate" | "splitProgressComplete";
+  totalExpectedSplits: number;
+  totalSplitFilesGenerated: number;
+  status?: string;
 }

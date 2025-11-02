@@ -21,7 +21,7 @@ const _executeRequest = async ({
   setSplitMessage(`${operationName}...`);
   logSplitStart(updateTaskLog, operationName, logId);
   if (setUploadStatuses) {
-    updateSplitStatuses(setUploadStatuses, "in-progress", undefined);
+    updateSplitStatuses(setUploadStatuses, "in-progress");
   }
 
   try {
@@ -43,7 +43,7 @@ const _executeRequest = async ({
 
     logSplitSuccess(updateTaskLog, operationName, logId, resData);
     if (setUploadStatuses) {
-      updateSplitStatuses(setUploadStatuses, "success", resData);
+      updateSplitStatuses(setUploadStatuses, "success");
     }
   } catch (error: unknown) {
     const errorMessage =
@@ -51,7 +51,7 @@ const _executeRequest = async ({
     setSplitMessage(`${operationName} failed: ${errorMessage}`);
     logSplitFailure(updateTaskLog, operationName, logId, errorMessage);
     if (setUploadStatuses) {
-      updateSplitStatuses(setUploadStatuses, "failed", undefined, errorMessage);
+      updateSplitStatuses(setUploadStatuses, "failed", errorMessage);
     }
   } finally {
     setLoading(false);

@@ -50,7 +50,6 @@ export const clearSplitLogs = (clearTaskLog: ClearTaskLogFunction) => {
 export const updateSplitStatuses = (
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>,
   finalStatus: "success" | "failed" | "in-progress",
-  resData: SplitFileResponse | undefined,
   errorMessage?: string
 ) => {
   if (setUploadStatuses) {

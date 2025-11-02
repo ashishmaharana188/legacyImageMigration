@@ -1,6 +1,4 @@
 import { Request, Response } from "express";
-
-
 import { Splitting } from "../services/splitProcessor";
 import { Database } from "../services/database";
 import { MongoDatabase } from "../services/mongoDatabase";
@@ -20,7 +18,7 @@ import {
   searchFiles,
   searchFolders,
 } from "../services/s3Manager";
-import logger from "../utils/logger";
+import logger from "../services/logger";
 
 
 class FileController {
