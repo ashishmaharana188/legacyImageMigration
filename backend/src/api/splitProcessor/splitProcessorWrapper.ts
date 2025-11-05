@@ -104,7 +104,6 @@ export class SplitProcessorWrapper {
     broadcast(JSON.stringify(completionUpdate));
 
     return {
-      splitFiles: createdSplitFiles,
       summary: {
         totalSplitFilesGenerated,
         splitErrors,
@@ -189,7 +188,6 @@ export class SplitProcessorWrapper {
     broadcast(JSON.stringify(completionUpdate));
 
     return {
-      splitFiles: createdSplitFiles,
       summary: {
         totalSplitFilesGenerated,
         splitErrors,

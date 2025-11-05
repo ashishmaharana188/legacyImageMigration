@@ -1,8 +1,8 @@
 import React from "react";
-import {UploadProgressDisplayProps} from "./uploadProcessorType";
+import {UploadProcessDisplayProps} from "./uploadProcessorType";
 
 
-export const UploadProgressDisplay: React.FC<UploadProgressDisplayProps> = ({
+export const UploadProcessDisplay: React.FC<UploadProcessDisplayProps> = ({
   title,
   progress = 0,
   total,

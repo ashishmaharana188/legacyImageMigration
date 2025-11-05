@@ -1,16 +1,11 @@
 import React from "react";
-import { SplitFile } from "./splitProcessorType";
-
-interface SplitProcessorSummaryUIProps {
-  splitMessage: string;
-  splitFiles: SplitFile[];
-}
+import { SplitProcessorSummaryUIProps } from "./splitProcessorType";
 
 const SplitProcessorSummaryUI: React.FC<SplitProcessorSummaryUIProps> = ({
   splitMessage,
-  splitFiles,
+  totalSplitFilesGenerated,
 }) => {
-  if (!splitMessage && splitFiles.length === 0) {
+  if (!splitMessage && totalSplitFilesGenerated === 0) {
     return null;
   }
 
@@ -20,22 +15,10 @@ const SplitProcessorSummaryUI: React.FC<SplitProcessorSummaryUIProps> = ({
       {splitMessage && (
         <p className="text-sm text-gray-600 mb-2">{splitMessage}</p>
       )}
-      {splitFiles.length > 0 && (
-        <div>
-          <h5 className="font-medium text-md text-black mt-4 mb-2">
-            Generated Files:
-          </h5>
-          <ul>
-            {splitFiles.map((file, index) => (
-              <li key={index} className="text-sm text-gray-700">
-                Row: {file.row}, Page Count: {file.pageCount}, URL:{" "}
-                <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
-                  {file.url}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </div>
+      {totalSplitFilesGenerated > 0 && (
+        <p className="text-sm text-gray-700">
+          Total Split Files Generated: <strong>{totalSplitFilesGenerated}</strong>
+        </p>
       )}
     </div>
   );

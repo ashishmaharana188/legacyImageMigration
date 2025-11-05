@@ -1,5 +1,5 @@
 import React from "react";
-import { UploadStatus, RequestConfig, SplitFileResponse, SplitFile } from "./splitProcessorType";
+import { UploadStatus, RequestConfig, SplitFileResponse } from "./splitProcessorType";
 import { splitFile, splitFileWithMuPDF } from "./splitProcessorService";
 import { logSplitStart, logSplitSuccess, logSplitFailure, updateSplitStatuses } from "./splitProcessorLog";
 
@@ -14,7 +14,6 @@ const _executeRequest = async ({
   operationName,
   setUploadStatuses,
   setIsUploading,
-  setSplitFiles,
 }: RequestConfig) => {
   setLoading(true);
   if (setIsUploading) setIsUploading(true);
@@ -37,9 +36,6 @@ const _executeRequest = async ({
       throw new Error(`Unknown endpoint: ${endpoint}`);
     }
     setSplitMessage(resData.message || `${operationName} successful`);
-    if (setSplitFiles && resData.splitFiles) {
-      setSplitFiles(resData.splitFiles);
-    }
 
     logSplitSuccess(updateTaskLog, operationName, logId, resData);
     if (setUploadStatuses) {
@@ -51,7 +47,7 @@ const _executeRequest = async ({
     setSplitMessage(`${operationName} failed: ${errorMessage}`);
     logSplitFailure(updateTaskLog, operationName, logId, errorMessage);
     if (setUploadStatuses) {
-      updateSplitStatuses(setUploadStatuses, "failed", errorMessage);
+      updateSplitStatuses(setUploadStatuses, "in-progress");
     }
   } finally {
     setLoading(false);
@@ -66,8 +62,7 @@ export const handleSplitFiles = async (
   setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
   setLoading: React.Dispatch<React.SetStateAction<boolean>>,
   setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
-  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>,
-  setSplitFiles: React.Dispatch<React.SetStateAction<SplitFile[]>>
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>
 ) => {
   if (!selectedFile) {
     setSplitMessage("Please select a file first.");
@@ -85,7 +80,6 @@ export const handleSplitFiles = async (
     operationName: "Splitting files",
     setUploadStatuses,
     setIsUploading,
-    setSplitFiles,
   });
 };
 
@@ -96,8 +90,7 @@ export const handleSplitFilesWithMuPDF = async (
   setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
   setLoading: React.Dispatch<React.SetStateAction<boolean>>,
   setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
-  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>,
-  setSplitFiles: React.Dispatch<React.SetStateAction<SplitFile[]>>
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>
 ) => {
   if (!selectedFile) {
     setSplitMessage("Please select a file first.");
@@ -115,6 +108,5 @@ export const handleSplitFilesWithMuPDF = async (
     operationName: "Splitting files with MuPDF",
     setUploadStatuses,
     setIsUploading,
-    setSplitFiles,
   });
 };

@@ -1,5 +1,4 @@
 export interface SplitResult {
-  splitFiles: SplitFileDetail[]; // Still keep this to return the list of successfully split files
   summary: {
     totalSplitFilesGenerated: number;
     splitErrors: number;

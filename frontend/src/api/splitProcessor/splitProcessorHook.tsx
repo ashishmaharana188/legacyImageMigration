@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
-import {useSplitProcessorProps, SplitFile, SplitProgressMessage} from "./splitProcessorType"
+import {useSplitProcessorProps, SplitProgressMessage} from "./splitProcessorType"
 import {
     handleSplitFiles as utilHandleSplitFiles,
     handleSplitFilesWithMuPDF as utilHandleSplitFilesWithMuPDF
@@ -16,7 +16,6 @@ export const useSplitProcessorHook = ({
     const [splitMessage, setSplitMessage] = useState<string>("");
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
-    const [splitFiles, setSplitFiles] = useState<SplitFile[]>([]);
 
     // Refs for throttling
     const splitProgressLatestRef = useRef<SplitProgressMessage | null>(null);
@@ -94,8 +93,7 @@ export const useSplitProcessorHook = ({
             setSplitMessage,
             setLoading,
             setIsUploading,
-            setUploadStatuses,
-            setSplitFiles
+            setUploadStatuses
         )
     };
 
@@ -107,8 +105,7 @@ export const useSplitProcessorHook = ({
             setSplitMessage,
             setLoading,
             setIsUploading,
-            setUploadStatuses,
-            setSplitFiles
+            setUploadStatuses
         )
     };
 
@@ -120,7 +117,6 @@ export const useSplitProcessorHook = ({
         handleSplitFilesWithMuPDF,
         selectedFile,
         setSelectedFile,
-        splitFiles
 
     }
 };

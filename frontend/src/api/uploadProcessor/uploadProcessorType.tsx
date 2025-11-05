@@ -119,7 +119,7 @@ export interface useUploadProcessorProps {
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }
 
-export interface UploadProgressDisplayProps {
+export interface UploadProcessDisplayProps {
   title: string;
   progress?: number;
   total?: number;

@@ -12,16 +12,16 @@ export interface useSplitProcessorProps {
     setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }
 
-export interface SplitFile {
-  row: number;
-  url: string;
-  pageCount: number;
-}
+
 
 export interface SplitFileResponse {
   statusCode?: number;
   message?: string;
-  splitFiles?: SplitFile[];
+  summary?: {
+    totalSplitFilesGenerated: number;
+    splitErrors: number;
+    totalExpectedPagesFromCsv: number;
+  };
   error?: string;
 }
 
@@ -35,7 +35,7 @@ export interface RequestConfig {
   operationName: string;
   setUploadStatuses?: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
   setIsUploading?: React.Dispatch<React.SetStateAction<boolean>>;
-  setSplitFiles?: React.Dispatch<React.SetStateAction<SplitFile[]>>;
+
 }
 
 export interface FileResponseSummary {
@@ -72,3 +72,8 @@ export interface SplitProgressMessage {
   totalExpectedPagesFromCsv?: number; // Added this field
   status?: string;
 }
+
+export interface SplitProcessorSummaryUIProps {
+    splitMessage: string;
+    totalSplitFilesGenerated: number;
+  }

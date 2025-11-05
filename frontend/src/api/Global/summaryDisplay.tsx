@@ -1,9 +1,8 @@
 import React from "react";
-import {SummaryDisplayProps } from "../uploadProcessor/uploadProcessorType";
+import { SummaryDisplayProps, LogEntry } from "../uploadProcessor/uploadProcessorType";
 import { useUploadProgressSummary } from "../uploadProcessor/uploadProcessorHook";
-import { UploadProgressDisplay } from "../uploadProcessor/uploadProcessorSummaryUI";
-
-
+import { UploadProcessDisplay } from "../uploadProcessor/uploadProcessorSummaryUI";
+import SplitProcessorSummaryUI from "../splitProcessor/splitProcessorSummaryUI";
 
 export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
@@ -15,6 +14,9 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   });
 
   const uploadAndScriptLogs = taskLogs["uploadAndScript"] || [];
+  const splitFilesLogs = taskLogs["splitFiles"] || [];
+
+  const latestSplitLog = splitFilesLogs[splitFilesLogs.length - 1] as LogEntry & { splitMessage?: string; summary?: { totalSplitFilesGenerated: number; splitErrors: number; totalExpectedPagesFromCsv: number; } };
 
   return (
     <div className="mt-4 text-black h-full flex flex-col">
@@ -27,7 +29,7 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             </div>
             <div className="bg-gray-100 p-2 rounded">
               {excelProcessingStatus && (
-                <UploadProgressDisplay
+                <UploadProcessDisplay
                   title="Excel Processing Progress"
                   progress={excelProcessingStatus.progress}
                   total={excelProcessingStatus.totalFiles}
@@ -38,6 +40,20 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                   badRowsDetails={excelProcessingStatus.badRowsDetails}
                 />
               )}
+            </div>
+          </div>
+        )}
+
+        {latestSplitLog && latestSplitLog.summary && latestSplitLog.summary.totalSplitFilesGenerated > 0 && (
+          <div key="splitProcessor" className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold capitalize">Split Processor</h4>
+            </div>
+            <div className="bg-gray-100 p-2 rounded">
+              <SplitProcessorSummaryUI
+                splitMessage={latestSplitLog.splitMessage || ""}
+                totalSplitFilesGenerated={latestSplitLog.summary.totalSplitFilesGenerated}
+              />
             </div>
           </div>
         )}
