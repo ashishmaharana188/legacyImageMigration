@@ -6,7 +6,6 @@ import { logSplitStart, logSplitSuccess, logSplitFailure, updateSplitStatuses } 
 
 const _executeRequest = async ({
   endpoint,
-  selectedFile,
   updateTaskLog,
   setSplitMessage,
   setLoading,
@@ -26,10 +25,7 @@ const _executeRequest = async ({
   try {
     let resData: SplitFileResponse;
     if (endpoint === "split-files") {
-      if (!selectedFile) {
-        throw new Error("No file selected for splitting.");
-      }
-      resData = await splitFile(endpoint, selectedFile);
+      resData = await splitFile(endpoint);
     } else if (endpoint === "split-mupdf") {
       resData = await splitFileWithMuPDF(endpoint);
     } else {
@@ -56,7 +52,6 @@ const _executeRequest = async ({
 };
 
 export const handleSplitFiles = async (
-  selectedFile: File | null,
   updateTaskLog: (task: string, log: unknown) => void,
   clearTaskLog: (task: string) => void,
   setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
@@ -64,15 +59,10 @@ export const handleSplitFiles = async (
   setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>
 ) => {
-  if (!selectedFile) {
-    setSplitMessage("Please select a file first.");
-    return;
-  }
   clearTaskLog("uploadAndScript");
   setUploadStatuses([]); // Clear previous upload progress
   await _executeRequest({
     endpoint: "split-files",
-    selectedFile,
     updateTaskLog,
     setSplitMessage,
     setLoading,
@@ -84,7 +74,6 @@ export const handleSplitFiles = async (
 };
 
 export const handleSplitFilesWithMuPDF = async (
-  selectedFile: File | null,
   updateTaskLog: (task: string, log: unknown) => void,
   clearTaskLog: (task: string) => void,
   setSplitMessage: React.Dispatch<React.SetStateAction<string>>,
@@ -92,15 +81,10 @@ export const handleSplitFilesWithMuPDF = async (
   setIsUploading: React.Dispatch<React.SetStateAction<boolean>>,
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>
 ) => {
-  if (!selectedFile) {
-    setSplitMessage("Please select a file first.");
-    return;
-  }
   clearTaskLog("uploadAndScript");
   setUploadStatuses([]); // Clear previous upload progress
   await _executeRequest({
     endpoint: "split-mupdf",
-    selectedFile,
     updateTaskLog,
     setSplitMessage,
     setLoading,

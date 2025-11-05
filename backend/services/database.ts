@@ -6,7 +6,7 @@ import fsSync from "fs";
 import path from "path";
 import * as ExcelJS from "exceljs";
 import { Pool, PoolClient } from "pg";
-import logger from "../utils/logger";
+import logger from "../src/utils/logger";
 import {
   getPgPool,
   reconnectPgPool,

@@ -5,7 +5,7 @@ import {
   getMongoDb,
 } from "../controllers/dbConnect";
 import mongoose from "mongoose";
-import logger from "../utils/logger";
+import logger from "../src/utils/logger";
 
 interface MongoDuplicateCheckResult {
   _id: { clientId: string; transactionNo: string };

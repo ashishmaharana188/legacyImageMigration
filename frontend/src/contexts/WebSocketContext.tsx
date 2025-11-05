@@ -1,13 +1,10 @@
-import React, { createContext, useContext, useEffect, useRef, useState, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 import { TaskLog, UploadStatus, S3UploadProgress } from '../types';
+import { useTaskLog } from './TaskLogContext';
 
 interface WebSocketContextType {
-  uploadStatuses: UploadStatus[];
-  taskLogs: { [key: string]: TaskLog[] };
   s3UploadProgress: S3UploadProgress;
   isConnected: boolean;
-  updateTaskLog: (task: string, log: TaskLog) => void;
-  clearTaskLog: (task: string) => void;
 }
 
 const WebSocketContext = createContext<WebSocketContextType | null>(null);
@@ -25,9 +22,8 @@ interface WebSocketProviderProps {
 }
 
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }) => {
-  const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
-  const [taskLogs, setTaskLogs] = useState<{ [key: string]: TaskLog[] }>({});
-    const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({ processedDirectories: 0, totalDirectories: 0, currentDirectory: "" });
+  const { updateTaskLog, onClearLogs: clearTaskLog, setUploadStatuses } = useTaskLog();
+  const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({ processedDirectories: 0, totalDirectories: 0, currentDirectory: "" });
   const [isConnected, setIsConnected] = useState(false);
 
   const progressAccumulator = useRef<S3UploadProgress>({ processedDirectories: 0, totalDirectories: 0, currentDirectory: "" });  const reconnectAttempts = useRef(0);
@@ -57,6 +53,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
       ws.current.onopen = () => {
         console.log("WebSocket connected");
+        updateTaskLog("websocket", { id: "websocket-status", message: "WebSocket connected", status: "success" });
         setIsConnected(true);
         if (reconnectTimeout.current) {
           clearTimeout(reconnectTimeout.current);
@@ -71,15 +68,11 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
           if (message.type === "s3-upload-total-directories") {
             progressAccumulator.current.totalDirectories = message.totalDirectories;
-          }
-
-          if (message.type === "s3-directory-progress") {
+          } else if (message.type === "s3-directory-progress") {
             progressAccumulator.current.processedDirectories = message.completedDirectories;
             progressAccumulator.current.totalDirectories = message.totalDirectories;
             progressAccumulator.current.currentDirectory = message.currentDirectory;
-          }
-
-          if (message.type === "progressUpdate" || message.type === "progressComplete") {
+          } else if (message.type === "progressUpdate" || message.type === "progressComplete") {
             setUploadStatuses((prevStatuses) => {
               const fileName = "excel_processing";
               const existingFileIndex = prevStatuses.findIndex((s) => s.fileName === fileName);
@@ -131,6 +124,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
                 return [...prevStatuses, newStatus];
               }
             });
+          } else {
+            // Log any other unhandled WebSocket messages
+            updateTaskLog("websocket", { id: `websocket-message-${Date.now()}`, message: `Received unhandled message: ${JSON.stringify(message)}`, status: "info" });
           }
         } catch (error) {
           console.error("Error parsing WebSocket message:", error);
@@ -139,6 +135,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
       ws.current.onclose = () => {
         console.log("WebSocket disconnected. Attempting to reconnect...");
+        updateTaskLog("websocket", { id: "websocket-status", message: "WebSocket disconnected. Attempting to reconnect...", status: "failed" });
         setIsConnected(false);
         if (reconnectTimeout.current) {
           clearTimeout(reconnectTimeout.current);
@@ -152,6 +149,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
 
       ws.current.onerror = (error) => {
         console.error("WebSocket error:", error);
+        updateTaskLog("websocket", { id: `websocket-error-${Date.now()}`, message: `WebSocket error: ${error instanceof Event ? error.type : JSON.stringify(error)}`, status: "failed" });
         ws.current?.close();
       };
     };
@@ -168,24 +166,9 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({ children }
     };
   }, []);
 
-  const updateTaskLog = useCallback((task: string, log: TaskLog) => {
-    setTaskLogs((prev) => {
-      const existingLogs = prev[task] || [];
-      return { ...prev, [task]: [...existingLogs, log] };
-    });
-  }, []);
-
-  const clearTaskLog = useCallback((task: string) => {
-    setTaskLogs((prev) => ({ ...prev, [task]: [] }));
-  }, []);
-
   const value = {
-    uploadStatuses,
-    taskLogs,
     s3UploadProgress,
     isConnected,
-    updateTaskLog,
-    clearTaskLog,
   };
 
   return (

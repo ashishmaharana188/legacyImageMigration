@@ -37,6 +37,10 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
 
   const updateTaskLog = (taskKey: string, log: any) => {
+    if (!log) {
+      console.warn(`Attempted to log an undefined message for taskKey: ${taskKey}`);
+      return;
+    }
     setTaskLogs(prevLogs => {
       const newLogs = { ...prevLogs };
       if (!newLogs[taskKey]) {

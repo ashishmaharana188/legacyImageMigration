@@ -4,7 +4,7 @@ import { Upload } from "@aws-sdk/lib-storage";
 import fs from "fs";
 import path from "path";
 import https from "https";
-import { broadcast } from "./webSocketService";
+import { broadcast } from "../src/utils/webSocketService";
 
 console.log(
   "AWS_ACCESS_KEY_ID:",

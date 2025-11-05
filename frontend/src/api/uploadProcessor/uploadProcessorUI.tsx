@@ -24,7 +24,7 @@ const UploadProcessorUI: React.FC<uploadProcessorUIProps> = ({
       </div>
 
       <div className="mt-4">
-        {uploadMessage && <p className="text-blue-500">{uploadMessage}</p>}
+        {uploadMessage && <p className="text-black">{uploadMessage}</p>}
 
       </div>
 

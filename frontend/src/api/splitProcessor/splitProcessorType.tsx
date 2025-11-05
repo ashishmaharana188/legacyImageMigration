@@ -2,8 +2,6 @@ export interface splitProcessorUIProps {
     loading: boolean;
     handleSplitFiles: () => Promise<void>;
     handleSplitFilesWithMuPDF: () => Promise<void>;
-    selectedFile: File | null;
-    setSelectedFile: React.Dispatch<React.SetStateAction<File | null>>;
 }
 
 export interface useSplitProcessorProps {
@@ -27,7 +25,6 @@ export interface SplitFileResponse {
 
 export interface RequestConfig {
   endpoint: string;
-  selectedFile?: File | null;
   updateTaskLog: (task: string, log: unknown) => void;
   setSplitMessage: React.Dispatch<React.SetStateAction<string>>;
   setLoading: React.Dispatch<React.SetStateAction<boolean>>;

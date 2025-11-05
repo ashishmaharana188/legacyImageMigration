@@ -1,7 +1,7 @@
 import { Pool, PoolClient } from "pg";
 import mongoose from "mongoose";
-import logger from "../utils/logger"; // Centralized logger
-import { startMongoSshTunnel, startSshTunnel } from "../services/tunnel"; // Import the tunnel starter
+import logger from "../src/utils/logger"; // Centralized logger
+import { startMongoSshTunnel, startSshTunnel } from "../src/utils/tunnel"; // Import the tunnel starter
 
 // --- PostgreSQL Pool Configuration ---
 let pgPool: Pool | null = null;

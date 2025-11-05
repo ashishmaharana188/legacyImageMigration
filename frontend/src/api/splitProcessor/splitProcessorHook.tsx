@@ -15,7 +15,6 @@ export const useSplitProcessorHook = ({
     const [loading, setLoading] = useState<boolean>(false);
     const [splitMessage, setSplitMessage] = useState<string>("");
     const [isUploading, setIsUploading] = useState<boolean>(false);
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [totalSplitFilesGenerated, setTotalSplitFilesGenerated] = useState<number>(0);
 
     // Refs for throttling
@@ -89,7 +88,6 @@ export const useSplitProcessorHook = ({
 
     const handleSplitFiles = async () => {
         await utilHandleSplitFiles(
-            selectedFile,
             updateTaskLog,
             clearTaskLog,
             setSplitMessage,
@@ -101,7 +99,6 @@ export const useSplitProcessorHook = ({
 
     const handleSplitFilesWithMuPDF = async () => {
         await utilHandleSplitFilesWithMuPDF(
-            selectedFile,
             updateTaskLog,
             clearTaskLog,
             setSplitMessage,
@@ -117,8 +114,6 @@ export const useSplitProcessorHook = ({
         isUploading,
         handleSplitFiles,
         handleSplitFilesWithMuPDF,
-        selectedFile,
-        setSelectedFile,
         totalSplitFilesGenerated,
     }
 };

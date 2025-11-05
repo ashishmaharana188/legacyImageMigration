@@ -18,6 +18,7 @@ if (fs.existsSync(envPath)) {
   console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
   console.log(`MONGO_URI: ${process.env.MONGO_URI ? "SET" : "NOT SET"}`);
   console.log(`LOCAL_URI: ${process.env.LOCAL_URI}`);
+  console.log(`API_FRONTEND_URL: ${process.env.API_FRONTEND_URL}`);
 
   if (isProduction) {
     console.log("Connected to Prod database");
@@ -33,11 +34,11 @@ import express from "express";
 import uploadProcessRouter from "./src/api/uploadProcessor/UploadProcessApp";
 import splitProcessorRouter from "./src/api/splitProcessor/splitProcessorApp";
 import cors from "cors";
-import { startSshTunnel } from "./services/tunnel";
+import { startSshTunnel } from "./src/utils/tunnel";
 import { connectMongo, disconnectMongo } from "./controllers/dbConnect"
 import { warmupPgPool } from "./controllers/dbConnect";
 import { verifyS3Connection } from "./services/s3Manager";
-import { initWebSocket } from "./services/webSocketService";
+import { initWebSocket } from "./src/utils/webSocketService";
 
 import { Server } from "net";
 
@@ -52,7 +53,7 @@ app.use(express.json());
 
 app.get("/config", (req, res) => {
   res.json({
-    apiBaseUrl: process.env.APP_BACKEND_URL,
+    apiBaseUrl: process.env.APP_BASE_URL,
     frontendUrl: process.env.API_FRONTEND_URL,
   });
 });
@@ -77,16 +78,28 @@ const startServer = async () => {
     );
   }
 
-  await warmupPgPool();
+  try {
+    await warmupPgPool();
+    console.log("PostgreSQL connection pool warmed up.");
+  } catch (error) {
+    console.error("Failed to warm up PostgreSQL connection pool:", error);
+  }
 
-  await verifyS3Connection();
+  try {
+    await verifyS3Connection();
+    console.log("S3 connection verified.");
+  } catch (error) {
+    console.error("Failed to verify S3 connection:", error);
+  }
 
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
     console.log("Express server listening, initializing WebSocket server...");
   });
 
+  console.log("Type of expressServer before initWebSocket:", typeof expressServer);
   initWebSocket(expressServer);
+  console.log("WebSocket server initialization attempted.");
 
   const gracefulShutdown = () => {
     console.log("Shutting down gracefully...");

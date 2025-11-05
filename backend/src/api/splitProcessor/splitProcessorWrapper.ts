@@ -1,7 +1,7 @@
 import fs from "fs/promises";
 import path from "path";
 import winston from "winston";
-import { broadcast } from "../../../services/webSocketService";
+import { broadcast } from "../../utils/webSocketService";
 import { SplitResult, SplitFileDetail, SplitProgressComplete } from "./splitProcessorTypes";
 import { performSplit } from "./splitProcessor";
 import { SplitProcessorUtil } from "./splitProcessorUtil"; // Import SplitProcessorUtil for its helper methods

@@ -23,15 +23,12 @@ const configPromise = initConfiguration();
 
 
 export const splitFile = async (
-  endpoint: string,
-  selectedFile: File
+  endpoint: string
 ): Promise<SplitFileResponse> => {
   await configPromise; // Ensure configuration is loaded
   const res = await axios.post<SplitFileResponse>(
     `${API_BASE_URL}/${endpoint}`,
-    {
-      filename: selectedFile.name,
-    }
+    {}
   );
   return res.data;
 };

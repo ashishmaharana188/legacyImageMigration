@@ -27,7 +27,6 @@ class SplitFilesController {
         statusCode: 200,
         message: "Files split successfully",
         splitSummary: result.summary,
-        splitFiles: result.splitFiles,
       });
     } catch (error) {
       logger.error({
@@ -63,7 +62,6 @@ class SplitFilesController {
         statusCode: 200,
         message: "Files split successfully with MuPDF",
         splitSummary: result.summary,
-        splitFiles: result.splitFiles,
       });
     } catch (error) {
       logger.error({
