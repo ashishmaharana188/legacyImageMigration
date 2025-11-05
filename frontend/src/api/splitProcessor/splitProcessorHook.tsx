@@ -16,6 +16,7 @@ export const useSplitProcessorHook = ({
     const [splitMessage, setSplitMessage] = useState<string>("");
     const [isUploading, setIsUploading] = useState<boolean>(false);
     const [selectedFile, setSelectedFile] = useState<File | null>(null);
+    const [totalSplitFilesGenerated, setTotalSplitFilesGenerated] = useState<number>(0);
 
     // Refs for throttling
     const splitProgressLatestRef = useRef<SplitProgressMessage | null>(null);
@@ -48,6 +49,7 @@ export const useSplitProcessorHook = ({
                 return newStatuses;
             });
             updateTaskLog("splitFiles", { splitSummary: latestSplitMessage });
+            setTotalSplitFilesGenerated(latestSplitMessage.totalSplitFilesGenerated);
             splitProgressLatestRef.current = null;
         }
 
@@ -117,6 +119,6 @@ export const useSplitProcessorHook = ({
         handleSplitFilesWithMuPDF,
         selectedFile,
         setSelectedFile,
-
+        totalSplitFilesGenerated,
     }
 };

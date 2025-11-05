@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import SplitProcessorUI from '../api/splitProcessor/splitProcessorUI';
-import SplitProcessorSummary from '../api/splitProcessor/splitProcessorSummary';
+import SplitProcessorSummaryUI from '../api/splitProcessor/splitProcessorSummaryUI';
 import { useTaskLog } from '../contexts/TaskLogContext';
 import {useSplitProcessorHook} from "../api/splitProcessor/splitProcessorHook"
 import { useState } from 'react';
@@ -8,7 +8,7 @@ import { useState } from 'react';
 const SplitProcessorComponent = () => {
 const { updateTaskLog, onClearLogs, setUploadStatuses } = useTaskLog()
 const [selectedFile, setSelectedFile] = useState<File | null>(null);
-const{splitMessage,loading,handleSplitFiles,handleSplitFilesWithMuPDF, splitFiles} = useSplitProcessorHook({
+const{splitMessage,loading,handleSplitFiles,handleSplitFilesWithMuPDF, totalSplitFilesGenerated} = useSplitProcessorHook({
     updateTaskLog,
     clearTaskLog: onClearLogs,
     setUploadStatuses,
@@ -23,9 +23,9 @@ const{splitMessage,loading,handleSplitFiles,handleSplitFilesWithMuPDF, splitFile
         selectedFile={selectedFile}
         setSelectedFile={setSelectedFile}
         />
-        <SplitProcessorSummary
+        <SplitProcessorSummaryUI
           splitMessage={splitMessage}
-          splitFiles={splitFiles}
+          totalSplitFilesGenerated={totalSplitFilesGenerated}
         />
       </>
     )

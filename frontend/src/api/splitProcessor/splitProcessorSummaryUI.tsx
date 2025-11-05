@@ -10,10 +10,16 @@ const SplitProcessorSummaryUI: React.FC<SplitProcessorSummaryUIProps> = ({
   }
 
   return (
-    <div className="border border-gray-300 rounded-lg p-4 mt-4">
-      <h4 className="font-semibold text-lg text-black mb-3">Split Results</h4>
+    <div>
+
       {splitMessage && (
-        <p className="text-sm text-gray-600 mb-2">{splitMessage}</p>
+
+          <div className="border border-gray-300 rounded-lg p-4 mt-4">
+
+               <h4 className="font-semibold text-lg text-black mb-3">Split Results</h4>
+                  <p className="text-sm text-gray-600 mb-2">{splitMessage}</p>
+          </div>
+
       )}
       {totalSplitFilesGenerated > 0 && (
         <p className="text-sm text-gray-700">
