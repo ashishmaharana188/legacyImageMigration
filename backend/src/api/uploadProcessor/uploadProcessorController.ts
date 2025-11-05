@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { spawn } from "child_process";
-import logger from "../../../utils/logger"
+import logger from "../../utils/logger"
 import path from "path";
 import { processExcelFile as wrapperProcessExcelFile } from "./uploadProcessorWrapper";
 

@@ -1,8 +1,13 @@
-import { Splitting } from "./splitProcessorUtil";
+import { SplitProcessorWrapper } from "./splitProcessorWrapper";
 import { Request, Response } from "express";
-import logger from "../../../services/logger"
+import logger from "../../../services/logger";
 
 class SplitFilesController {
+  private splitProcessorWrapper: SplitProcessorWrapper;
+
+  constructor() {
+    this.splitProcessorWrapper = new SplitProcessorWrapper();
+  }
 
   async splitFiles(req: Request, res: Response) {
     try {
@@ -11,8 +16,7 @@ class SplitFilesController {
         function: "splitFiles",
         message: "Initiating file splitting process.",
       });
-      const processor = new Splitting();
-      const result = await processor.splitFiles();
+      const result = await this.splitProcessorWrapper.splitFiles();
       logger.debug({
         category: "responses",
         function: "splitFiles",
@@ -48,8 +52,7 @@ class SplitFilesController {
         function: "splitFilesWithMuPDF",
         message: "Initiating file splitting process with MuPDF.",
       });
-      const processor = new Splitting();
-      const result = await processor.splitFilesWithMuPDF();
+      const result = await this.splitProcessorWrapper.splitFilesWithMuPDF();
       logger.debug({
         category: "responses",
         function: "splitFilesWithMuPDF",

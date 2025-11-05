@@ -31,6 +31,7 @@ if (fs.existsSync(envPath)) {
 
 import express from "express";
 import uploadProcessRouter from "./src/api/uploadProcessor/UploadProcessApp";
+import splitProcessorRouter from "./src/api/splitProcessor/splitProcessorApp";
 import cors from "cors";
 import { startSshTunnel } from "./services/tunnel";
 import { connectMongo, disconnectMongo } from "./controllers/dbConnect"
@@ -57,6 +58,7 @@ app.get("/config", (req, res) => {
 });
 
 app.use(uploadProcessRouter);
+app.use(splitProcessorRouter);
 
 const startServer = async () => {
   let pgServer: Server | undefined;

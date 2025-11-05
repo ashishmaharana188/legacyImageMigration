@@ -34,10 +34,8 @@ export const useSplitProcessorHook = ({
                 const isComplete = latestSplitMessage.type === "splitProgressComplete";
                 const progress = isComplete
                     ? 100
-                    : latestSplitMessage.totalExpectedSplits > 0
-                        ? (latestSplitMessage.totalSplitFilesGenerated /
-                            latestSplitMessage.totalExpectedSplits) *
-                        100
+                    : (latestSplitMessage.totalExpectedPagesFromCsv && latestSplitMessage.totalExpectedPagesFromCsv > 0)
+                        ? (latestSplitMessage.totalSplitFilesGenerated / latestSplitMessage.totalExpectedPagesFromCsv) * 100
                         : 0;
 
                 newStatuses.push({

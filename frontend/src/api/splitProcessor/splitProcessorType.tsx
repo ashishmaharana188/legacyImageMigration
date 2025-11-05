@@ -66,7 +66,9 @@ export interface UploadStatus {
 
 export interface SplitProgressMessage {
   type: "splitProgressUpdate" | "splitProgressComplete";
-  totalExpectedSplits: number;
+  // Removed totalExpectedSplits
   totalSplitFilesGenerated: number;
+  splitErrors: number;
+  totalExpectedPagesFromCsv?: number; // Added this field
   status?: string;
 }
