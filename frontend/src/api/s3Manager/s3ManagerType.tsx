@@ -66,3 +66,12 @@ export interface S3UploadResponse {
   error?: string;
   nextContinuationToken?: string;
 }
+
+
+
+export interface S3UploadSummaryUIProps {
+  title: string;
+  s3UploadStatus: UploadStatus;
+  displayType?: "aggregate" | "default";
+  unit?: string;
+}

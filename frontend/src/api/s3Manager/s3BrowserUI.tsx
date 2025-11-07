@@ -1,5 +1,5 @@
 import React from "react";
-import { S3Item, S3BrowserUIProps } from "./s3ManagerType";
+import { S3BrowserUIProps } from "./s3ManagerType";
 
 const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   items,

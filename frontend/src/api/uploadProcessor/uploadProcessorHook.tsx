@@ -60,6 +60,7 @@ export const useUploadProgressSummary = ({
 }: useUploadProgressSummaryProps) => {
   const [excelProcessingStatus, setExcelProcessingStatus] =
     useState<UploadStatus | null>(null);
+  const [s3UploadStatus, setS3UploadStatus] = useState<UploadStatus | null>(null);
 
   useEffect(() => {
     const excelStatus = uploadStatuses.find(
@@ -67,9 +68,15 @@ export const useUploadProgressSummary = ({
     );
     setExcelProcessingStatus(excelStatus || null);
 
+    const s3Status = uploadStatuses.find(
+      (s) => s.fileName === "s3_upload_progress"
+    );
+    setS3UploadStatus(s3Status || null);
+
   }, [uploadStatuses, taskLogs]);
 
   return {
     excelProcessingStatus,
+    s3UploadStatus,
   };
 };

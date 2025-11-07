@@ -3,12 +3,13 @@ import { SummaryDisplayProps, LogEntry } from "../uploadProcessor/uploadProcesso
 import { useUploadProgressSummary } from "../uploadProcessor/uploadProcessorHook";
 import { UploadProcessDisplay } from "../uploadProcessor/uploadProcessorSummaryUI";
 import SplitProcessorSummaryUI from "../splitProcessor/splitProcessorSummaryUI";
+import S3UploadSummaryUI from "../s3Manager/s3UploadSummaryUI";
 
 export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
   uploadStatuses,
 }) => {
-  const { excelProcessingStatus } = useUploadProgressSummary({
+  const { excelProcessingStatus, s3UploadStatus } = useUploadProgressSummary({
     uploadStatuses,
     taskLogs,
   });
@@ -44,7 +45,23 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
           </div>
         )}
 
-        {latestSplitLog && latestSplitLog.summary && latestSplitLog.summary.totalSplitFilesGenerated > 0 && (
+        {s3UploadStatus && (
+          <div key="s3Upload" className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold capitalize">S3 Upload</h4>
+            </div>
+            <div className="bg-gray-100 p-2 rounded">
+              <S3UploadSummaryUI
+                title="S3 Upload Progress"
+                s3UploadStatus={s3UploadStatus}
+                displayType="aggregate"
+                unit="files"
+              />
+            </div>
+          </div>
+        )}
+
+        {latestSplitLog && latestSplitLog.summary && (
           <div key="splitProcessor" className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <h4 className="font-semibold capitalize">Split Processor</h4>
