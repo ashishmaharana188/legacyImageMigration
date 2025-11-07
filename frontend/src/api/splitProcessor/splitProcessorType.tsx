@@ -35,22 +35,12 @@ export interface RequestConfig {
 
 }
 
-export interface FileResponseSummary {
+export interface SplitSummary {
   totalSplits: number;
   totalSuccessfulSplits: number;
   errors: number;
   totalUnsuccessfulSplits: number;
   totalPageCount: number;
-}
-
-export interface FileResponse {
-  statusCode?: number;
-  message?: string;
-  nextContinuationToken?: string;
-  summary?: FileResponseSummary;
-  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
-  error?: string;
-  directories?: string[];
 }
 
 export interface UploadStatus {

@@ -58,7 +58,11 @@ export interface S3UploadUIProps {
   handleUploadSplitFilesToS3: () => Promise<void>;
 }
 
-export interface S3BrowserTaskProps {
-  updateTaskLog: (task: string, log: any) => void;
-  clearTaskLog: (task: string) => void;
+export interface S3UploadResponse {
+  statusCode?: number;
+  message?: string;
+  downloadUrl?: string;
+  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
+  error?: string;
+  nextContinuationToken?: string;
 }

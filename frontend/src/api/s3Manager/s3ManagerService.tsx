@@ -1,5 +1,5 @@
 import axios from "axios";
-import { S3ApiResponse, SplitFileResponse, FileResponse } from "./s3ManagerType";
+import { S3ApiResponse, S3UploadResponse } from "./s3ManagerType";
 
 let API_BASE_URL: string | undefined;
 
@@ -39,17 +39,17 @@ export const deleteS3Object = async (key: string) => {
   return axios.post(`${API_BASE_URL}/s3-delete-object`, { keys: [key] });
 };
 
-export const uploadOriginalToS3 = async (): Promise<FileResponse> => {
+export const uploadOriginalToS3 = async (): Promise<S3UploadResponse> => {
   await configPromise;
-  const res = await axios.post<FileResponse>(
+  const res = await axios.post<S3UploadResponse>(
     `${API_BASE_URL}/upload-to-s3`
   );
   return res.data;
 };
 
-export const uploadSplitFilesToS3 = async (): Promise<FileResponse> => {
+export const uploadSplitFilesToS3 = async (): Promise<S3UploadResponse> => {
   await configPromise;
-  const res = await axios.post<FileResponse>(
+  const res = await axios.post<S3UploadResponse>(
     `${API_BASE_URL}/upload-split-to-s3`,
     {}
   );

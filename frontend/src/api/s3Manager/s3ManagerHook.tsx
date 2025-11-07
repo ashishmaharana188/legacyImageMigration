@@ -6,8 +6,8 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useDebounce } from "../../hooks/useDebounce";
-import { S3Item, S3File, S3ApiResponse, useS3BrowserProps } from "./s3ManagerType";
-import { fetchS3Objects, searchS3Folders, deleteS3Object } from "./s3ManagerService";
+import { S3Item, S3File, S3ApiResponse, useS3BrowserProps, useS3UploadProps } from "./s3ManagerType";
+import { fetchS3Objects, searchS3Folders, deleteS3Object, uploadOriginalToS3, uploadSplitFilesToS3 } from "./s3ManagerService";
 
 export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserProps) => {
   const queryClient = useQueryClient();
@@ -18,10 +18,9 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
 
   const {
     data: s3Data,
-    fetchNextPage: fetchNextS3Page,
-    hasNextPage: hasNextS3Page,
-    isLoading: isS3Loading,
-    isFetchingNextPage: isFetchingNextS3Page,
+    fetchNextPage: handleLoadMore,
+    hasNextPage,
+    isLoading,
     refetch: refetchS3Objects,
   } = useInfiniteQuery({
     queryKey: ["s3Objects", currentPrefix],
@@ -33,10 +32,9 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
 
   const {
     data: searchData,
-    fetchNextPage: fetchNextSearchPage,
+    fetchNextPage: handleLoadMoreSearch,
     hasNextPage: hasNextSearchPage,
     isLoading: isSearching,
-    isFetchingNextPage: isFetchingNextSearchPage,
   } = useInfiniteQuery({
     queryKey: ["s3Search", currentPrefix, debouncedSearchTerm],
     queryFn: ({ pageParam }: { pageParam?: string }) =>
@@ -65,7 +63,7 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
         });
       } else {
         updateTaskLog("s3Browser", {
-          message: `Failed to delete ${key}: An unknown error occurred.`, 
+          message: `Failed to delete ${key}: An unknown error occurred.`,
         });
       }
     },
@@ -82,13 +80,13 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
     [deleteMutation, updateTaskLog]
   );
 
-  const allS3Items = useMemo(() => {
-    const items: S3Item[] = [];
+  const items = useMemo(() => {
+    const newItems: S3Item[] = [];
     s3Data?.pages.forEach((page: S3ApiResponse) => {
-      page.directories.forEach((dir: string) => items.push({ key: dir, type: "dir" }));
-      page.files.forEach((file: S3File) => items.push({ ...file, type: "file" }));
+      page.directories.forEach((dir: string) => newItems.push({ key: dir, type: "dir" }));
+      page.files.forEach((file: S3File) => newItems.push({ ...file, type: "file" }));
     });
-    return items;
+    return newItems;
   }, [s3Data]);
 
   const searchResults = useMemo(() => {
@@ -100,43 +98,88 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
   }, [searchData]);
 
   const handleDirectoryClick = useCallback((directoryKey: string) => {
+    clearTaskLog("s3Browser");
     setCurrentPrefix(directoryKey);
     setIsFilterMode(false);
     setSearchTerm("");
-  }, []);
+  }, [clearTaskLog]);
 
   const handleBreadcrumbClick = useCallback(
     (index: number) => {
+      clearTaskLog("s3Browser");
       const pathParts = currentPrefix.split("/").filter(Boolean);
       const newPrefix = pathParts.slice(0, index + 1).join("/") + "/";
       setCurrentPrefix(newPrefix);
     },
-    [currentPrefix]
+    [currentPrefix, clearTaskLog]
   );
 
   const handleReload = useCallback(() => {
+    clearTaskLog("s3Browser");
     refetchS3Objects();
-  }, [refetchS3Objects]);
+  }, [refetchS3Objects, clearTaskLog]);
 
   return {
-    allS3Items,
+    items,
     currentPrefix,
-    isS3Loading,
-    isFetchingNextS3Page,
+    isLoading,
     isSearching,
-    isFetchingNextSearchPage,
     searchResults,
     isFilterMode,
     searchTerm,
-    hasNextS3Page,
+    hasNextPage,
     hasNextSearchPage,
     setIsFilterMode,
     setSearchTerm,
-    fetchNextS3Page,
-    fetchNextSearchPage,
+    handleLoadMore,
+    handleLoadMoreSearch,
     handleDeleteS3File,
     handleDirectoryClick,
     handleBreadcrumbClick,
     handleReload,
+  };
+};
+
+export const useS3UploadHook = ({ updateTaskLog, setUploadStatuses }: useS3UploadProps) => {
+  const [loading, setLoading] = useState(false);
+
+  const handleUploadToS3 = useCallback(async () => {
+    setLoading(true);
+    updateTaskLog("s3Upload", { message: "Initiating S3 original file upload..." });
+    setUploadStatuses((prev) => [...prev, { id: Date.now(), name: "Original File Upload", status: "pending", fileName: "Original File" }]);
+    try {
+      const response = await uploadOriginalToS3();
+      updateTaskLog("s3Upload", { message: `Original file upload successful: ${response.message}` });
+      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Original File Upload" ? { ...upload, status: "completed" } : upload));
+    } catch (error) {
+      const errorMessage = axios.isAxiosError(error) ? error.response?.data?.error || error.message : String(error);
+      updateTaskLog("s3Upload", { message: `Original file upload failed: ${errorMessage}` });
+      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Original File Upload" ? { ...upload, status: "failed", error: errorMessage } : upload));
+    } finally {
+      setLoading(false);
+    }
+  }, [updateTaskLog, setUploadStatuses]);
+
+  const handleUploadSplitFilesToS3 = useCallback(async () => {
+    setLoading(true);
+    updateTaskLog("s3Upload", { message: "Initiating S3 split files upload..." });
+    setUploadStatuses((prev) => [...prev, { id: Date.now(), name: "Split Files Upload", status: "pending", fileName: "Split Files" }]);
+    try {
+      const response = await uploadSplitFilesToS3();
+      updateTaskLog("s3Upload", { message: `Split files upload successful: ${response.message}` });
+      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Split Files Upload" ? { ...upload, status: "completed" } : upload));
+    } catch (error) {
+      const errorMessage = axios.isAxiosError(error) ? error.response?.data?.error || error.message : String(error);
+      updateTaskLog("s3Upload", { message: `Split files upload failed: ${errorMessage}` });
+      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Split Files Upload" ? { ...upload, status: "failed", error: errorMessage } : upload));
+    } finally {
+      setLoading(false);
+    }
+  }, [updateTaskLog, setUploadStatuses]);
+
+  return {
+    loading,
+    handleUploadToS3,
+    handleUploadSplitFilesToS3,
   };
 };
