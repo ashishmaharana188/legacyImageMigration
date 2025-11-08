@@ -248,3 +248,62 @@ export async function searchFolders(
     }
   }
 }
+
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { createReadStream } from "fs";
+import path from "path";
+
+export async function uploadOriginalToS3(localFilePath: string, s3Key: string): Promise<string> {
+  const fileStream = createReadStream(localFilePath);
+
+  const uploadParams = {
+    Bucket: S3_BUCKET_NAME,
+    Key: s3Key,
+    Body: fileStream,
+  };
+
+  try {
+    await s3.send(new PutObjectCommand(uploadParams));
+    console.log(`Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`);
+    return `Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`;
+  } catch (err: unknown) {
+    if (isAuthError(err)) {
+      console.error("S3 uploadOriginalToS3 failed: Authentication token expired or invalid. Please refresh your credentials.");
+      throw new Error("S3 operation failed due to expired or invalid credentials.");
+    } else {
+      console.error("Error uploading original file to S3:", err);
+      throw err;
+    }
+  }
+}
+
+export async function uploadSplitFilesToS3(localFilePaths: string[], s3Prefix: string): Promise<string[]> {
+  const uploadedKeys: string[] = [];
+  for (const localFilePath of localFilePaths) {
+    const fileName = path.basename(localFilePath);
+    const s3Key = `${s3Prefix}${fileName}`;
+    const fileStream = createReadStream(localFilePath);
+
+    const uploadParams = {
+      Bucket: S3_BUCKET_NAME,
+      Key: s3Key,
+      Body: fileStream,
+    };
+
+    try {
+      await s3.send(new PutObjectCommand(uploadParams));
+      uploadedKeys.push(s3Key);
+      console.log(`Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`);
+    } catch (err: unknown) {
+      if (isAuthError(err)) {
+        console.error("S3 uploadSplitFilesToS3 failed: Authentication token expired or invalid. Please refresh your credentials.");
+        throw new Error("S3 operation failed due to expired or invalid credentials.");
+      } else {
+        console.error(`Error uploading split file ${localFilePath} to S3:`, err);
+        throw err;
+      }
+    }
+  }
+  return uploadedKeys;
+}
+
