@@ -4,6 +4,7 @@ import { useUploadProgressSummary } from "../uploadProcessor/uploadProcessorHook
 import { UploadProcessDisplay } from "../uploadProcessor/uploadProcessorSummaryUI";
 import SplitProcessorSummaryUI from "../splitProcessor/splitProcessorSummaryUI";
 import S3UploadSummaryUI from "../s3Manager/s3UploadSummaryUI";
+import { SQLSummaryDisplay, MongoSummaryDisplay } from "../imageDataTransfer/imageDataTransferSummaryUI";
 
 export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
@@ -16,8 +17,10 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
 
   const uploadAndScriptLogs = taskLogs["uploadAndScript"] || [];
   const splitFilesLogs = taskLogs["splitFiles"] || [];
+  const sqlAndMongoLogs = taskLogs["sqlAndMongo"] || [];
 
   const latestSplitLog = splitFilesLogs[splitFilesLogs.length - 1] as LogEntry & { splitMessage?: string; summary?: { totalSplitFilesGenerated: number; splitErrors: number; totalExpectedPagesFromCsv: number; } };
+  const latestSqlAndMongoLog = sqlAndMongoLogs[sqlAndMongoLogs.length - 1];
 
   return (
     <div className="mt-4 text-black h-full flex flex-col">
@@ -71,6 +74,21 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 splitMessage={latestSplitLog.splitMessage || ""}
                 totalSplitFilesGenerated={latestSplitLog.summary.totalSplitFilesGenerated}
               />
+            </div>
+          </div>
+        )}
+
+        {latestSqlAndMongoLog && (
+          <div key="sqlAndMongo" className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold capitalize">SQL and Mongo Operations</h4>
+            </div>
+            <div className="bg-gray-100 p-2 rounded">
+              <SQLSummaryDisplay
+                log={latestSqlAndMongoLog}
+                logKey="sqlAndMongo"
+              />
+              <MongoSummaryDisplay log={latestSqlAndMongoLog} />
             </div>
           </div>
         )}

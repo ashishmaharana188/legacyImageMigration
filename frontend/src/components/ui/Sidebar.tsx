@@ -116,7 +116,7 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/sql-mongo" onClick={() => onSelectTask("sql-mongo")}>
+        <Link to="/sqlMongoRouter" onClick={() => onSelectTask("sql-mongo")}>
           <SidebarItem
             icon={<StorageIcon />}
             text="SQL and Mongo Calls"
