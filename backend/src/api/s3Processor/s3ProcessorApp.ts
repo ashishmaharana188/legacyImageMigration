@@ -1,6 +1,6 @@
 import express from "express";
 import { listFiles, deleteFiles, searchFiles, searchFolders } from "./s3Manager";
-import { uploadDirectoryRecursive, uploadSplitFilesToS3 } from "./s3Uploader";
+import { uploadDirectoryRecursive, uploadSplitFilesToS3, uploadOriginalToS3 } from "./s3Uploader";
 import { S3_BUCKET_NAME } from "../../utils/s3Config";
 
 const s3ProcessorRouter = express.Router();
@@ -57,6 +57,17 @@ s3ProcessorRouter.post("/s3/upload-directory", async (req, res) => {
   } catch (error: unknown) {
     console.error("Error uploading directory to S3:", error);
     res.status(500).json({ message: "Failed to upload directory to S3", error: error instanceof Error ? error.message : String(error) });
+  }
+});
+
+s3ProcessorRouter.post("/s3/upload-original", async (req, res) => {
+  const { localFilePath, s3Key } = req.body;
+  try {
+    const result = await uploadOriginalToS3(localFilePath, s3Key);
+    res.json({ message: "Original file upload initiated", result });
+  } catch (error: unknown) {
+    console.error("Error uploading original file to S3:", error);
+    res.status(500).json({ message: "Failed to upload original file to S3", error: error instanceof Error ? error.message : String(error) });
   }
 });
 

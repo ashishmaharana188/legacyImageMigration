@@ -5,6 +5,62 @@ import fs from "fs";
 import path from "path";
 import https from "https";
 import { broadcast } from "../../utils/webSocketService";
+import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3_BUCKET_NAME } from "../../utils/s3Config";
+
+export async function uploadOriginalToS3(localFilePath: string, s3Key: string): Promise<string> {
+  const fileStream = fs.createReadStream(localFilePath);
+
+  const uploadParams = {
+    Bucket: S3_BUCKET_NAME,
+    Key: s3Key,
+    Body: fileStream,
+  };
+
+  try {
+    await s3.send(new PutObjectCommand(uploadParams));
+    console.log(`Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`);
+    return `Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`;
+  } catch (err: unknown) {
+    if (isAuthError(err)) {
+      console.error("S3 uploadOriginalToS3 failed: Authentication token expired or invalid. Please refresh your credentials.");
+      throw new Error("S3 operation failed due to expired or invalid credentials.");
+    } else {
+      console.error("Error uploading original file to S3:", err);
+      throw err;
+    }
+  }
+}
+
+export async function uploadSplitFilesToS3(localFilePaths: string[], s3Prefix: string): Promise<string[]> {
+  const uploadedKeys: string[] = [];
+  for (const localFilePath of localFilePaths) {
+    const fileName = path.basename(localFilePath);
+    const s3Key = `${s3Prefix}${fileName}`;
+    const fileStream = fs.createReadStream(localFilePath);
+
+    const uploadParams = {
+      Bucket: S3_BUCKET_NAME,
+      Key: s3Key,
+      Body: fileStream,
+    };
+
+    try {
+      await s3.send(new PutObjectCommand(uploadParams));
+      uploadedKeys.push(s3Key);
+      console.log(`Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`);
+    } catch (err: unknown) {
+      if (isAuthError(err)) {
+        console.error("S3 uploadSplitFilesToS3 failed: Authentication token expired or invalid. Please refresh your credentials.");
+        throw new Error("S3 operation failed due to expired or invalid credentials.");
+      } else {
+        console.error(`Error uploading split file ${localFilePath} to S3:`, err);
+        throw err;
+      }
+    }
+  }
+  return uploadedKeys;
+}
 
 console.log(
   "AWS_ACCESS_KEY_ID:",
@@ -36,61 +92,9 @@ const s3 = new S3Client({
   }),
 });
 
-function isAuthError(error: unknown): boolean {
-  if (typeof error !== 'object' || error === null) {
-    return false;
-  }
-  const err = error as { name?: string; message?: string };
-  const isMessageAuthError = err.message
-    ? err.message.includes("token expired") ||
-      err.message.includes("InvalidToken") ||
-      err.message.includes("Token-0")
-    : false;
 
-  return err.name === "ExpiredToken" || isMessageAuthError;
-}
 
-// function countFilesRecursive(dir: string): number {
-//   let count = 0;
-//   try {
-//     const entries = fs.readdirSync(dir, { withFileTypes: true });
-//     for (const entry of entries) {
-//       const entryPath = path.join(dir, entry.name);
-//       if (entry.isDirectory()) {
-//         count += countFilesRecursive(entryPath);
-//       } else {
-//         count++;
-//       }
-//     }
-//   } catch (err) {
-//     console.error(`Error counting files in ${dir}:`, err);
-//   }
-//   return count;
-// }
 
-function countTrackedDirectories(dir: string, isInsideClientCodeDir: boolean = false): number {
-  let count = 0;
-  try {
-    const entries = fs.readdirSync(dir, { withFileTypes: true });
-    const currentDirName = path.basename(dir);
-    const isClientCodeDir = /^CLIENT_CODE_\d+$/.test(currentDirName);
-
-    if (isInsideClientCodeDir || !isClientCodeDir) {
-      // If we are inside a CLIENT_CODE_ directory, or the current directory is not a CLIENT_CODE_ directory, count it.
-      count++;
-    }
-
-    for (const entry of entries) {
-      const entryPath = path.join(dir, entry.name);
-      if (entry.isDirectory()) {
-        count += countTrackedDirectories(entryPath, isInsideClientCodeDir || isClientCodeDir);
-      }
-    }
-  } catch (err: unknown) {
-    console.error(`Error counting tracked directories in ${dir}:`, err instanceof Error ? err.message : err);
-  }
-  return count;
-}
 
 export async function uploadFile(
   localFilePath: string,

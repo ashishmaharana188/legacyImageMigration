@@ -34,6 +34,7 @@ import express from "express";
 import uploadProcessRouter from "./src/api/uploadProcessor/uploadProcessorApp";
 import splitProcessorRouter from "./src/api/splitProcessor/splitProcessorApp";
 import s3ProcessorRouter from "./src/api/s3Processor/s3ProcessorApp";
+import duplicateProcessorRouter from "./src/api/duplicateProcessor/duplicateProcessorApp";
 import cors from "cors";
 import { startSshTunnel } from "./src/utils/tunnel";
 import { connectMongo, disconnectMongo } from "./controllers/dbConnect"
@@ -62,6 +63,7 @@ app.get("/config", (req, res) => {
 app.use(uploadProcessRouter);
 app.use(splitProcessorRouter);
 app.use(s3ProcessorRouter);
+app.use(duplicateProcessorRouter);
 
 const startServer = async () => {
   let pgServer: Server | undefined;

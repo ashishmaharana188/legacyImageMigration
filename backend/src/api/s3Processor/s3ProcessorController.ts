@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import fs from "fs/promises";
 import logger from "../../utils/logger"
-import { uploadDirectoryRecursive,uploadSplitFilesToS3 } from "./s3Uploader";
+import { uploadDirectoryRecursive, uploadSplitFilesToS3, uploadOriginalToS3 } from "./s3Uploader";
 import { listFiles,deleteFiles,searchFiles, searchFolders } from "./s3Manager";
 import path from "path";
 import {
@@ -115,9 +115,7 @@ class S3ProcessorController {
         const bucket = S3_BUCKET_NAME;
 
         try {
-            const clients = await fs.readdir(splitOutputRoot, {
-                withFileTypes: true,
-            });
+            const clients = await fs.readdir(splitOutputRoot, { withFileTypes: true });
             const clientDirs = clients.filter(
                 (d) => d.isDirectory() && d.name.startsWith("CLIENT_CODE_")
             );
@@ -129,18 +127,28 @@ class S3ProcessorController {
                 });
             }
 
-            // Await the upload process to get final counts
             const uploadResults = await Promise.all(
                 clientDirs.map(async (clientDir) => {
                     const clientPath = path.join(splitOutputRoot, clientDir.name);
                     const s3Prefix = getS3SplitPrefix(clientDir.name);
+
+                    const filesInClientDir = await fs.readdir(clientPath, { withFileTypes: true });
+                    const localFilePaths = filesInClientDir
+                        .filter(file => file.isFile())
+                        .map(file => path.join(clientPath, file.name));
+
                     logger.info({
                         category: "task-steps",
                         function: "uploadSplitFilesToS3",
                         message: `Uploading SplitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
                     });
                     try {
-                        return await uploadSplitFilesToS3(clientPath, bucket, s3Prefix);
+                        const uploadedKeys = await uploadSplitFilesToS3(localFilePaths, s3Prefix);
+                        return {
+                            successfulFilesCount: uploadedKeys.length,
+                            failedFilesCount: localFilePaths.length - uploadedKeys.length,
+                            failedFileDetails: [], // Detailed errors would be logged inside uploadSplitFilesToS3
+                        };
                     } catch (error) {
                         logger.error({
                             category: "task-steps",
@@ -151,7 +159,7 @@ class S3ProcessorController {
                         });
                         return {
                             successfulFilesCount: 0,
-                            failedFilesCount: 1,
+                            failedFilesCount: localFilePaths.length,
                             failedFileDetails: [
                                 {
                                     name: clientDir.name,
@@ -185,7 +193,6 @@ class S3ProcessorController {
                 failedFilesCount: totalFailedFiles,
             });
         } catch (error: unknown) {
-            // This outer catch handles errors like `fs.readdir` failing
             const errorMessage =
               error instanceof Error ?  error.message && error.message.includes("expired credentials"):error
                     ? "S3 upload process failed: Authentication token expired. Please refresh your credentials."
@@ -199,7 +206,6 @@ class S3ProcessorController {
                 error: errorMessage,
                 stack: error instanceof Error ? error.stack : undefined,
             });
-            // If an error occurs before sending the initial 200 response, send a 500.
             if (!res.headersSent) {
                 res.status(500).json({
                     statusCode: 500,
@@ -209,6 +215,52 @@ class S3ProcessorController {
             }
         }
     }
+    async uploadOriginalToS3(req: Request, res: Response) {
+        try {
+            const { localFilePath, s3Key } = req.body;
+
+            if (!localFilePath || !s3Key) {
+                return res.status(400).json({
+                    statusCode: 400,
+                    error: "Missing required parameters: localFilePath and s3Key.",
+                });
+            }
+
+            logger.info({
+                category: "api-calls",
+                function: "uploadOriginalToS3",
+                message: `Initiating S3 upload for original file: ${localFilePath} to ${s3Key}`,
+            });
+
+            const result = await uploadOriginalToS3(localFilePath, s3Key);
+
+            res.status(200).json({
+                statusCode: 200,
+                message: "Original file uploaded successfully",
+                result,
+            });
+        } catch (error: unknown) {
+            const errorMessage =
+                error instanceof Error ? error.message && error.message.includes("expired credentials") : error
+                    ? "S3 operation failed: Authentication token expired. Please refresh your credentials."
+                    : error instanceof Error
+                        ? error.message
+                        : "Unknown error";
+            logger.error({
+                category: "api-calls",
+                function: "uploadOriginalToS3",
+                message: "Failed to upload original file to S3",
+                error: errorMessage,
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+            res.status(500).json({
+                statusCode: 500,
+                error: "Failed to upload original file to S3",
+                details: errorMessage,
+            });
+        }
+    }
+
     async listS3Files(req: Request, res: Response) {
         try {
             const prefix = (req.query.prefix as string) || "";
