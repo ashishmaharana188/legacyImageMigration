@@ -83,8 +83,8 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
   const items = useMemo(() => {
     const newItems: S3Item[] = [];
     s3Data?.pages.forEach((page: S3ApiResponse) => {
-      page.directories.forEach((dir: string) => newItems.push({ key: dir, type: "dir" }));
-      page.files.forEach((file: S3File) => newItems.push({ ...file, type: "file" }));
+      (page.directories ?? []).forEach((dir: string) => newItems.push({ key: dir, type: "dir" }));
+      (page.files ?? []).forEach((file: S3File) => newItems.push({ ...file, type: "file" }));
     });
     return newItems;
   }, [s3Data]);
@@ -116,8 +116,21 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
 
   const handleReload = useCallback(() => {
     clearTaskLog("s3Browser");
-    refetchS3Objects();
-  }, [refetchS3Objects, clearTaskLog]);
+    const defaultPrefix = "Data/";
+    if (currentPrefix !== defaultPrefix) {
+      const pathParts = currentPrefix.split("/").filter(Boolean);
+      if (pathParts.length > 1) {
+        const newPrefix = pathParts.slice(0, pathParts.length - 1).join("/") + "/";
+        setCurrentPrefix(newPrefix);
+      } else {
+        // If only one part (e.g., 'Data/'), go to default
+        setCurrentPrefix(defaultPrefix);
+      }
+    } else {
+      // Already at default, just refetch
+      refetchS3Objects();
+    }
+  }, [refetchS3Objects, clearTaskLog, currentPrefix, setCurrentPrefix]);
 
   return {
     items,

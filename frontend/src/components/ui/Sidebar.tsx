@@ -123,7 +123,7 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/s3-browser" onClick={() => onSelectTask("s3-browser")}>
+        <Link to="/s3ManagerRouter" onClick={() => onSelectTask("s3-browser")}>
           <SidebarItem
             icon={<CloudUploadIcon />}
             text="S3 Browser"

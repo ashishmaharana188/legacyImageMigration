@@ -20,38 +20,39 @@ const configPromise = initConfiguration();
 
 export const fetchS3Objects = async ({ pageParam, prefix = "Data/" }: { pageParam?: string; prefix?: string; }): Promise<S3ApiResponse> => {
   await configPromise;
-  const { data } = await axios.get(`${API_BASE_URL}/s3-list-objects`, {
-    params: { prefix, continuationToken: pageParam },
+  const { data } = await axios.post(`${API_BASE_URL}/s3/list`, {
+    prefix, continuationToken: pageParam,
   });
   return data;
 };
 
 export const searchS3Folders = async ({ pageParam, prefix = "Data/", pattern = "" }: { pageParam?: string; prefix?: string; pattern?: string; }): Promise<S3ApiResponse> => {
   await configPromise;
-  const { data } = await axios.get(`${API_BASE_URL}/s3-search-folders`, {
-    params: { prefix, pattern, continuationToken: pageParam },
+  const { data } = await axios.post(`${API_BASE_URL}/s3/search-folders`, {
+    prefix, pattern, continuationToken: pageParam,
   });
   return data;
 };
 
 export const deleteS3Object = async (key: string) => {
   await configPromise;
-  return axios.post(`${API_BASE_URL}/s3-delete-object`, { keys: [key] });
+  return axios.post(`${API_BASE_URL}/s3/delete`, { keys: [key] });
 };
 
-export const uploadOriginalToS3 = async (): Promise<S3UploadResponse> => {
+export const uploadOriginalToS3 = async (localDir: string, prefix: string): Promise<S3UploadResponse> => {
   await configPromise;
   const res = await axios.post<S3UploadResponse>(
-    `${API_BASE_URL}/upload-to-s3`
+    `${API_BASE_URL}/s3/upload-directory`,
+    { localDir, prefix }
   );
   return res.data;
 };
 
-export const uploadSplitFilesToS3 = async (): Promise<S3UploadResponse> => {
+export const uploadSplitFilesToS3 = async (localDir: string, prefix: string): Promise<S3UploadResponse> => {
   await configPromise;
   const res = await axios.post<S3UploadResponse>(
-    `${API_BASE_URL}/upload-split-to-s3`,
-    {}
+    `${API_BASE_URL}/s3/upload-split-files`,
+    { localDir, prefix }
   );
   return res.data;
 };
