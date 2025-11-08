@@ -7,6 +7,7 @@ import {
 import mongoose from "mongoose";
 import logger from "../../utils/logger";
 import { MongoDuplicateCheckResult } from "./duplicateProcessorTypes";
+import { mongoAggregate, mongoDeleteMany } from "./duplicateProcessorCore";
 
 export class DuplicateProcessorMongoUtil {
   private model: mongoose.Model<any>;
@@ -227,24 +228,20 @@ export class DuplicateProcessorMongoUtil {
       ];
 
       // Log the count of documents after the cutoff date filter
-      const documentsAfterCutoff = await this.model
-        .aggregate([
-          ...pipeline.slice(
-            0,
-            pipeline.findIndex((stage) => "$group" in stage)
-          ), // Get stages up to the group stage
-          { $count: "count" },
-        ])
-        .exec();
+      const documentsAfterCutoff = await mongoAggregate(this.model, [
+        ...pipeline.slice(
+          0,
+          pipeline.findIndex((stage) => "$group" in stage)
+        ), // Get stages up to the group stage
+        { $count: "count" },
+      ]);
 
       logger.info({
         category: "task-steps",
         message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${documentsAfterCutoff[0]?.count || 0}`,
       });
 
-      const duplicates = await this.model
-        .aggregate<MongoDuplicateCheckResult>(pipeline)
-        .exec();
+      const duplicates = await mongoAggregate(this.model, pipeline);
 
       const totalDuplicateGroups = duplicates.length;
       const totalDuplicateDocuments = duplicates.reduce(
@@ -285,7 +282,7 @@ export class DuplicateProcessorMongoUtil {
         }
 
         if (allDocumentsToDeleteIds.length > 0) {
-          const deleteResult = await this.model.deleteMany({
+          const deleteResult = await mongoDeleteMany(this.model, {
             _id: { $in: allDocumentsToDeleteIds },
           });
           logs.push({
