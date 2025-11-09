@@ -1,7 +1,7 @@
 // backend/src/api/imageDataTransfer/imageDataTransferCore.ts
 
 import { PoolClient } from "pg";
-import mongoose from "mongoose";
+import mongoose, { Document } from "mongoose";
 
 // --- SQL Queries ---
 
@@ -155,23 +155,23 @@ WHERE add.created_by = 'system' %CLIENT_ID_CLAUSE%;
 
 // --- MongoDB Operations ---
 
-export async function mongoFindOne(model: mongoose.Model<any>): Promise<any> {
-  return model.find({}).limit(1).lean();
+export async function mongoFindOne(model: mongoose.Model<Document>): Promise<Document | null> {
+  return model.findOne({}).lean();
 }
 
-export async function mongoInsertMany(model: mongoose.Model<any>, documents: any[]): Promise<void> {
+export async function mongoInsertMany(model: mongoose.Model<Document>, documents: unknown[]): Promise<void> {
   await model.insertMany(documents);
 }
 
-export async function mongoBulkWrite(model: mongoose.Model<any>, operations: any[]): Promise<any> {
+export async function mongoBulkWrite(model: mongoose.Model<Document>, operations: mongoose.BulkWriteOperation<Document>[]): Promise<any> {
   return model.bulkWrite(operations);
 }
 
-export async function mongoFind(model: mongoose.Model<any>, query: any): Promise<any[]> {
+export async function mongoFind(model: mongoose.Model<Document>, query: Record<string, unknown>): Promise<Document[]> {
   return model.find(query).lean();
 }
 
-export async function mongoAggregate(model: mongoose.Model<any>, pipeline: any[]): Promise<any[]> {
+export async function mongoAggregate(model: mongoose.Model<Document>, pipeline: Record<string, unknown>[]): Promise<Document[]> {
   return model.aggregate(pipeline).exec();
 }
 

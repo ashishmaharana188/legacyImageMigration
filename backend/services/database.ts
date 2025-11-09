@@ -4,7 +4,7 @@ import { parse } from "csv-parse";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
-import * as ExcelJS from "exceljs";
+import ExcelJS from "exceljs";
 import { Pool, PoolClient } from "pg";
 import logger from "../src/utils/logger";
 import {

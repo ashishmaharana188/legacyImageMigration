@@ -1,12 +1,12 @@
+import mongoose, { Document } from "mongoose";
+import logger from "../../utils/logger"; // Adjusted path
+import { SqlUtil } from "./sqlUtil"; // Import SqlUtil for PostgreSQL operations
 import {
   connectMongo,
   disconnectMongo,
   getMongoModel,
   getMongoDb,
-} from "../../../controllers/dbConnect"; // Adjusted path
-import mongoose from "mongoose";
-import logger from "../../utils/logger"; // Adjusted path
-import { SqlUtil } from "./sqlUtil"; // Import SqlUtil for PostgreSQL operations
+} from "../../utils/dbConnect"; // Adjusted path
 import {
   mongoFindOne,
   mongoInsertMany,
@@ -16,7 +16,7 @@ import {
 } from "./imageDataTransferCore";
 
 export class MongoUtil {
-  private model: mongoose.Model<any>;
+  private model: mongoose.Model<Document>;
 
   constructor() {
     this.model = getMongoModel();
@@ -34,7 +34,7 @@ export class MongoUtil {
     await disconnectMongo();
   }
 
-  public async testConnectionAndQuery(): Promise<any[]> {
+  public async testConnectionAndQuery(): Promise<Document[]> {
     try {
       if (mongoose.connection.readyState !== 1) {
         logger.warn({
@@ -55,9 +55,9 @@ export class MongoUtil {
       const result = await mongoFindOne(this.model);
       logger.info({
         category: "app-flow",
-        message: `MongoDB connection test successful. Found ${result.length} document(s).`,
+        message: `MongoDB connection test successful. Found ${result ? 1 : 0} document(s).`,
       });
-      return result;
+      return result ? [result] : [];
     } catch (error) {
       logger.error({
         category: "app-flow",
@@ -69,7 +69,7 @@ export class MongoUtil {
 
   public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
-    documents?: any[]; // Added to return the documents
+    documents?: Document[]; // Added to return the documents
   }> {
     try {
       const sqlUtil = new SqlUtil(); // Use SqlUtil
@@ -113,13 +113,13 @@ export class MongoUtil {
         pgClientId: pgClientId || "N/A",
         pgDataCount: pgData.length,
       });
-      const documentsToInsert = [];
+      const documentsToInsert: Document[] = [];
 
       for (const data of pgData) {
         const docType = data.document_type;
         const docProcess = data.document_process;
 
-        const doc = {
+        const doc: Document = {
           activityStatus: data.activity_status || "O",
           applicationId: data.application_id || null,
           clientId: data.client_code, // Use the correct client_code
@@ -169,7 +169,7 @@ export class MongoUtil {
     }
   }
 
-  public async insertDocument(documents: any[]): Promise<void> {
+  public async insertDocument(documents: Document[]): Promise<void> {
     try {
       await mongoInsertMany(this.model, documents);
     } catch (error) {
@@ -184,13 +184,13 @@ export class MongoUtil {
   public async updateMongoTransactions(clientId?: number): Promise<{
     updatedCount: number;
     syncedCount: number;
-    updatedDocuments: any[];
-    syncedDocuments: any[];
+    updatedDocuments: Document[];
+    syncedDocuments: Document[];
   }> {
     let totalUpdatedCount = 0;
     let totalSyncedCount = 0;
-    const allUpdatedDocuments: any[] = [];
-    const allSyncedDocuments: any[] = [];
+    const allUpdatedDocuments: Document[] = [];
+    const allSyncedDocuments: Document[] = [];
 
     logger.info({
       category: "task-steps",
@@ -215,16 +215,16 @@ export class MongoUtil {
         };
       }
 
-      const processBatch = async (pgData: any[]) => {
+      const processBatch = async (pgData: unknown[]) => {
         logger.info({
           category: "task-steps",
           message: `Processing batch of ${pgData.length} PostgreSQL documents.`,
           pgDataSample: pgData.slice(0, 2), // Log first 2 items for brevity
           pgDataCount: pgData.length,
         });
-        const bulkOperations = [];
-        const documentsToUpdate = [];
-        const documentsToSync = [];
+        const bulkOperations: mongoose.BulkWriteOperation<Document>[] = [];
+        const documentsToUpdate: Document[] = [];
+        const documentsToSync: Document[] = [];
 
         const uniqueFilters = pgData.map((data) => ({
           clientId: data.client_code, // Use client_code (string) from PostgreSQL
@@ -240,7 +240,7 @@ export class MongoUtil {
           return;
         }
 
-        const mongoQuery: any = { $or: uniqueFilters, sourceUser: "system" };
+        const mongoQuery: Record<string, unknown> = { $or: uniqueFilters, sourceUser: "system" };
         // The clientId filter is already part of the uniqueFilters if clientId was provided to streamUpdateDetails
         // No need to add it again as a top-level AND condition.
 
@@ -256,12 +256,12 @@ export class MongoUtil {
           message: `Fetched ${mongoDocs.length} documents from MongoDB.`,
           mongoDocsCount: mongoDocs.length,
         });
-        const mongoDocMap = new Map<string, any>();
+        const mongoDocMap = new Map<string, Document>();
         mongoDocs.forEach((doc) => {
           mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
         });
 
-        for (const data of pgData) {
+        for (const data of pgData as Record<string, unknown>[]) {
           const key = `${data.client_code}-${data.user_attr1}`;
           const mongoDoc = mongoDocMap.get(key);
 
@@ -347,10 +347,10 @@ export class MongoUtil {
     }
   }
 
-  public async getDocumentsCreatedAfterDate(date: Date): Promise<any[]> {
+  public async getDocumentsCreatedAfterDate(date: Date): Promise<Document[]> {
     try {
       await this.connect();
-      const pipeline: any[] = [
+      const pipeline: Record<string, unknown>[] = [
         {
           $addFields: {
             createdOnDate: {

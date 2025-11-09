@@ -2,23 +2,15 @@
 
 import { SqlUtil } from "./sqlUtil";
 import { MongoUtil } from "./mongoUtil";
-import logger from "../../utils/logger";
 import { SqlLog } from "./imageDataTransferTypes";
-import { DuplicateProcessorSqlUtil } from "../duplicateProcessor/duplicateProcessorSqlUtil";
-import { DuplicateProcessorMongoUtil } from "../duplicateProcessor/duplicateProcessorMongoUtil";
-import { MongoDuplicateCheckResult } from "../duplicateProcessor/duplicateProcessorTypes";
 
 export class ImageDataTransferWrapper {
   private sqlUtil: SqlUtil;
   private mongoUtil: MongoUtil;
-  private duplicateProcessorSqlUtil: DuplicateProcessorSqlUtil;
-  private duplicateProcessorMongoUtil: DuplicateProcessorMongoUtil;
 
   constructor() {
     this.sqlUtil = new SqlUtil();
     this.mongoUtil = new MongoUtil();
-    this.duplicateProcessorSqlUtil = new DuplicateProcessorSqlUtil();
-    this.duplicateProcessorMongoUtil = new DuplicateProcessorMongoUtil();
   }
 
   public async executeSql(): Promise<{
@@ -62,27 +54,6 @@ export class ImageDataTransferWrapper {
     );
   }
 
-
-
-  public async sanityCheckDuplicates(params: {
-    dryRun?: boolean;
-    normalize?: boolean;
-    cutoffTms?: string;
-    clientCode?: string;
-  }): Promise<{
-    result: "success" | "failed";
-    dryRun: boolean;
-    cutoffTms: string;
-    deletedCount?: number;
-    rows?: any[];
-    logs: SqlLog[];
-    imperfectDuplicates?: string[];
-    imperfectDuplicatesFilePath?: string | null;
-    totalDuplicatesFound?: number;
-  }> {
-    return this.duplicateProcessorSqlUtil.sanityCheckDuplicates(params);
-  }
-
   public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
     documents?: any[];
@@ -97,21 +68,6 @@ export class ImageDataTransferWrapper {
     syncedDocuments: any[];
   }> {
     return this.mongoUtil.updateMongoTransactions(clientId);
-  }
-
-  public async sanityCheckMongoDuplicates(params: {
-    dryRun?: boolean;
-    cutoffTms?: string;
-    clientId?: string;
-  }): Promise<{
-    result: "success" | "failed";
-    dryRun: boolean;
-    duplicates: MongoDuplicateCheckResult[];
-    totalDuplicateGroups: number;
-    totalDuplicateDocuments: number;
-    logs: any[];
-  }> {
-    return this.duplicateProcessorMongoUtil.sanityCheckMongoDuplicates(params);
   }
 
 

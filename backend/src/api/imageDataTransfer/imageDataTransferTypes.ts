@@ -1,12 +1,9 @@
 // backend/src/api/imageDataTransfer/imageDataTransferTypes.ts
 
-import mongoose from "mongoose";
 
 export interface SqlLog {
   row: number;
-  status: "success" | "error" | "executed" | "updated";
+  status: "error" | "updated" | "info" | "success" | "executed";
   message: string;
   sql?: string;
 }
-
-

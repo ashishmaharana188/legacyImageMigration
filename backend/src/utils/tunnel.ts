@@ -1,7 +1,7 @@
 import { createTunnel } from "tunnel-ssh";
-import * as fs from "fs";
-import * as path from "path";
-import * as os from "os";
+import fs from "fs";
+import path from "path";
+import os from "os";
 import logger from "../utils/logger"; // Import the logger
 
 export const startSshTunnel = async () => {

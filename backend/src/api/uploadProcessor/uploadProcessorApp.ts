@@ -1,6 +1,6 @@
 import express from "express";
 import multer from "multer";
-import * as fsp from "fs/promises";
+import fsp from "fs/promises";
 import path from "path";
 import { uploadProcessorController } from "./uploadProcessorController"; // New import
 

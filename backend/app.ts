@@ -1,7 +1,7 @@
 import dotenv from "dotenv";
 import os from "os";
 import path from "path";
-import * as fs from "fs";
+import fs from "fs";
 
 // --- Environment Variable Loading ---
 // This block MUST be at the very top of the file, before any other imports,
