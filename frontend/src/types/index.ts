@@ -1,3 +1,5 @@
+import { SanityCheckResponse } from '../api/dataClean/sanityCheckType';
+
 export interface SummaryItem {
   fileName: string;
   status: string;
@@ -142,7 +144,8 @@ export type LogEntry =
   | FolioTransactionUpdateLog
   | TaskLogEntry
   | FileResponse
-  | UploadProgressResponse;
+  | UploadProgressResponse
+  | SanityCheckResponse;
 
 export interface S3UploadProgress {
   processedDirectories: number;

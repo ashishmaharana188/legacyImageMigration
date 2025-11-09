@@ -14,7 +14,6 @@ import {
 } from "../../../controllers/dbConnect"; // Adjusted path
 import Cursor from "pg-cursor";
 import { SqlLog, AifDocumentDetail, IPgQueryResult } from "./imageDataTransferTypes"; // Adjusted path
-import { DuplicateProcessorSqlUtil } from "../duplicateProcessor/duplicateProcessorSqlUtil";
 import {
   pgQuery,
   pgBegin,
@@ -46,12 +45,6 @@ export class SqlUtil {
     SWOF: "SWP",
   };
 
-  private duplicateProcessorSqlUtil: DuplicateProcessorSqlUtil;
-
-  constructor() {
-    // Pool is now managed externally
-    this.duplicateProcessorSqlUtil = new DuplicateProcessorSqlUtil();
-  }
 
   private async reconnectPool(): Promise<void> {
     await reconnectPgPool();

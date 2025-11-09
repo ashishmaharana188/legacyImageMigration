@@ -1,8 +1,10 @@
 import React, { useState } from "react";
 import { UploadProgressDisplay, BadRowsDetailsTable } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
+import SanityCheckSummaryDisplay from "../../api/dataClean/sanityCheckSummaryUI";
+import { LogEntry } from "../../types";
 
 interface DetailsDisplayUIProps {
-  log: any;
+  log: LogEntry;
   logKey: string;
   expandedLogId: string | null;
   parsedBadRows: any[] | null;
@@ -99,50 +101,12 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
           )}
         </div>
       );
-    } else if (log.dryRun !== undefined && log.rows !== undefined) {
-      const duplicatesMap = new Map<
-        string,
-        { count: number; entries: any[] }
-      >();
-      log.rows.forEach((row: any) => {
-        const key = row.user_attr1;
-        if (!duplicatesMap.has(key)) {
-          duplicatesMap.set(key, { count: 0, entries: [] });
-        }
-        const entry = duplicatesMap.get(key)!;
-        entry.count++;
-        entry.entries.push(row);
-      });
-      const duplicateEntries = Array.from(duplicatesMap.values()).filter(
-        (entry) => entry.count > 1
-      );
-
-      return (
-        <div>
-          <h5 className="font-semibold">Sanity Check Duplicates Summary:</h5>
-          <p>Dry Run: {log.dryRun ? "Yes" : "No"}</p>
-          <p>Cutoff Timestamp: {log.cutoffTms}</p>
-          <p>
-            Total Duplicates Found:{" "}
-            {duplicateEntries.reduce((acc, entry) => acc + entry.count - 1, 0)}
-          </p>
-          <button onClick={toggleExpansion}>
-            {isExpanded ? "Hide Details" : "Show Details"}
-          </button>
-          {isExpanded && (
-            <>
-              {duplicateEntries.length > 0 ? (
-                <div className="bg-gray-100 p-2 rounded mt-2">
-                  {/* ... duplicate details table ... */}
-                </div>
-              ) : (
-                <p className="mt-2">No duplicates found.</p>
-              )}
-            </>
-          )}
-        </div>
-      );
-    } else if (log.successfulRows !== undefined && log.badRows !== undefined) {
+    } else if (
+      ("dryRun" in log && log.dryRun !== undefined) ||
+      ("duplicates" in log && Array.isArray(log.duplicates))
+    ) {
+      return <SanityCheckSummaryDisplay log={log} logKey={logKey} />;
+    } else if ("successfulRows" in log && "badRows" in log) {
       return (
         <div>
           <h5 className="font-semibold">SQL Execution Summary:</h5>
@@ -161,7 +125,7 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
             <>
               <button
                 onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath, logKey)
+                  toggleBadRowsDisplay(log.badRowsFilePath!, logKey)
                 }
                 className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
               >
@@ -185,7 +149,7 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
           <button onClick={toggleExpansion}>
             {isExpanded ? "Hide Details" : "Show Details"}
           </button>
-          {isExpanded && log.documents.length > 0 && (
+          {isExpanded && log.documents && log.documents.length > 0 && (
             <div className="bg-gray-100 p-2 rounded mt-2">
               {/* ... transferred documents table ... */}
             </div>
@@ -220,23 +184,12 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
           </table>
         </div>
       );
-    } else if (log.duplicates && Array.isArray(log.duplicates)) {
-      return (
-        <div>
-          <h5 className="font-semibold">MongoDB Duplicate Check Summary:</h5>
-          <p>
-            Total Duplicate Documents:{" "}
-            {log.totalDuplicateDocuments - log.totalDuplicateGroups}
-          </p>
-          <p>Total documents after Cuttoff: {log.totalDuplicateGroups}</p>
-        </div>
-      );
-    } else if (log.updatedDocuments) {
+    } else if ("updatedDocuments" in log) {
       return (
         <div>
           <h5 className="font-semibold">Mongo Transactions Update Summary:</h5>
           <p>Updated Count: {log.updatedCount}</p>
-          {log.updatedDocuments.length > 0 && (
+          {log.updatedDocuments && log.updatedDocuments.length > 0 && (
             <button onClick={toggleExpansion}>
               {isExpanded ? "Hide Details" : "Show Details"}
             </button>

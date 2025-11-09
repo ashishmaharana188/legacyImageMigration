@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadProcessorRouterRouteImport } from './routes/uploadProcessorRouter'
 import { Route as SqlMongoRouterRouteImport } from './routes/sqlMongoRouter'
 import { Route as SplitProcessorRouterRouteImport } from './routes/splitProcessorRouter'
-import { Route as SanityCheckRouteImport } from './routes/sanity-check'
+import { Route as SanityCheckRouteImport } from './routes/dataCleanRouter'
 import { Route as S3ManagerRouterRouteImport } from './routes/s3ManagerRouter'
 import { Route as IndexRouteImport } from './routes/index'
 

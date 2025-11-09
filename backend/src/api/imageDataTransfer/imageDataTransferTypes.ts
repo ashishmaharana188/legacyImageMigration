@@ -31,8 +31,10 @@ export interface AifDocumentDetail {
 
 export interface IAifDocumentInput {
   activityStatus: string;
+  barcode?: string;
   applicationId: string | null;
   clientId: string;
+  branchId?: string;
   createdBy: string;
   createdFrom: string;
   createdOn: string;

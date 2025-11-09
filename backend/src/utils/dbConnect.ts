@@ -6,7 +6,11 @@ import { IAifDocument } from "../api/imageDataTransfer/imageDataTransferTypes";
 
 // --- PostgreSQL Pool Configuration ---
 let pgPool: Pool | null = null;
-let pgSshTunnel: any = null; // To store the PostgreSQL SSH tunnel server instance
+
+interface SshTunnelServer {
+  close(): void;
+}
+let pgSshTunnel: SshTunnelServer | null = null; // To store the PostgreSQL SSH tunnel server instance
 
 const createPgPool = async (): Promise<Pool> => {
   const useSshTunnel = process.env.USE_SSH_TUNNEL === "true";
@@ -21,27 +25,30 @@ const createPgPool = async (): Promise<Pool> => {
         message: "Attempting to start PostgreSQL SSH tunnel.",
       });
       try {
-        pgSshTunnel = await startSshTunnel();
+        const tunnel = await startSshTunnel();
+        pgSshTunnel = tunnel as SshTunnelServer;
         logger.info({
           category: "app-flow",
           function: "createPgPool",
           message: "PostgreSQL SSH tunnel started successfully.",
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
+        let errorMessage = "Unknown error";
+        if (error instanceof Error) {
+          errorMessage = error.message;
+        }
         logger.error({
           category: "app-flow",
           function: "createPgPool",
           message: "Failed to start PostgreSQL SSH tunnel. PostgreSQL connection will likely fail.",
-          error: error.message,
+          error: errorMessage,
         });
-        // If tunnel fails, we might still try to connect to DB directly or throw.
-        // For now, we proceed, and the DB connection will likely fail.
       }
     }
-    dbHost = "localhost"; // Connect to the local end of the tunnel
-    dbPort = parseInt(process.env.DB_PORT || "5433", 10); // Local port for the tunnel
+    dbHost = "localhost";
+    dbPort = parseInt(process.env.DB_PORT || "5433", 10);
   } else {
-    dbHost = "localhost"; // Direct connection
+    dbHost = "localhost";
     dbPort = parseInt(process.env.DB_PORT || "5432", 10);
   }
 
@@ -52,7 +59,7 @@ const createPgPool = async (): Promise<Pool> => {
     password: useSshTunnel ? process.env.DB_PASSWORD : "123456",
     port: dbPort,
     max: 20,
-    idleTimeoutMillis: 30000, // 30 seconds
+    idleTimeoutMillis: 30000,
     connectionTimeoutMillis: 10000,
     keepAlive: true,
   });
@@ -73,8 +80,12 @@ const createPgPool = async (): Promise<Pool> => {
       err.message.includes("EHOSTUNREACH")
     ) {
       logger.error({ category: 'app-flow', function: "createPgPool", message: "pg Pool: Critical connection error detected. Attempting to reconnect pool.", error: err.message, });
-      reconnectPgPool().catch((reconnectErr) => {
-        logger.error({ category: 'app-flow', function: "createPgPool", message: "Failed to re-establish PostgreSQL pool after critical error.", error: reconnectErr.message, });
+      reconnectPgPool().catch((reconnectErr: unknown) => {
+        let reconnectErrorMessage = "Unknown error";
+        if (reconnectErr instanceof Error) {
+          reconnectErrorMessage = reconnectErr.message;
+        }
+        logger.error({ category: 'app-flow', function: "createPgPool", message: "Failed to re-establish PostgreSQL pool after critical error.", error: reconnectErrorMessage, });
       });
     }
   });
@@ -118,7 +129,7 @@ export const reconnectPgPool = async (): Promise<void> => {
       await warmupPgPool(); // Warm up the new pool
       logger.info({ category: 'app-flow', function: "reconnectPgPool", message: "PostgreSQL pool reconnected successfully.", });
       return;
-    } catch (e) {
+    } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Unknown error";
       logger.error({ category: 'app-flow', function: "reconnectPgPool", message: `PostgreSQL pool reconnection failed (attempt ${i + 1}/${MAX_RECONNECT_RETRIES})`, error: msg, });
       if (i < MAX_RECONNECT_RETRIES - 1) {
@@ -170,6 +181,11 @@ export const warmupPgPool = async () => {
 // --- MongoDB Connection Configuration ---
 let mongoConnection: mongoose.Connection | null = null;
 let mongoModel: mongoose.Model<IAifDocument> | null = null;
+
+interface MongoSshTunnelServer {
+  close(): void;
+}
+let mongoSshTunnel: MongoSshTunnelServer | null = null;
 
 const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema<IAifDocument>(
   {
@@ -238,9 +254,9 @@ export const connectMongo = async (): Promise<void> => {
     if (useTunnel) {
       if (!mongoSshTunnel) {
         console.log("Attempting to start MongoDB SSH tunnel.");
-        const tunnel = await startMongoSshTunnel(); // Start the SSH tunnel
-        if (tunnel) {
-          mongoSshTunnel = tunnel.server;
+        const tunnel = await startMongoSshTunnel();
+        if (tunnel && tunnel.server) {
+          mongoSshTunnel = tunnel.server as MongoSshTunnelServer;
         }
       } else {
         console.log("MongoDB SSH tunnel already active. Skipping tunnel creation.");
@@ -267,7 +283,6 @@ export const connectMongo = async (): Promise<void> => {
     mongoConnection = mongoose.connection;
     logger.info({ category: 'app-flow', message: "MongoDB connected successfully" });
 
-    // Check if the collection exists
     if (mongoose.connection && mongoose.connection.db) {
       try {
         const collectionName = getMongoModel().collection.name;
@@ -282,15 +297,23 @@ export const connectMongo = async (): Promise<void> => {
         } else {
           logger.info({ category: 'app-flow', message: `MongoDB collection '${collectionName}' accessed successfully.` });
         }
-      } catch (collectionError) {
-        logger.warn({ category: 'app-flow', message: `Could not access '${getMongoModel().collection.name}' collection: ${collectionError}` });
+      } catch (collectionError: unknown) {
+        let collectionErrorMessage = "Unknown error";
+        if (collectionError instanceof Error) {
+          collectionErrorMessage = collectionError.message;
+        }
+        logger.warn({ category: 'app-flow', message: `Could not access '${getMongoModel().collection.name}' collection: ${collectionErrorMessage}` });
       }
     } else {
       logger.error({ category: 'app-flow', message: "MongoDB connection or db object is not available after connection attempt." });
       process.exit(1);
     }
-  } catch (error) {
-    logger.error({ category: 'app-flow', message: `MongoDB connection error: ${error}` });
+  } catch (error: unknown) {
+    let errorMessage = "Unknown error";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    logger.error({ category: 'app-flow', message: `MongoDB connection error: ${errorMessage}` });
     process.exit(1);
   }
 };
@@ -307,8 +330,12 @@ export const disconnectMongo = async (): Promise<void> => {
         mongoSshTunnel = null;
         logger.info({ category: 'app-flow', message: "MongoDB SSH tunnel closed" });
       }
-    } catch (error) {
-      logger.error({ category: 'app-flow', message: `Error disconnecting from MongoDB: ${error}` });
+    } catch (error: unknown) {
+      let errorMessage = "Unknown error";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      logger.error({ category: 'app-flow', message: `Error disconnecting from MongoDB: ${errorMessage}` });
     }
   } else {
     logger.info({ category: 'app-flow', message: "MongoDB not connected, no need to disconnect." });
@@ -333,8 +360,12 @@ export const disconnectPgPool = async (): Promise<void> => {
       await pgPool.end();
       pgPool = null;
       logger.info({ category: 'app-flow', message: "PostgreSQL pool disconnected." });
-    } catch (error) {
-      logger.error({ category: 'app-flow', message: `Error disconnecting PostgreSQL pool: ${error}` });
+    } catch (error: unknown) {
+      let errorMessage = "Unknown error";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      logger.error({ category: 'app-flow', message: `Error disconnecting PostgreSQL pool: ${errorMessage}` });
     }
   }
 
@@ -343,8 +374,12 @@ export const disconnectPgPool = async (): Promise<void> => {
       pgSshTunnel.close();
       pgSshTunnel = null;
       logger.info({ category: 'app-flow', message: "PostgreSQL SSH tunnel closed." });
-    } catch (error) {
-      logger.error({ category: 'app-flow', message: `Error closing PostgreSQL SSH tunnel: ${error}` });
+    } catch (error: unknown) {
+      let errorMessage = "Unknown error";
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      logger.error({ category: 'app-flow', message: `Error closing PostgreSQL SSH tunnel: ${errorMessage}` });
     }
   }
 };

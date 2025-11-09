@@ -1,10 +1,11 @@
 import React from "react";
-import { SummaryDisplayProps, LogEntry } from "../uploadProcessor/uploadProcessorType";
+import { SummaryDisplayProps, LogEntry } from "../../types";
 import { useUploadProgressSummary } from "../uploadProcessor/uploadProcessorHook";
 import { UploadProcessDisplay } from "../uploadProcessor/uploadProcessorSummaryUI";
 import SplitProcessorSummaryUI from "../splitProcessor/splitProcessorSummaryUI";
 import S3UploadSummaryUI from "../s3Manager/s3UploadSummaryUI";
 import { SQLSummaryDisplay, MongoSummaryDisplay } from "../imageDataTransfer/imageDataTransferSummaryUI";
+import SanityCheckSummaryDisplay from "../dataClean/sanityCheckSummaryUI";
 
 export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
@@ -89,6 +90,32 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 logKey="sqlAndMongo"
               />
               <MongoSummaryDisplay log={latestSqlAndMongoLog} />
+            </div>
+          </div>
+        )}
+
+        {(taskLogs["pgSanityCheck"] || []).length > 0 && (
+          <div key="pgSanityCheck" className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold capitalize">PostgreSQL Sanity Check</h4>
+            </div>
+            <div className="bg-gray-100 p-2 rounded">
+              {(taskLogs["pgSanityCheck"] || []).map((logItem, index) => (
+                <SanityCheckSummaryDisplay key={index} log={logItem} logKey="pgSanityCheck" />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {(taskLogs["mongoSanityCheck"] || []).length > 0 && (
+          <div key="mongoSanityCheck" className="mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <h4 className="font-semibold capitalize">MongoDB Sanity Check</h4>
+            </div>
+            <div className="bg-gray-100 p-2 rounded">
+              {(taskLogs["mongoSanityCheck"] || []).map((logItem, index) => (
+                <SanityCheckSummaryDisplay key={index} log={logItem} logKey="mongoSanityCheck" />
+              ))}
             </div>
           </div>
         )}

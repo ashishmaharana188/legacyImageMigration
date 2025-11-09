@@ -1,10 +1,13 @@
 import { createFileRoute } from '@tanstack/react-router';
-import SanityCheckTask from '../components/action/SanityCheckTask';
+import SanityCheckUI from '../api/dataClean/sanityCheckUI';
+import { useSanityCheckHook } from '../api/dataClean/sanityCheckHook';
 import { useTaskLog } from '../hooks/useTaskLog';
 
 function SanityCheckComponent() {
   const { updateTaskLog, onClearLogs: clearTaskLog } = useTaskLog();
-  return <SanityCheckTask updateTaskLog={updateTaskLog} clearTaskLog={clearTaskLog} />;
+  const sanityCheckProps = useSanityCheckHook({ updateTaskLog, clearTaskLog });
+
+  return <SanityCheckUI {...sanityCheckProps} />;
 }
 
 export const Route = createFileRoute('/sanity-check')({

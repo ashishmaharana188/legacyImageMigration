@@ -130,7 +130,7 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/sanity-check" onClick={() => onSelectTask("sanity-check")}>
+        <Link to="/dataCleanRouter" onClick={() => onSelectTask("sanity-check")}>
           <SidebarItem
             icon={<BugReportIcon />}
             text="Sanity Checks"
