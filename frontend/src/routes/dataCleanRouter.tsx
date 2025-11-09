@@ -10,6 +10,6 @@ function SanityCheckComponent() {
   return <SanityCheckUI {...sanityCheckProps} />;
 }
 
-export const Route = createFileRoute('/sanity-check')({
+export const Route = createFileRoute('/dataCleanRouter')({
   component: SanityCheckComponent,
 });

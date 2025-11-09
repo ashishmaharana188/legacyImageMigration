@@ -12,8 +12,8 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as UploadProcessorRouterRouteImport } from './routes/uploadProcessorRouter'
 import { Route as SqlMongoRouterRouteImport } from './routes/sqlMongoRouter'
 import { Route as SplitProcessorRouterRouteImport } from './routes/splitProcessorRouter'
-import { Route as SanityCheckRouteImport } from './routes/dataCleanRouter'
 import { Route as S3ManagerRouterRouteImport } from './routes/s3ManagerRouter'
+import { Route as DataCleanRouterRouteImport } from './routes/dataCleanRouter'
 import { Route as IndexRouteImport } from './routes/index'
 
 const UploadProcessorRouterRoute = UploadProcessorRouterRouteImport.update({
@@ -31,14 +31,14 @@ const SplitProcessorRouterRoute = SplitProcessorRouterRouteImport.update({
   path: '/splitProcessorRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SanityCheckRoute = SanityCheckRouteImport.update({
-  id: '/sanity-check',
-  path: '/sanity-check',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const S3ManagerRouterRoute = S3ManagerRouterRouteImport.update({
   id: '/s3ManagerRouter',
   path: '/s3ManagerRouter',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DataCleanRouterRoute = DataCleanRouterRouteImport.update({
+  id: '/dataCleanRouter',
+  path: '/dataCleanRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -49,16 +49,16 @@ const IndexRoute = IndexRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/dataCleanRouter': typeof DataCleanRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
-  '/sanity-check': typeof SanityCheckRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sqlMongoRouter': typeof SqlMongoRouterRoute
   '/uploadProcessorRouter': typeof UploadProcessorRouterRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/dataCleanRouter': typeof DataCleanRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
-  '/sanity-check': typeof SanityCheckRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sqlMongoRouter': typeof SqlMongoRouterRoute
   '/uploadProcessorRouter': typeof UploadProcessorRouterRoute
@@ -66,8 +66,8 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/dataCleanRouter': typeof DataCleanRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
-  '/sanity-check': typeof SanityCheckRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sqlMongoRouter': typeof SqlMongoRouterRoute
   '/uploadProcessorRouter': typeof UploadProcessorRouterRoute
@@ -76,24 +76,24 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/dataCleanRouter'
     | '/s3ManagerRouter'
-    | '/sanity-check'
     | '/splitProcessorRouter'
     | '/sqlMongoRouter'
     | '/uploadProcessorRouter'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/dataCleanRouter'
     | '/s3ManagerRouter'
-    | '/sanity-check'
     | '/splitProcessorRouter'
     | '/sqlMongoRouter'
     | '/uploadProcessorRouter'
   id:
     | '__root__'
     | '/'
+    | '/dataCleanRouter'
     | '/s3ManagerRouter'
-    | '/sanity-check'
     | '/splitProcessorRouter'
     | '/sqlMongoRouter'
     | '/uploadProcessorRouter'
@@ -101,8 +101,8 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  DataCleanRouterRoute: typeof DataCleanRouterRoute
   S3ManagerRouterRoute: typeof S3ManagerRouterRoute
-  SanityCheckRoute: typeof SanityCheckRoute
   SplitProcessorRouterRoute: typeof SplitProcessorRouterRoute
   SqlMongoRouterRoute: typeof SqlMongoRouterRoute
   UploadProcessorRouterRoute: typeof UploadProcessorRouterRoute
@@ -131,18 +131,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SplitProcessorRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/sanity-check': {
-      id: '/sanity-check'
-      path: '/sanity-check'
-      fullPath: '/sanity-check'
-      preLoaderRoute: typeof SanityCheckRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/s3ManagerRouter': {
       id: '/s3ManagerRouter'
       path: '/s3ManagerRouter'
       fullPath: '/s3ManagerRouter'
       preLoaderRoute: typeof S3ManagerRouterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/dataCleanRouter': {
+      id: '/dataCleanRouter'
+      path: '/dataCleanRouter'
+      fullPath: '/dataCleanRouter'
+      preLoaderRoute: typeof DataCleanRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -157,8 +157,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  DataCleanRouterRoute: DataCleanRouterRoute,
   S3ManagerRouterRoute: S3ManagerRouterRoute,
-  SanityCheckRoute: SanityCheckRoute,
   SplitProcessorRouterRoute: SplitProcessorRouterRoute,
   SqlMongoRouterRoute: SqlMongoRouterRoute,
   UploadProcessorRouterRoute: UploadProcessorRouterRoute,
