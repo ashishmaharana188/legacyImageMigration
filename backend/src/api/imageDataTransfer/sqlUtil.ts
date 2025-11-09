@@ -4,7 +4,7 @@ import { parse } from "csv-parse";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
-import * as ExcelJS from "exceljs";
+import ExcelJS from "exceljs";
 import { Pool, PoolClient } from "pg";
 import logger from "../../utils/logger"; // Adjusted path
 import {
@@ -71,12 +71,12 @@ export class SqlUtil {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
-  private formatQuery(query: string, params: any[]): string {
+  private formatQuery(query: string, params: unknown[]): string {
     let formattedQuery = query;
     params.forEach((param, index) => {
       // Replace $1, $2, etc., with the actual parameter value
       // Handle strings by quoting them, numbers directly
-      const replacement = typeof param === "string" ? `"${param}"` : param;
+      const replacement = typeof param === "string" ? `"${param}"` : String(param);
       formattedQuery = formattedQuery.replace(`$${index + 1}`, replacement);
     });
     return formattedQuery;
@@ -307,8 +307,8 @@ export class SqlUtil {
             const format = ext.replace(".", "").toUpperCase();
             const clientId = data.id_fund;
 
-            const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-            const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+            const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${String(data.id_fund)}/`;
+            const docPath = `${basePath}CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
             const sql = `(
 '${this.trxnMap[data.id_trtype] || "Unknown"}', 'Image Upload', '${
@@ -389,7 +389,7 @@ ${data.page_count}, ${clientId}
     summary: {
       insertedRows: number;
       errorRows: number;
-      badRows: any[];
+      badRows: unknown[];
       badRowsFilePath: string | null;
     };
   }> {
@@ -441,12 +441,15 @@ ${data.page_count}, ${clientId}
         `executeSql: found ${uniqueIdFunds.length} unique id_fund values`
       );
 
+interface ClientMasterRow { id: number; client_code: string; }
+
+
       const clientIdMap: Map<string, number> = new Map();
       if (uniqueIdFunds.length > 0) {
         const clientMasterRes = await pgQuery(client, SQL_SELECT_CLIENT_MASTER_BY_CODES, [
           uniqueIdFunds,
         ]);
-        clientMasterRes.rows.forEach((row) => {
+        clientMasterRes.rows.forEach((row: ClientMasterRow) => {
           clientIdMap.set(row.client_code, row.id);
         });
         this.logger.info(
@@ -473,12 +476,12 @@ ${data.page_count}, ${clientId}
       };
 
       let insertedRows = 0;
-      const badRows: any[] = [];
+      const badRows: unknown[] = [];
       const chunkSize = 500; // Process 500 rows at a time
 
       for (let i = 0; i < transactions.length; i += chunkSize) {
         const chunk = transactions.slice(i, i + chunkSize);
-        const valueParams: any[] = [];
+        const valueParams: unknown[] = [];
         const valueStrings: string[] = [];
         let paramIndex = 1;
 
@@ -521,8 +524,8 @@ ${data.page_count}, ${clientId}
             continue; // Skip this row entirely from valueParams and valueStrings
           }
 
-          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
-          const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${String(data.id_fund)}/`;
+          const docPath = `${basePath}CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
           const mime = mimeType[ext.replace(".", "")] || "Unknown";
 
           const rowValues = [
@@ -581,7 +584,7 @@ ${data.page_count}, ${clientId}
       await pgCommit(client);
       this.logger.info("executeSql: COMMIT successful");
       this.logger.info("SQL executed successfully");
-      const badRowsFilePath = await this.duplicateProcessorSqlUtil.writeBadRowsToFile(
+      const badRowsFilePath = await this.writeBadRowsToFile(
         badRows,
         "sql_bad_rows.txt"
       );
@@ -779,7 +782,8 @@ ${data.page_count}, ${clientId}
       );
 
       // Query 1: Delete from temp_images_1
-      await pgQuery(client, SQL_DELETE_TEMP_IMAGES_1);
+      const deleteQuery = SQL_DELETE_TEMP_IMAGES_1;
+      await pgQuery(client, deleteQuery);
       logs.push({
         row: 0,
         status: "executed",
@@ -819,12 +823,15 @@ ${data.page_count}, ${clientId}
         updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"
       );
       this.logger.info("updateFolioAndTransaction: updating folio_id");
+interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
+
+
       const updateFolioResult = await pgQuery(
         client,
         updateFolioQuery,
         updateAll ? [] : [processedFolioNumbers]
       );
-      updateFolioResult.rows.forEach((row) => {
+      updateFolioResult.rows.forEach((row: FolioUpdateRow) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
         );
@@ -852,7 +859,7 @@ ${data.page_count}, ${clientId}
         updateTransactionQuery,
         updateAll ? [] : [processedFolioNumbers]
       );
-      updateTransactionResult.rows.forEach((row) => {
+      updateTransactionResult.rows.forEach((row: FolioUpdateRow) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
         );
@@ -887,7 +894,7 @@ ${data.page_count}, ${clientId}
         }
       });
 
-      const badRowsFilePath = await this.duplicateProcessorSqlUtil.writeBadRowsToFile(
+      const badRowsFilePath = await this.writeBadRowsToFile(
         badRows,
         "folio_update_bad_rows.txt"
       );
@@ -1000,7 +1007,7 @@ ${data.page_count}, ${clientId}
     }
   }
 
-  public async getAifDocumentDetails(clientId?: number): Promise<any[]> {
+  public async getAifDocumentDetails(clientId?: number): Promise<unknown[]> {
     let client: PoolClient | null = null;
     try {
       const processedFolioNumbers = await this.getProcessedFolioNumbers();
@@ -1014,9 +1021,17 @@ ${data.page_count}, ${clientId}
       }
 
       client = await (await this.getPool()).connect();
-      let query = SQL_SELECT_AIF_DOCUMENT_DETAILS.replace(
+      const queryParams: unknown[] = [processedFolioNumbers]; // Add processedFolioNumbers as the first parameter
+      let clientIdClause = "";
+
+      if (clientId) {
+        clientIdClause = ` AND add.client_id = $${queryParams.length + 1}`;
+        queryParams.push(clientId);
+      }
+
+      const query = SQL_SELECT_AIF_DOCUMENT_DETAILS.replace(
         "%CLIENT_ID_CLAUSE%",
-        clientId ? ` AND add.client_id = $${queryParams.length}` : ""
+        clientIdClause
       );
 
       logger.info({
@@ -1042,7 +1057,7 @@ ${data.page_count}, ${clientId}
     }
   }
 
-  public async getUpdateDetails(): Promise<any[]> {
+  public async getUpdateDetails(): Promise<unknown[]> {
     let client: PoolClient | null = null;
     try {
       client = await (await this.getPool()).connect();
@@ -1061,17 +1076,17 @@ ${data.page_count}, ${clientId}
 
   public async streamUpdateDetails(
     batchSize: number,
-    processBatch: (batch: any[]) => Promise<void>,
+    processBatch: (batch: unknown[]) => Promise<void>,
     clientId?: number
   ): Promise<void> {
     let client: PoolClient | null = null;
     try {
       client = await (await this.getPool()).connect();
-      let query = SQL_STREAM_UPDATE_DETAILS.replace(
+      const queryParams: unknown[] = [];
+      const query = SQL_STREAM_UPDATE_DETAILS.replace(
         "%CLIENT_ID_CLAUSE%",
-        clientId ? ` AND add.client_id = $${queryParams.length}` : ""
+        clientId ? ` AND add.client_id = $${queryParams.length + 1}` : ""
       );
-      const queryParams: any[] = [];
 
       if (clientId) {
         queryParams.push(clientId);
@@ -1088,11 +1103,11 @@ ${data.page_count}, ${clientId}
 
       const cursor = client.query(new Cursor(query, queryParams));
 
-      let batch: any[] = [];
-      let rows;
+      let batch: unknown[] = [];
+      let rows: unknown[];
       do {
-        rows = await new Promise<any[]>((resolve, reject) => {
-          cursor.read(batchSize, (err: Error | undefined, rows: any[]) => {
+        rows = await new Promise<unknown[]>((resolve, reject) => {
+            cursor.read(batchSize, (err: Error | undefined, rows: unknown[]) => {
             if (err) {
               logger.error({
                 category: "task-steps",
@@ -1129,6 +1144,40 @@ ${data.page_count}, ${clientId}
       if (client) {
         client.release();
       }
+    }
+  }
+
+  private async writeBadRowsToFile(
+    badRows: unknown[],
+    fileName: string
+  ): Promise<string | null> {
+    if (badRows.length === 0) {
+      return null;
+    }
+
+    const timestamp = new Date().toISOString().replace(/[:.-]/g, "_");
+    const fullFileName = `bad_rows_${timestamp}_${fileName}`;
+    const filePath = path.join(__dirname, "../../../../processed", fullFileName);
+
+    try {
+      const header = Object.keys(badRows[0] || {}).join(",");
+      const rows = badRows.map((row) =>
+        Object.values(row as Record<string, unknown>).map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+      );
+      const content = [header, ...rows].join("\n");
+      await fs.writeFile(filePath, content, "utf8");
+      this.logger.warn({
+        function: "writeBadRowsToFile",
+        message: `Bad rows written to: ${filePath}`,
+      });
+      return filePath;
+    } catch (error) {
+      this.logger.error({
+        function: "writeBadRowsToFile",
+        message: `Failed to write bad rows to file ${filePath}: ${error}`,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return null;
     }
   }
 }
