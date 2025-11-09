@@ -178,7 +178,7 @@ export async function mongoAggregate(model: mongoose.Model<IAifDocument>, pipeli
 
 // --- PostgreSQL Operations ---
 
-export async function pgQuery(client: PoolClient, query: string, params: unknown[] = []): Promise<unknown> {
+export async function pgQuery(client: PoolClient, query: string, params: unknown[] = []): Promise<{ rows: unknown[] }> {
   return client.query(query, params);
 }
 

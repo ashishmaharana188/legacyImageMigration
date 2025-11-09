@@ -1,6 +1,6 @@
 // backend/src/api/imageDataTransfer/imageDataTransferTypes.ts
 
-import mongoose, { Document } from "mongoose";
+import { Document } from "mongoose";
 
 export interface SqlLog {
   row: number;
@@ -72,4 +72,9 @@ export interface ISyncedDocumentSummary {
 export interface IBulkWriteResult {
   modifiedCount: number;
   // Add other properties if needed, e.g., insertedCount, upsertedCount, etc.
+}
+
+export interface IPgQueryResult {
+  rows: unknown[];
+  rowCount: number;
 }

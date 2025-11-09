@@ -13,7 +13,7 @@ import {
   warmupPgPool,
 } from "../../../controllers/dbConnect"; // Adjusted path
 import Cursor from "pg-cursor";
-import { SqlLog, AifDocumentDetail } from "./imageDataTransferTypes"; // Adjusted path
+import { SqlLog, AifDocumentDetail, IPgQueryResult } from "./imageDataTransferTypes"; // Adjusted path
 import { DuplicateProcessorSqlUtil } from "../duplicateProcessor/duplicateProcessorSqlUtil";
 import {
   pgQuery,
@@ -449,7 +449,7 @@ interface ClientMasterRow { id: number; client_code: string; }
         const clientMasterRes = await pgQuery(client, SQL_SELECT_CLIENT_MASTER_BY_CODES, [
           uniqueIdFunds,
         ]);
-        clientMasterRes.rows.forEach((row: ClientMasterRow) => {
+        (clientMasterRes.rows as ClientMasterRow[]).forEach((row: ClientMasterRow) => {
           clientIdMap.set(row.client_code, row.id);
         });
         this.logger.info(
@@ -575,7 +575,7 @@ interface ClientMasterRow { id: number; client_code: string; }
           this.logger.info(
             `executeSql: executing batch of ${valueStrings.length} rows.`
           );
-          const result = await pgQuery(client, queryText, valueParams);
+          const result = await pgQuery(client, queryText, valueParams) as IPgQueryResult;
           insertedRows += result.rowCount || 0;
         }
       }
@@ -806,7 +806,7 @@ interface ClientMasterRow { id: number; client_code: string; }
         client,
         insertTempQuery,
         updateAll ? [] : [processedFolioNumbers]
-      );
+      ) as IPgQueryResult;
       logs.push({
         row: 0,
         status: "executed",
@@ -830,8 +830,8 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
         client,
         updateFolioQuery,
         updateAll ? [] : [processedFolioNumbers]
-      );
-      updateFolioResult.rows.forEach((row: FolioUpdateRow) => {
+      ) as IPgQueryResult;
+      (updateFolioResult.rows as FolioUpdateRow[]).forEach((row: FolioUpdateRow) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
         );
@@ -858,8 +858,8 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
         client,
         updateTransactionQuery,
         updateAll ? [] : [processedFolioNumbers]
-      );
-      updateTransactionResult.rows.forEach((row: FolioUpdateRow) => {
+      ) as IPgQueryResult;
+      (updateTransactionResult.rows as FolioUpdateRow[]).forEach((row: FolioUpdateRow) => {
         updatedTransactionIdentifiers.add(
           `${row.user_attr1}-${row.user_attr2}`
         );
@@ -985,15 +985,16 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
       const res = await pgQuery(client, SQL_SELECT_CLIENT_ID_BY_CODE, [
         clientCode,
       ]);
+      const clientRow: { id: number } | undefined = res.rows[0] as { id: number } | undefined;
       logger.info({
         category: "task-steps",
         message: `Fetched client ID for code ${clientCode}: ${
-          res.rows[0]?.id || "Not Found"
+          clientRow?.id || "Not Found"
         }`,
         clientCode: clientCode,
-        clientIdFound: res.rows[0]?.id || "N/A",
+        clientIdFound: clientRow?.id || "N/A",
       });
-      return res.rows[0];
+      return res.rows[0] as { id: number };
     } catch (error) {
       logger.error({
         category: "task-steps",
@@ -1048,7 +1049,7 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
         message: `Fetched ${res.rows.length} rows from aif_document_details.`,
         rowsFetched: res.rows.length,
       });
-      return res.rows;
+      return res.rows as AifDocumentDetail[];
     } catch (error) {
       this.logger.error(`Error fetching aif_document_details: ${error}`);
       throw error;
@@ -1132,7 +1133,7 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
             message: `Processing a batch of ${batch.length} rows from PostgreSQL.`,
             batchSize: batch.length,
           });
-          await processBatch(batch);
+          await processBatch(batch as AifDocumentDetail[]);
         }
       } while (rows.length > 0);
 
