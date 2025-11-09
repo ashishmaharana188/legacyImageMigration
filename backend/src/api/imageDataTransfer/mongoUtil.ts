@@ -14,9 +14,10 @@ import {
   mongoFind,
   mongoAggregate,
 } from "./imageDataTransferCore";
+import { AifDocumentDetail, IAifDocument, IAifDocumentInput,IUpdatedDocumentSummary, ISyncedDocumentSummary } from "./imageDataTransferTypes";
 
 export class MongoUtil {
-  private model: mongoose.Model<Document>;
+  private model: mongoose.Model<IAifDocument>;
 
   constructor() {
     this.model = getMongoModel();
@@ -69,7 +70,7 @@ export class MongoUtil {
 
   public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
-    documents?: Document[]; // Added to return the documents
+    documents?: IAifDocument[]; // Added to return the documents
   }> {
     try {
       const sqlUtil = new SqlUtil(); // Use SqlUtil
@@ -106,20 +107,20 @@ export class MongoUtil {
         NCT: "NCTP",
       };
 
-      const pgData = await sqlUtil.getAifDocumentDetails(pgClientId);
+      const pgData: AifDocumentDetail[] = await sqlUtil.getAifDocumentDetails(pgClientId);
       logger.info({
         category: "task-steps",
         message: `Fetched ${pgData.length} documents from PostgreSQL for transfer. (pgClientId: ${pgClientId || "N/A"})`,
         pgClientId: pgClientId || "N/A",
         pgDataCount: pgData.length,
       });
-      const documentsToInsert: Document[] = [];
+      const documentsToInsert: IAifDocumentInput[] = [];
 
       for (const data of pgData) {
         const docType = data.document_type;
         const docProcess = data.document_process;
 
-        const doc: Document = {
+        const doc: IAifDocumentInput = {
           activityStatus: data.activity_status || "O",
           applicationId: data.application_id || null,
           clientId: data.client_code, // Use the correct client_code
@@ -155,11 +156,12 @@ export class MongoUtil {
       }
 
       if (documentsToInsert.length > 0) {
-        await this.insertDocument(documentsToInsert);
+        const insertedDocuments = await this.insertDocument(documentsToInsert);
+        return { transferredCount: pgData.length, documents: insertedDocuments };
       }
 
       await this.disconnect();
-      return { transferredCount: pgData.length, documents: documentsToInsert };
+      return { transferredCount: pgData.length, documents: [] };
     } catch (error) {
       logger.error({
         category: "task-steps",
@@ -169,9 +171,10 @@ export class MongoUtil {
     }
   }
 
-  public async insertDocument(documents: Document[]): Promise<void> {
+  public async insertDocument(documents: IAifDocumentInput[]): Promise<IAifDocument[]> {
     try {
-      await mongoInsertMany(this.model, documents);
+      const insertedDocs = await mongoInsertMany(this.model, documents);
+      return insertedDocs;
     } catch (error) {
       logger.error({
         category: "task-steps",
@@ -184,13 +187,13 @@ export class MongoUtil {
   public async updateMongoTransactions(clientId?: number): Promise<{
     updatedCount: number;
     syncedCount: number;
-    updatedDocuments: Document[];
-    syncedDocuments: Document[];
+    updatedDocuments: IUpdatedDocumentSummary[];
+    syncedDocuments: ISyncedDocumentSummary[];
   }> {
     let totalUpdatedCount = 0;
     let totalSyncedCount = 0;
-    const allUpdatedDocuments: Document[] = [];
-    const allSyncedDocuments: Document[] = [];
+    const allUpdatedDocuments: IUpdatedDocumentSummary[] = [];
+    const allSyncedDocuments: ISyncedDocumentSummary[] = [];
 
     logger.info({
       category: "task-steps",
@@ -215,16 +218,16 @@ export class MongoUtil {
         };
       }
 
-      const processBatch = async (pgData: unknown[]) => {
+      const processBatch = async (pgData: AifDocumentDetail[]) => {
         logger.info({
           category: "task-steps",
           message: `Processing batch of ${pgData.length} PostgreSQL documents.`,
           pgDataSample: pgData.slice(0, 2), // Log first 2 items for brevity
           pgDataCount: pgData.length,
         });
-        const bulkOperations: mongoose.BulkWriteOperation<Document>[] = [];
-        const documentsToUpdate: Document[] = [];
-        const documentsToSync: Document[] = [];
+        const bulkOperations: mongoose.BulkWriteOperation<IAifDocument>[] = [];
+        const documentsToUpdate: IUpdatedDocumentSummary[] = [];
+        const documentsToSync: ISyncedDocumentSummary[] = [];
 
         const uniqueFilters = pgData.map((data) => ({
           clientId: data.client_code, // Use client_code (string) from PostgreSQL
@@ -256,12 +259,12 @@ export class MongoUtil {
           message: `Fetched ${mongoDocs.length} documents from MongoDB.`,
           mongoDocsCount: mongoDocs.length,
         });
-        const mongoDocMap = new Map<string, Document>();
+        const mongoDocMap = new Map<string, IAifDocument>();
         mongoDocs.forEach((doc) => {
           mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
         });
 
-        for (const data of pgData as Record<string, unknown>[]) {
+        for (const data of pgData) {
           const key = `${data.client_code}-${data.user_attr1}`;
           const mongoDoc = mongoDocMap.get(key);
 
@@ -347,7 +350,7 @@ export class MongoUtil {
     }
   }
 
-  public async getDocumentsCreatedAfterDate(date: Date): Promise<Document[]> {
+  public async getDocumentsCreatedAfterDate(date: Date): Promise<IAifDocument[]> {
     try {
       await this.connect();
       const pipeline: Record<string, unknown>[] = [

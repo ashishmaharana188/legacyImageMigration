@@ -13,7 +13,7 @@ import {
   warmupPgPool,
 } from "../../../controllers/dbConnect"; // Adjusted path
 import Cursor from "pg-cursor";
-import { SqlLog } from "./imageDataTransferTypes"; // Adjusted path
+import { SqlLog, AifDocumentDetail } from "./imageDataTransferTypes"; // Adjusted path
 import { DuplicateProcessorSqlUtil } from "../duplicateProcessor/duplicateProcessorSqlUtil";
 import {
   pgQuery,
@@ -1007,7 +1007,7 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
     }
   }
 
-  public async getAifDocumentDetails(clientId?: number): Promise<unknown[]> {
+  public async getAifDocumentDetails(clientId?: number): Promise<AifDocumentDetail[]> {
     let client: PoolClient | null = null;
     try {
       const processedFolioNumbers = await this.getProcessedFolioNumbers();
@@ -1076,7 +1076,7 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
 
   public async streamUpdateDetails(
     batchSize: number,
-    processBatch: (batch: unknown[]) => Promise<void>,
+    processBatch: (batch: AifDocumentDetail[]) => Promise<void>,
     clientId?: number
   ): Promise<void> {
     let client: PoolClient | null = null;

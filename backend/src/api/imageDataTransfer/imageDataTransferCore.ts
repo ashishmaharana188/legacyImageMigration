@@ -2,6 +2,7 @@
 
 import { PoolClient } from "pg";
 import mongoose, { Document } from "mongoose";
+import { IAifDocument } from "./imageDataTransferTypes";
 
 // --- SQL Queries ---
 
@@ -155,23 +156,23 @@ WHERE add.created_by = 'system' %CLIENT_ID_CLAUSE%;
 
 // --- MongoDB Operations ---
 
-export async function mongoFindOne(model: mongoose.Model<Document>): Promise<Document | null> {
+export async function mongoFindOne(model: mongoose.Model<IAifDocument>): Promise<IAifDocument | null> {
   return model.findOne({}).lean();
 }
 
-export async function mongoInsertMany(model: mongoose.Model<Document>, documents: unknown[]): Promise<void> {
+export async function mongoInsertMany(model: mongoose.Model<IAifDocument>, documents: IAifDocumentInput[]): Promise<IAifDocument[]> {
   await model.insertMany(documents);
 }
 
-export async function mongoBulkWrite(model: mongoose.Model<Document>, operations: mongoose.BulkWriteOperation<Document>[]): Promise<any> {
+export async function mongoBulkWrite(model: mongoose.Model<IAifDocument>, operations: mongoose.BulkWriteOperation<IAifDocument>[]): Promise<any> {
   return model.bulkWrite(operations);
 }
 
-export async function mongoFind(model: mongoose.Model<Document>, query: Record<string, unknown>): Promise<Document[]> {
+export async function mongoFind(model: mongoose.Model<IAifDocument>, query: Record<string, unknown>): Promise<IAifDocument[]> {
   return model.find(query).lean();
 }
 
-export async function mongoAggregate(model: mongoose.Model<Document>, pipeline: Record<string, unknown>[]): Promise<Document[]> {
+export async function mongoAggregate(model: mongoose.Model<IAifDocument>, pipeline: Record<string, unknown>[]): Promise<IAifDocument[]> {
   return model.aggregate(pipeline).exec();
 }
 

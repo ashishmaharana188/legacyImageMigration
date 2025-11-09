@@ -2,6 +2,7 @@ import { Pool, PoolClient } from "pg";
 import mongoose from "mongoose";
 import logger from "./logger"; // Centralized logger
 import { startMongoSshTunnel, startSshTunnel } from "./tunnel"; // Import the tunnel starter
+import { IAifDocument } from "../api/imageDataTransfer/imageDataTransferTypes";
 
 // --- PostgreSQL Pool Configuration ---
 let pgPool: Pool | null = null;
@@ -168,10 +169,9 @@ export const warmupPgPool = async () => {
 
 // --- MongoDB Connection Configuration ---
 let mongoConnection: mongoose.Connection | null = null;
-let mongoModel: mongoose.Model<any> | null = null;
-let mongoSshTunnel: any = null; // To store the SSH tunnel server instance
+let mongoModel: mongoose.Model<IAifDocument> | null = null;
 
-const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema(
+const FnxTransactionInitiationDocUploadSchema = new mongoose.Schema<IAifDocument>(
   {
     activityStatus: String,
     applicationId: String,
@@ -206,7 +206,7 @@ const TestImageMigrationSchema = new mongoose.Schema(
   { strict: false, collection: "testImageMigration", versionKey: false }
 );
 
-export const getMongoModel = (): mongoose.Model<any> => {
+export const getMongoModel = (): mongoose.Model<IAifDocument> => {
   if (!mongoModel) {
     const useTunnel = process.env.USE_MONGO_SSH_TUNNEL === "true";
     if (useTunnel) {
