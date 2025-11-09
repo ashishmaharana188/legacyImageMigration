@@ -1,12 +1,11 @@
 import React, { useState } from "react";
 import { SQLSummaryDisplayProps } from "./sqlTaskType";
 import { MongoSummaryDisplayProps } from "./mongoTaskType";
-
+import { MongoDocument, MongoUpdatedDocument } from "./mongoTaskType";
 export const SQLSummaryDisplay: React.FC<SQLSummaryDisplayProps> = ({
   log,
   logKey,
   expandedLogId,
-  parsedBadRows,
   toggleBadRowsDisplay,
 }) => {
   if ("successfulRows" in log && "badRows" in log) {
@@ -23,7 +22,7 @@ export const SQLSummaryDisplay: React.FC<SQLSummaryDisplayProps> = ({
           {successfulRows !== undefined ? successfulRows : "N/A"}
         </p>
         <p>Total Failed: {badRows !== undefined ? badRows : "N/A"}</p>
-        {log.badRowsFilePath && log.badRows > 0 && (
+        {log.badRowsFilePath && log.badRows !== undefined && log.badRows > 0 && (
           <>
             <button
               onClick={() => toggleBadRowsDisplay(log.badRowsFilePath!, logKey)}
@@ -90,7 +89,7 @@ export const MongoSummaryDisplay: React.FC<MongoSummaryDisplayProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {log.documents.map((doc: any, index: number) => (
+                {log.documents.map((doc: MongoDocument, index: number) => (
                   <tr key={index} className="bg-white border-b">
                     <td className="px-2 py-1">{doc._id}</td>
                     <td className="px-2 py-1">{doc.clientCode}</td>
@@ -140,7 +139,7 @@ export const MongoSummaryDisplay: React.FC<MongoSummaryDisplayProps> = ({
                 </tr>
               </thead>
               <tbody>
-                {log.updatedDocuments.map((doc: any, index: number) => (
+                {log.updatedDocuments.map((doc: MongoUpdatedDocument, index: number) => (
                   <tr key={index} className="bg-white border-b">
                     <td className="px-2 py-1">{doc._id}</td>
                     <td className="px-2 py-1">{doc.clientCode}</td>

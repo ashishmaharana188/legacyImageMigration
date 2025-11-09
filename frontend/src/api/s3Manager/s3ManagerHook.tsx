@@ -156,12 +156,12 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
 export const useS3UploadHook = ({ updateTaskLog, setUploadStatuses }: useS3UploadProps) => {
   const [loading, setLoading] = useState(false);
 
-  const handleUploadToS3 = useCallback(async () => {
+  const handleUploadToS3 = useCallback(async (localDir: string, prefix: string) => {
     setLoading(true);
     updateTaskLog("s3Upload", { message: "Initiating S3 original file upload..." });
     setUploadStatuses((prev) => [...prev, { id: Date.now(), name: "Original File Upload", status: "pending", fileName: "Original File" }]);
     try {
-      const response = await uploadOriginalToS3();
+      const response = await uploadOriginalToS3(localDir, prefix);
       updateTaskLog("s3Upload", { message: `Original file upload successful: ${response.message}` });
       setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Original File Upload" ? { ...upload, status: "completed" } : upload));
     } catch (error) {
@@ -173,12 +173,12 @@ export const useS3UploadHook = ({ updateTaskLog, setUploadStatuses }: useS3Uploa
     }
   }, [updateTaskLog, setUploadStatuses]);
 
-  const handleUploadSplitFilesToS3 = useCallback(async () => {
+  const handleUploadSplitFilesToS3 = useCallback(async (localDir: string, prefix: string) => {
     setLoading(true);
     updateTaskLog("s3Upload", { message: "Initiating S3 split files upload..." });
     setUploadStatuses((prev) => [...prev, { id: Date.now(), name: "Split Files Upload", status: "pending", fileName: "Split Files" }]);
     try {
-      const response = await uploadSplitFilesToS3();
+      const response = await uploadSplitFilesToS3(localDir, prefix);
       updateTaskLog("s3Upload", { message: `Split files upload successful: ${response.message}` });
       setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Split Files Upload" ? { ...upload, status: "completed" } : upload));
     } catch (error) {

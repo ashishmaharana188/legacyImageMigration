@@ -1,6 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import UploadProcessorUI from '../api/uploadProcessor/uploadProcessorUI';
-import { useTaskLog } from '../contexts/TaskLogContext';
+import { useTaskLog } from '../hooks/useTaskLog';
 import { useUploadProcessorHook } from '../api/uploadProcessor/uploadProcessorHook';
 
 

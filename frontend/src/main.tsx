@@ -5,7 +5,7 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { routeTree } from "./routeTree.gen";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TaskLogProvider } from "./contexts/TaskLogContext";
-import { WebSocketProvider } from "./contexts/WebSocketContext";
+import { WebSocketProvider } from "./contexts/WebSocketProvider";
 
 const queryClient = new QueryClient();
 const router = createRouter({ routeTree });

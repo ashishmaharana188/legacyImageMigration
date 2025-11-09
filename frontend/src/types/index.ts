@@ -13,15 +13,6 @@ export interface UploadStatus {
   successfulFiles?: number;
   errorFiles?: number;
   notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
 }
 
 export interface SplitSummaryLog {
@@ -87,17 +78,83 @@ export interface FolioTransactionUpdateLog {
   message: string;
 }
 
-export type TaskLog =
+export interface UploadProgressResponse {
+  totalRows: number;
+  processedRows: number;
+  successfulRows: number;
+  errors: number;
+  notFound: number;
+}
+
+export interface FileResponseSummary {
+  totalRows: number;
+  successfulRows: number;
+  errors: number;
+  notFound: number;
+  successfulInserts: number;
+  unsuccessfulCount: number;
+  totalPageCount: number;
+}
+
+export interface FileResponse {
+  statusCode?: number;
+  message?: string;
+  originalFile?: string;
+  processedFile?: string;
+  nextContinuationToken?: string;
+  summary?: FileResponseSummary;
+  downloadUrl?: string;
+  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
+  error?: string;
+  directories?: string[];
+  files?: unknown[];
+  badRowsFilePath?: string | null;
+  updatedFolioRows?: number;
+  updatedTransactionRows?: number;
+  badRows?: number;
+  successfulFilesCount?: number;
+  failedFilesCount?: number;
+}
+
+export interface TaskLogEntry {
+  id: string;
+  message: string;
+  status: "success" | "failed" | "in-progress";
+  originalFile?: string;
+  processedFile?: string;
+  downloadUrl?: string;
+  fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
+  error?: string;
+  directories?: string[];
+  files?: unknown[];
+  badRowsFilePath?: string | null;
+  successfulFilesCount?: number;
+  failedFilesCount?: number;
+}
+
+export type LogEntry =
   | string
   | SplitSummaryLog
   | FileUploadLog
   | SanityCheckLog
   | SqlExecutionLog
   | MongoTransferLog
-  | FolioTransactionUpdateLog;
+  | FolioTransactionUpdateLog
+  | TaskLogEntry
+  | FileResponse
+  | UploadProgressResponse;
 
 export interface S3UploadProgress {
   processedDirectories: number;
   totalDirectories: number;
   currentDirectory: string;
+}
+
+export interface TaskLogContextType {
+  taskLogs: { [key: string]: LogEntry[] };
+  uploadStatuses: UploadStatus[];
+  updateTaskLog: (taskKey: string, log: LogEntry) => void;
+  onClearLogs: (taskKey: string) => void;
+  setSummaryData: React.Dispatch<React.SetStateAction<{ [key: string]: LogEntry[]; }>>;
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }

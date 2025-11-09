@@ -2,7 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import S3BrowserUI from '../api/s3Manager/s3BrowserUI';
 import S3UploadUI from '../api/s3Manager/s3UploadUI';
 import { useS3BrowserHook, useS3UploadHook } from '../api/s3Manager/s3ManagerHook';
-import { useTaskLog } from '../contexts/TaskLogContext';
+import { useTaskLog } from '../hooks/useTaskLog';
 
 export const Route = createFileRoute('/s3ManagerRouter')({
   component: S3BrowserComponent,

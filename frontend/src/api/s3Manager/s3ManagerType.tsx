@@ -54,8 +54,8 @@ export interface S3BrowserUIProps {
 
 export interface S3UploadUIProps {
   loading: boolean;
-  handleUploadToS3: () => Promise<void>;
-  handleUploadSplitFilesToS3: () => Promise<void>;
+  handleUploadToS3: (localDir: string, prefix: string) => Promise<void>;
+  handleUploadSplitFilesToS3: (localDir: string, prefix: string) => Promise<void>;
 }
 
 export interface S3UploadResponse {

@@ -1,4 +1,4 @@
-import { TaskLogUpdate } from '../../contexts/TaskLogContext';
+import { TaskLogContextType } from '../../types/index';
 
 export interface SQLTaskUIProps {
   loading: boolean;
@@ -11,7 +11,7 @@ export interface SQLTaskUIProps {
 }
 
 export interface UseSQLTaskHookProps {
-  updateTaskLog: TaskLogUpdate;
+  updateTaskLog: TaskLogContextType['updateTaskLog'];
   clearTaskLog: (task: string) => void;
 }
 
@@ -21,9 +21,10 @@ export interface FileResponse {
   originalFile?: string;
   processedFile?: string;
   nextContinuationToken?: string;
+  totalRows?: number;
+  successfulRows?: number;
+  badRows?: number;
   summary?: {
-    totalRows: number;
-    successfulRows: number;
     errors: number;
     notFound: number;
     successfulInserts: number;
@@ -44,7 +45,6 @@ export interface FileResponse {
   error?: string;
   updatedFolioRows?: number;
   updatedTransactionRows?: number;
-  badRows?: number;
 }
 
 export interface SQLExecutionSummaryLog {
@@ -68,6 +68,5 @@ export interface SQLSummaryDisplayProps {
   log: SQLExecutionSummaryLog | FolioTransactionUpdateSummaryLog;
   logKey: string;
   expandedLogId: string | null;
-  parsedBadRows: any[] | null;
   toggleBadRowsDisplay: (filePath: string, logId: string) => void;
 }

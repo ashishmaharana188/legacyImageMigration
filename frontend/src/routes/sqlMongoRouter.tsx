@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useTaskLog } from '../contexts/TaskLogContext';
+import { useTaskLog } from '../hooks/useTaskLog';
 import SQLTaskUI from '../api/imageDataTransfer/sqlTaskUI';
 import MongoTaskUI from '../api/imageDataTransfer/mongoTaskUI';
 import { useSQLTaskHook } from '../api/imageDataTransfer/sqlTaskHook';

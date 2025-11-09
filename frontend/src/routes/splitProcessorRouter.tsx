@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import SplitProcessorUI from '../api/splitProcessor/splitProcessorUI';
 import SplitProcessorSummaryUI from '../api/splitProcessor/splitProcessorSummaryUI';
-import { useTaskLog } from '../contexts/TaskLogContext';
+import { useTaskLog } from '../hooks/useTaskLog';
 import {useSplitProcessorHook} from "../api/splitProcessor/splitProcessorHook"
 
 const SplitProcessorComponent = () => {

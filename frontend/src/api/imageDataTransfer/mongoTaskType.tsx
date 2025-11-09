@@ -1,4 +1,4 @@
-import { TaskLogUpdate } from '../../contexts/TaskLogContext';
+import { TaskLogContextType } from '../../types/index';
 
 export interface MongoTaskUIProps {
   loading: boolean;
@@ -10,7 +10,7 @@ export interface MongoTaskUIProps {
 }
 
 export interface UseMongoTaskHookProps {
-  updateTaskLog: TaskLogUpdate;
+  updateTaskLog: TaskLogContextType['updateTaskLog'];
   clearTaskLog: (task: string) => void;
 }
 
@@ -42,18 +42,24 @@ export interface FileResponse {
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
   error?: string;
   transferredCount?: number;
-  documents?: any[];
+  documents?: unknown[];
 }
 
 export interface MongoTransferSummaryLog {
   transferredCount?: number;
-  documents?: any[];
+  documents?: MongoDocument[];
   message?: string;
   status?: "success" | "failed";
 }
 
+export interface MongoDocument {
+  _id: string;
+  clientCode: string;
+  status: string;
+}
+
 export interface MongoDuplicateCheckSummaryLog {
-  duplicates?: any[];
+  duplicates?: unknown;
   totalDuplicateDocuments?: number;
   totalDuplicateGroups?: number;
   message?: string;
@@ -62,9 +68,16 @@ export interface MongoDuplicateCheckSummaryLog {
 
 export interface MongoTransactionsUpdateSummaryLog {
   updatedCount?: number;
-  updatedDocuments?: any[];
+  updatedDocuments?: MongoUpdatedDocument[];
   message?: string;
   status?: "success" | "failed";
+}
+
+export interface MongoUpdatedDocument {
+  _id: string;
+  clientCode: string;
+  oldTransactionId: string;
+  newTransactionId: string;
 }
 
 export interface MongoSummaryDisplayProps {

@@ -1,42 +1,12 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
-
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  totalFiles?: number;
-  processedFiles?: number;
-  successfulFiles?: number;
-  errorFiles?: number;
-  notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
-}
-
-interface TaskLogContextType {
-  taskLogs: { [key: string]: any[] };
-  uploadStatuses: UploadStatus[];
-  updateTaskLog: (taskKey: string, log: any) => void;
-  onClearLogs: (taskKey: string) => void;
-  setSummaryData: React.Dispatch<React.SetStateAction<{ [key: string]: any[]; }>>;
-  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
-}
-
-const TaskLogContext = createContext<TaskLogContextType | undefined>(undefined);
+import React, { useState, ReactNode } from 'react';
+import { UploadStatus, LogEntry } from '../types';
+import { TaskLogContext } from './TaskLogContextDefinition';
 
 export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [taskLogs, setTaskLogs] = useState<{ [key: string]: any[] }>({});
+  const [taskLogs, setTaskLogs] = useState<{ [key: string]: LogEntry[] }>({});
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
 
-  const updateTaskLog = (taskKey: string, log: any) => {
+  const updateTaskLog = (taskKey: string, log: LogEntry) => {
     if (!log) {
       console.warn(`Attempted to log an undefined message for taskKey: ${taskKey}`);
       return;
@@ -47,10 +17,10 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children })
         newLogs[taskKey] = [];
       }
 
-      if (log.id) {
-        const existingLogIndex = newLogs[taskKey].findIndex((item: any) => item.id === log.id);
+      if (typeof log === 'object' && log !== null && 'id' in log) {
+        const existingLogIndex = newLogs[taskKey].findIndex((item: LogEntry) => typeof item === 'object' && item !== null && 'id' in item && item.id === log.id);
         if (existingLogIndex > -1) {
-          newLogs[taskKey][existingLogIndex] = { ...newLogs[taskKey][existingLogIndex], ...log };
+          newLogs[taskKey][existingLogIndex] = { ...(newLogs[taskKey][existingLogIndex] as object), ...(log as object) };
         } else {
           newLogs[taskKey] = [...newLogs[taskKey], log];
         }
@@ -85,12 +55,4 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children })
       {children}
     </TaskLogContext.Provider>
   );
-};
-
-export const useTaskLog = () => {
-  const context = useContext(TaskLogContext);
-  if (context === undefined) {
-    throw new Error('useTaskLog must be used within a TaskLogProvider');
-  }
-  return context;
 };

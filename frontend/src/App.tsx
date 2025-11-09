@@ -3,7 +3,7 @@ import Sidebar from "./components/ui/Sidebar";
 import { SummaryDisplay } from "./api/Global/summaryDisplay";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Outlet } from "@tanstack/react-router";
-import { useTaskLog } from "./contexts/TaskLogContext";
+import { useTaskLog } from "../src/hooks/useTaskLog";
 
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
