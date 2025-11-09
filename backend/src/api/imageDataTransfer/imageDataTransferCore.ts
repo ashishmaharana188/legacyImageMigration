@@ -1,8 +1,8 @@
 // backend/src/api/imageDataTransfer/imageDataTransferCore.ts
 
 import { PoolClient } from "pg";
-import mongoose, { Document } from "mongoose";
-import { IAifDocument } from "./imageDataTransferTypes";
+import mongoose, { PipelineStage, BulkWriteOperation } from "mongoose";
+import { IAifDocument, IAifDocumentInput, IBulkWriteResult } from "./imageDataTransferTypes";
 
 // --- SQL Queries ---
 
@@ -161,10 +161,10 @@ export async function mongoFindOne(model: mongoose.Model<IAifDocument>): Promise
 }
 
 export async function mongoInsertMany(model: mongoose.Model<IAifDocument>, documents: IAifDocumentInput[]): Promise<IAifDocument[]> {
-  await model.insertMany(documents);
+  return model.insertMany(documents);
 }
 
-export async function mongoBulkWrite(model: mongoose.Model<IAifDocument>, operations: mongoose.BulkWriteOperation<IAifDocument>[]): Promise<any> {
+export async function mongoBulkWrite(model: mongoose.Model<IAifDocument>, operations: BulkWriteOperation<IAifDocument>[]): Promise<IBulkWriteResult> {
   return model.bulkWrite(operations);
 }
 
@@ -172,13 +172,13 @@ export async function mongoFind(model: mongoose.Model<IAifDocument>, query: Reco
   return model.find(query).lean();
 }
 
-export async function mongoAggregate(model: mongoose.Model<IAifDocument>, pipeline: Record<string, unknown>[]): Promise<IAifDocument[]> {
+export async function mongoAggregate(model: mongoose.Model<IAifDocument>, pipeline: PipelineStage[]): Promise<IAifDocument[]> {
   return model.aggregate(pipeline).exec();
 }
 
 // --- PostgreSQL Operations ---
 
-export async function pgQuery(client: PoolClient, query: string, params: any[] = []): Promise<any> {
+export async function pgQuery(client: PoolClient, query: string, params: unknown[] = []): Promise<unknown> {
   return client.query(query, params);
 }
 

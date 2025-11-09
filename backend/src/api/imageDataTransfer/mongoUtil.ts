@@ -1,4 +1,4 @@
-import mongoose, { Document } from "mongoose";
+import mongoose, { Document, PipelineStage } from "mongoose";
 import logger from "../../utils/logger"; // Adjusted path
 import { SqlUtil } from "./sqlUtil"; // Import SqlUtil for PostgreSQL operations
 import {
@@ -14,7 +14,7 @@ import {
   mongoFind,
   mongoAggregate,
 } from "./imageDataTransferCore";
-import { AifDocumentDetail, IAifDocument, IAifDocumentInput,IUpdatedDocumentSummary, ISyncedDocumentSummary } from "./imageDataTransferTypes";
+import { AifDocumentDetail, IAifDocument, IAifDocumentInput,IUpdatedDocumentSummary, ISyncedDocumentSummary,IBulkWriteResult } from "./imageDataTransferTypes";
 
 export class MongoUtil {
   private model: mongoose.Model<IAifDocument>;
@@ -297,7 +297,7 @@ export class MongoUtil {
         }
 
         if (bulkOperations.length > 0) {
-          const bulkWriteResult = await mongoBulkWrite(this.model, bulkOperations);
+          const bulkWriteResult: IBulkWriteResult = await mongoBulkWrite(this.model, bulkOperations);
           totalUpdatedCount += bulkWriteResult.modifiedCount;
           allUpdatedDocuments.push(...documentsToUpdate);
         }
@@ -353,7 +353,7 @@ export class MongoUtil {
   public async getDocumentsCreatedAfterDate(date: Date): Promise<IAifDocument[]> {
     try {
       await this.connect();
-      const pipeline: Record<string, unknown>[] = [
+      const pipeline: PipelineStage[] = [
         {
           $addFields: {
             createdOnDate: {

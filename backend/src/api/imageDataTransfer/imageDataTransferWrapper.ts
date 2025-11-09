@@ -19,7 +19,7 @@ export class ImageDataTransferWrapper {
     summary: {
       insertedRows: number;
       errorRows: number;
-      badRows: any[];
+      badRows: unknown[];
       badRowsFilePath: string | null;
     };
   }> {
@@ -56,7 +56,7 @@ export class ImageDataTransferWrapper {
 
   public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
-    documents?: any[];
+    documents?: unknown[];
   }> {
     return this.mongoUtil.transferDataFromPostgres(clientCode);
   }
@@ -64,8 +64,8 @@ export class ImageDataTransferWrapper {
   public async updateMongoTransactions(clientId?: number): Promise<{
     updatedCount: number;
     syncedCount: number;
-    updatedDocuments: any[];
-    syncedDocuments: any[];
+    updatedDocuments: unknown[];
+    syncedDocuments: unknown[];
   }> {
     return this.mongoUtil.updateMongoTransactions(clientId);
   }

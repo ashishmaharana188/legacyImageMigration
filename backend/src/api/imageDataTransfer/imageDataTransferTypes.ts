@@ -68,3 +68,8 @@ export interface ISyncedDocumentSummary {
   clientId: string;
   transactionNo: string;
 }
+
+export interface IBulkWriteResult {
+  modifiedCount: number;
+  // Add other properties if needed, e.g., insertedCount, upsertedCount, etc.
+}
