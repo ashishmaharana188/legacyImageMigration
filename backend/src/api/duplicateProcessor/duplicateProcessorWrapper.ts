@@ -1,7 +1,6 @@
 // backend/src/api/duplicateProcessor/duplicateProcessorWrapper.ts
 
-import logger from "../../utils/logger";
-import { SqlLog, MongoDuplicateCheckResult } from "./duplicateProcessorTypes";
+import { SqlLog, MongoDuplicateCheckResult, DryRunResultRow } from "./duplicateProcessorTypes";
 import { DuplicateProcessorSqlUtil } from "./duplicateProcessorSqlUtil";
 import { DuplicateProcessorMongoUtil } from "./duplicateProcessorMongoUtil";
 
@@ -24,7 +23,7 @@ export class DuplicateProcessorWrapper {
     dryRun: boolean;
     cutoffTms: string;
     deletedCount?: number;
-    rows?: any[];
+    rows?: DryRunResultRow[];
     logs: SqlLog[];
     imperfectDuplicates?: string[];
     imperfectDuplicatesFilePath?: string | null;
@@ -43,7 +42,7 @@ export class DuplicateProcessorWrapper {
     duplicates: MongoDuplicateCheckResult[];
     totalDuplicateGroups: number;
     totalDuplicateDocuments: number;
-    logs: any[];
+    logs: SqlLog[];
   }> {
     return this.duplicateProcessorMongoUtil.sanityCheckMongoDuplicates(params);
   }

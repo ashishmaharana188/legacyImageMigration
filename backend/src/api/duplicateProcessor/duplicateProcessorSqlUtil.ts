@@ -11,9 +11,9 @@ import {
 } from "../../../controllers/dbConnect";
 import {
   SqlLog,
-  SanityCheckRow,
+
   DryRunResultRow,
-  ImperfectDuplicateRow,
+
 } from "./duplicateProcessorTypes";
 import {
   pgQuery,
@@ -66,25 +66,25 @@ export class DuplicateProcessorSqlUtil {
     let content = "";
 
     if (badRows[0].id_ihno !== undefined) {
-      content = "id_ihno,reason\\n";
+      content = "id_ihno,reason\n";
       badRows.forEach((row) => {
-        content += `${row.id_ihno},"${row.reason}"\\n`;
+        content += `${row.id_ihno},"${row.reason}"\n`;
       });
     } else if (
       badRows[0].user_attr1 !== undefined ||
       badRows[0].user_attr2 !== undefined
     ) {
-      content = "user_attr1,user_attr2,reason\\n";
+      content = "user_attr1,user_attr2,reason\n";
       badRows.forEach((row) => {
         content += `${row.user_attr1 || ""},${row.user_attr2 || ""},"${
           row.reason
-        }"\\n`;
+        }"\n`;
       });
     } else {
       // Fallback if structure is unexpected
-      content = "reason\\n";
+      content = "reason\n";
       badRows.forEach((row) => {
-        content += `"${row.reason}"\\n`;
+        content += `"${row.reason}"\n`;
       });
     }
 
@@ -108,7 +108,7 @@ export class DuplicateProcessorSqlUtil {
     dryRun: boolean;
     cutoffTms: string;
     deletedCount?: number;
-    rows?: any[];
+    rows?: DryRunResultRow[];
     logs: SqlLog[];
     imperfectDuplicates?: string[];
     imperfectDuplicatesFilePath?: string | null;
@@ -137,6 +137,7 @@ export class DuplicateProcessorSqlUtil {
           SQL_SELECT_CLIENT_ID_BY_CODE,
           [clientCode]
         );
+        if (clientRes.rows.length === 0) {
           await pgRollback(client);
           return {
             result: "failed",
@@ -146,11 +147,12 @@ export class DuplicateProcessorSqlUtil {
               {
                 row: 0,
                 status: "error",
-                message: `Client code \'${clientCode}\' not found.`,
+                message: `Client code '${clientCode}' not found.`,
               },
             ],
           };
         }
+        clientId = clientRes.rows[0].id;
       }
 
       const keyExpr = (alias?: string) => {
@@ -261,6 +263,10 @@ export class DuplicateProcessorSqlUtil {
             creation_date: row.creation_date,
             folio_id: row.folio_id,
             transaction_reference_id: row.transaction_reference_id,
+            is_perfect: row.is_perfect, // Added missing property
+            perfect_rows_in_group: row.perfect_rows_in_group, // Added missing property
+            rn_desc: row.rn_desc, // Added missing property
+            total_rows_in_group: row.total_rows_in_group, // Added missing property
             isPerfect: isPerfectRow,
             wouldBeDeleted,
             reason,

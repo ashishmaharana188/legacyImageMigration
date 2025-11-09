@@ -133,9 +133,9 @@ export class MongoUtil {
           currentStage: data.current_stage || 15,
           documentFormat: data.document_format,
           documentPath: data.document_path,
-          documentSize: data.document_size || "";
+          documentSize: data.document_size || "",
           documentType: "APLCN",
-          lastUpdatedBy: "";
+          lastUpdatedBy: "",
           lastUpdatedFrom: data.last_updated_from || null,
           lastUpdatedOn: new Date()
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })

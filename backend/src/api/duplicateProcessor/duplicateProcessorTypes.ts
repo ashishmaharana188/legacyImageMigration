@@ -25,6 +25,22 @@ export interface ImperfectDuplicateRow {
   reason: string;
 }
 
+export interface SqlLog {
+  row: number;
+  status: "error" | "updated" | "info";
+  message: string;
+}
+
+export interface MongoCountResult {
+  count: number;
+}
+
+export interface MongoDuplicateGroupResult {
+  _id: { clientId: string; transactionNo: string; modifiedDocumentPathNo: string; sourceUser: string; };
+  count: number;
+  documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
+}
+
 export interface MongoDuplicateCheckResult {
   _id: { clientId: string; transactionNo: string };
   count: number;

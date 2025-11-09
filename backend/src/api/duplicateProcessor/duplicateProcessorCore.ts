@@ -1,7 +1,9 @@
 // backend/src/api/duplicateProcessor/duplicateProcessorCore.ts
 
 import { PoolClient } from "pg";
-import mongoose from "mongoose";
+import mongoose, { Document, PipelineStage } from "mongoose";
+import { DeleteResult } from "mongodb";
+import { QueryResult } from "pg";
 
 // --- SQL Queries ---
 
@@ -187,17 +189,17 @@ WHERE d.created_by = 'system' %CLIENT_FILTER_D%;
 
 // --- MongoDB Operations ---
 
-export async function mongoAggregate(model: mongoose.Model<any>, pipeline: any[]): Promise<any[]> {
+export async function mongoAggregate<T>(model: mongoose.Model<Document>, pipeline: PipelineStage[]): Promise<T[]> {
   return model.aggregate(pipeline).exec();
 }
 
-export async function mongoDeleteMany(model: mongoose.Model<any>, filter: any): Promise<any> {
+export async function mongoDeleteMany(model: mongoose.Model<Document>, filter: Record<string, unknown>): Promise<DeleteResult> {
   return model.deleteMany(filter);
 }
 
 // --- PostgreSQL Operations ---
 
-export async function pgQuery(client: PoolClient, query: string, params: any[] = []): Promise<any> {
+export async function pgQuery(client: PoolClient, query: string, params: unknown[] = []): Promise<QueryResult> {
   return client.query(query, params);
 }
 

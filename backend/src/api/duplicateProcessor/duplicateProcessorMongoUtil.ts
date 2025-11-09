@@ -4,64 +4,118 @@ import {
   getMongoModel,
   getMongoDb,
 } from "../../../controllers/dbConnect";
-import mongoose from "mongoose";
+import mongoose, { Document, PipelineStage } from "mongoose";
 import logger from "../../utils/logger";
-import { MongoDuplicateCheckResult } from "./duplicateProcessorTypes";
+import { MongoDuplicateCheckResult, SqlLog, MongoCountResult, MongoDuplicateGroupResult } from "./duplicateProcessorTypes";
 import { mongoAggregate, mongoDeleteMany } from "./duplicateProcessorCore";
 
 export class DuplicateProcessorMongoUtil {
-  private model: mongoose.Model<any>;
+
+  private model: mongoose.Model<Document>;
+
+
 
   constructor() {
+
     this.model = getMongoModel();
+
   }
+
+
 
   public async connect(): Promise<void> {
+
     await connectMongo();
+
   }
+
+
 
   public getDb() {
+
     return getMongoDb();
+
   }
+
+
 
   public async disconnect(): Promise<void> {
+
     await disconnectMongo();
+
   }
+
+
 
   private convertCutoffTmsToDate(cutoffTms: string): Date | null {
+
     try {
+
       // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
+
       const date = new Date(cutoffTms);
+
       if (isNaN(date.getTime())) {
+
         logger.error({
+
           category: "task-steps",
+
           message: `Invalid cutoffTms date string: ${cutoffTms}`,
+
         });
+
         return null;
+
       }
+
       return date;
-    } catch (error) {
-      logger.error({
-        category: "task-steps",
-        message: `Error converting cutoffTms to Date: ${error}`,
-      });
-      return null;
+
     }
+
+    catch (error) {
+
+      logger.error({
+
+        category: "task-steps",
+
+        message: `Error converting cutoffTms to Date: ${error}`,
+
+      });
+
+      return null;
+
+    }
+
   }
 
+
+
   public async sanityCheckMongoDuplicates(params: {
+
     dryRun?: boolean;
+
     cutoffTms?: string;
+
     clientId?: string;
+
   }): Promise<{
+
     result: "success" | "failed";
+
     dryRun: boolean;
+
     duplicates: MongoDuplicateCheckResult[];
+
     totalDuplicateGroups: number;
+
     totalDuplicateDocuments: number;
-    logs: any[];
+
+    logs: SqlLog[];
+
   }> {
-    const logs: any[] = [];
+
+    const logs: SqlLog[] = [];
     const { dryRun = true, cutoffTms: cutoffDateString, clientId } = params;
     let cutoffDate: Date | null = null;
 
@@ -73,6 +127,7 @@ export class DuplicateProcessorMongoUtil {
 
       if (isNaN(cutoffDate.getTime())) {
         logs.push({
+          row: 0,
           status: "error",
           message: `Invalid cutoffDateString provided: ${cutoffDateString}`,
         });
@@ -100,7 +155,7 @@ export class DuplicateProcessorMongoUtil {
     try {
       await this.connect();
 
-      const pipeline: any[] = [
+      const pipeline: PipelineStage[] = [
         ...(clientId ? [{ $match: { clientId: clientId } }] : []),
         {
           $addFields: {
@@ -195,7 +250,7 @@ export class DuplicateProcessorMongoUtil {
                   regexMatch: {
                     $regexFind: {
                       input: "$documentPath",
-                      regex: "_TRANSACTION_NUMBER_(\d+)",
+                      regex: "_TRANSACTION_NUMBER_(d+)",
                     },
                   },
                 },
@@ -228,7 +283,7 @@ export class DuplicateProcessorMongoUtil {
       ];
 
       // Log the count of documents after the cutoff date filter
-      const documentsAfterCutoff = await mongoAggregate(this.model, [
+      const documentsAfterCutoff = await mongoAggregate<MongoCountResult>(this.model, [
         ...pipeline.slice(
           0,
           pipeline.findIndex((stage) => "$group" in stage)
@@ -241,7 +296,7 @@ export class DuplicateProcessorMongoUtil {
         message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${documentsAfterCutoff[0]?.count || 0}`,
       });
 
-      const duplicates = await mongoAggregate(this.model, pipeline);
+      const duplicates = await mongoAggregate<MongoDuplicateGroupResult>(this.model, pipeline);
 
       const totalDuplicateGroups = duplicates.length;
       const totalDuplicateDocuments = duplicates.reduce(
@@ -286,6 +341,7 @@ export class DuplicateProcessorMongoUtil {
             _id: { $in: allDocumentsToDeleteIds },
           });
           logs.push({
+            row: 0,
             status: "info",
             message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
           });
@@ -295,6 +351,7 @@ export class DuplicateProcessorMongoUtil {
           });
         }
         logs.push({
+          row: 0,
           status: "info",
           message: "Oldest duplicate deletion process completed.",
         });
@@ -316,6 +373,7 @@ export class DuplicateProcessorMongoUtil {
         message: `sanityCheckMongoDuplicates failed: ${error}`,
       });
       logs.push({
+        row: 0,
         status: "error",
         message: `sanityCheckMongoDuplicates failed: ${error}`,
       });
