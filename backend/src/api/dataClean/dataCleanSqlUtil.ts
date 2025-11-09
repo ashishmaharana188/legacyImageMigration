@@ -14,7 +14,7 @@ import {
 
   DryRunResultRow,
 
-} from "./duplicateProcessorTypes";
+} from "./dataCleanTypes";
 import {
   pgQuery,
   pgBegin,
@@ -26,7 +26,7 @@ import {
   SQL_DELETE_OLDER_PERFECT_DUPLICATES,
   SQL_DELETE_OLDER_IMPERFECT_DUPLICATES,
   SQL_SELECT_IMPERFECT_DUPLICATES,
-} from "./duplicateProcessorCore";
+} from "./dataCleanCore";
 
 export class DuplicateProcessorSqlUtil {
   constructor() {

@@ -18,10 +18,11 @@ const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
 const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
 const sessionToken = process.env.AWS_SESSION_TOKEN; // Often required for temporary credentials
 const region = process.env.AWS_DEFAULT_REGION || "ap-south-1";
+const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
 
-if (!accessKeyId || !secretAccessKey) {
+if (!accessKeyId || !secretAccessKey || !S3_BUCKET_NAME) {
   const errorMessage =
-    "AWS credentials are not configured properly. Please ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set.";
+    "AWS credentials or S3 bucket name are not configured properly. Please ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME environment variables are set.";
   console.error(errorMessage);
   throw new Error(errorMessage);
 }

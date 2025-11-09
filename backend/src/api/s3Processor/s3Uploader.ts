@@ -7,6 +7,7 @@ import https from "https";
 import { broadcast } from "../../utils/webSocketService";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { S3_BUCKET_NAME } from "../../utils/s3Config";
+import { isAuthError, countTrackedDirectories } from "./s3ProcessorUtil";
 
 export async function uploadOriginalToS3(localFilePath: string, s3Key: string): Promise<string> {
   const fileStream = fs.createReadStream(localFilePath);
@@ -289,14 +290,6 @@ async function performIterativeUpload(
 }
 
 export async function uploadDirectoryRecursive(
-  localDir: string,
-  bucket: string,
-  prefix: string
-) {
-  return performIterativeUpload(localDir, bucket, prefix);
-}
-
-export async function uploadSplitFilesToS3(
   localDir: string,
   bucket: string,
   prefix: string

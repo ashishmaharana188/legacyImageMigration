@@ -74,7 +74,7 @@ s3ProcessorRouter.post("/s3/upload-original", async (req, res) => {
 s3ProcessorRouter.post("/s3/upload-split-files", async (req, res) => {
   const { localDir, prefix } = req.body;
   try {
-    const results = await uploadSplitFilesToS3(localDir, S3_BUCKET_NAME, prefix);
+    const results = await uploadSplitFilesToS3(localDir, prefix);
     res.json({ message: "Split files upload initiated", results });
   } catch (error: unknown) {
     console.error("Error uploading split files to S3:", error);

@@ -1,7 +1,7 @@
 // backend/src/api/duplicateProcessor/duplicateProcessorController.ts
 
 import { Request, Response } from "express";
-import { DuplicateProcessorWrapper } from "./duplicateProcessorWrapper";
+import { DuplicateProcessorWrapper } from "./dataCleanWrapper";
 import logger from "../../utils/logger";
 
 class DuplicateProcessorController {

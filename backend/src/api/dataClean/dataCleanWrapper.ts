@@ -1,8 +1,8 @@
 // backend/src/api/duplicateProcessor/duplicateProcessorWrapper.ts
 
-import { SqlLog, MongoDuplicateCheckResult, DryRunResultRow } from "./duplicateProcessorTypes";
-import { DuplicateProcessorSqlUtil } from "./duplicateProcessorSqlUtil";
-import { DuplicateProcessorMongoUtil } from "./duplicateProcessorMongoUtil";
+import { SqlLog, MongoDuplicateCheckResult, DryRunResultRow } from "./dataCleanTypes";
+import { DuplicateProcessorSqlUtil } from "./dataCleanSqlUtil";
+import { DuplicateProcessorMongoUtil } from "./dataCleanMongoUtil";
 
 export class DuplicateProcessorWrapper {
   private duplicateProcessorSqlUtil: DuplicateProcessorSqlUtil;

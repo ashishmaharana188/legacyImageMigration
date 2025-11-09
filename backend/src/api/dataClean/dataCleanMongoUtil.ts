@@ -6,13 +6,12 @@ import {
 } from "../../../controllers/dbConnect";
 import mongoose, { Document, PipelineStage } from "mongoose";
 import logger from "../../utils/logger";
-import { MongoDuplicateCheckResult, SqlLog, MongoCountResult, MongoDuplicateGroupResult } from "./duplicateProcessorTypes";
-import { mongoAggregate, mongoDeleteMany } from "./duplicateProcessorCore";
+import { MongoDuplicateCheckResult, SqlLog, MongoCountResult, MongoDuplicateGroupResult } from "./dataCleanTypes";
+import { mongoAggregate, mongoDeleteMany } from "./dataCleanCore";
 
 export class DuplicateProcessorMongoUtil {
 
   private model: mongoose.Model<Document>;
-
 
 
   constructor() {
@@ -20,7 +19,6 @@ export class DuplicateProcessorMongoUtil {
     this.model = getMongoModel();
 
   }
-
 
 
   public async connect(): Promise<void> {

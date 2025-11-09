@@ -1,7 +1,7 @@
 // backend/src/api/duplicateProcessor/duplicateProcessorApp.ts
 
 import express from "express";
-import { duplicateProcessorController } from "./duplicateProcessorController";
+import { duplicateProcessorController } from "./dataCleanController";
 
 const duplicateProcessorRouter = express.Router();
 
