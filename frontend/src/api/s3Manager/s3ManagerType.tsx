@@ -1,5 +1,5 @@
-// Re-using UploadStatus from uploadProcessorType for S3 upload progress
-import { UploadStatus } from '../uploadProcessor/uploadProcessorType';
+import { UploadStatus } from '../../types';
+
 
 
 export interface S3File {

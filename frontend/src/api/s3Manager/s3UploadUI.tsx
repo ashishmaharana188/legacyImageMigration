@@ -50,13 +50,12 @@ const S3UploadUI: React.FC<S3UploadUIProps> = ({
         </div>
       </div>
       <div className="flex flex-col gap-2">
-        <button onClick={onUploadOriginal} className="btn w-full" disabled={loading || !localDir}>
+        <button onClick={onUploadOriginal} className="btn w-full">
           {loading ? "Uploading..." : "Upload Original to S3"}
         </button>
         <button
           onClick={onUploadSplitFiles}
           className="btn w-full"
-          disabled={loading || !localDir}
         >
           {loading ? "Uploading..." : "Upload Split Files to S3"}
         </button>
