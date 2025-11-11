@@ -5,24 +5,30 @@ import {
   ObjectIdentifier,
   ListBucketsCommand,
 } from "@aws-sdk/client-s3";
+import { isAuthError } from "./s3ProcessorUtil";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import https from "https";
-import { isAuthError } from "./s3ProcessorUtil";
+import {
+  S3_BUCKET_NAME,
+  AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY,
+  AWS_SESSION_TOKEN,
+  AWS_DEFAULT_REGION,
+} from "../../../utils/s3Config";
 
 const agent = new https.Agent({
   maxSockets: 200,
 });
 
 // Check for essential AWS credentials
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const sessionToken = process.env.AWS_SESSION_TOKEN; // Often required for temporary credentials
-const region = process.env.AWS_DEFAULT_REGION || "ap-south-1";
-const S3_BUCKET_NAME = process.env.S3_BUCKET_NAME;
+const accessKeyId = AWS_ACCESS_KEY_ID;
+const secretAccessKey = AWS_SECRET_ACCESS_KEY;
+const sessionToken = AWS_SESSION_TOKEN; // Often required for temporary credentials
+const region = AWS_DEFAULT_REGION;
 
 if (!accessKeyId || !secretAccessKey || !S3_BUCKET_NAME) {
   const errorMessage =
-    "AWS credentials or S3 bucket name are not configured properly. Please ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME environment variables are set.";
+    "AWS credentials or S3 bucket name are not configured properly. Please ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME are provided in the .env file.";
   console.error(errorMessage);
   throw new Error(errorMessage);
 }

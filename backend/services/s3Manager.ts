@@ -7,21 +7,27 @@ import {
 } from "@aws-sdk/client-s3";
 import { NodeHttpHandler } from "@smithy/node-http-handler";
 import https from "https";
-import { S3_BUCKET_NAME } from "../utils/s3Config";
+import {
+  S3_BUCKET_NAME,
+  AWS_ACCESS_KEY_ID,
+  AWS_SECRET_ACCESS_KEY,
+  AWS_SESSION_TOKEN,
+  AWS_DEFAULT_REGION,
+} from "../utils/s3Config";
 
 const agent = new https.Agent({
   maxSockets: 200,
 });
 
 // Check for essential AWS credentials
-const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-const sessionToken = process.env.AWS_SESSION_TOKEN; // Often required for temporary credentials
-const region = process.env.AWS_DEFAULT_REGION || "ap-south-1";
+const accessKeyId = AWS_ACCESS_KEY_ID;
+const secretAccessKey = AWS_SECRET_ACCESS_KEY;
+const sessionToken = AWS_SESSION_TOKEN; // Often required for temporary credentials
+const region = AWS_DEFAULT_REGION;
 
 if (!accessKeyId || !secretAccessKey) {
   const errorMessage =
-    "AWS credentials are not configured properly. Please ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY environment variables are set.";
+    "AWS credentials are not configured properly. Please ensure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY are provided in the .env file.";
   console.error(errorMessage);
   throw new Error(errorMessage);
 }
