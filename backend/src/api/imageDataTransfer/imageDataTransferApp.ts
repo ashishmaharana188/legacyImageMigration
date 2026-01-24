@@ -5,23 +5,34 @@ import { imageDataTransferController } from "./imageDataTransferController";
 
 const imageDataTransferRouter = express.Router();
 
+// Change this line to match the URL in your axios call
 imageDataTransferRouter.post(
-  "/sql/execute",
+  "/process-sql-mongo",
+  imageDataTransferController.executeSql.bind(imageDataTransferController)
+);
+
+imageDataTransferRouter.post(
+  "/process-sql-mongo/sql/execute",
   imageDataTransferController.executeSql.bind(imageDataTransferController)
 );
 imageDataTransferRouter.post(
-  "/sql/update-folio-transaction",
-  imageDataTransferController.updateFolioAndTransaction.bind(imageDataTransferController)
+  "/process-sql-mongo/sql/update-folio-transaction",
+  imageDataTransferController.updateFolioAndTransaction.bind(
+    imageDataTransferController
+  )
 );
 
 imageDataTransferRouter.post(
-  "/mongo/transfer-from-postgres",
-  imageDataTransferController.transferDataFromPostgres.bind(imageDataTransferController)
+  "/transfer-to-mongo",
+  imageDataTransferController.transferDataFromPostgres.bind(
+    imageDataTransferController
+  )
 );
 imageDataTransferRouter.post(
-  "/mongo/update-transactions",
-  imageDataTransferController.updateMongoTransactions.bind(imageDataTransferController)
+  "/process-sql-mongo/mongo/update-transactions",
+  imageDataTransferController.updateMongoTransactions.bind(
+    imageDataTransferController
+  )
 );
-
 
 export default imageDataTransferRouter;

@@ -35,6 +35,7 @@ if (fs.existsSync(envPath)) {
 import express from "express";
 import uploadProcessRouter from "./src/api/uploadProcessor/uploadProcessorApp";
 import splitProcessorRouter from "./src/api/splitProcessor/splitProcessorApp";
+import imageDataTransferRouter from "./src/api/imageDataTransfer/imageDataTransferApp";
 import s3ProcessorRouter from "./src/api/s3Processor/s3ProcessorApp";
 import duplicateProcessorRouter from "./src/api/dataClean/dataCleanApp";
 import cors from "cors";
@@ -66,6 +67,7 @@ app.get("/config", (req, res) => {
 
 app.use(uploadProcessRouter);
 app.use(splitProcessorRouter);
+app.use(imageDataTransferRouter);
 app.use(s3ProcessorRouter);
 app.use(duplicateProcessorRouter);
 

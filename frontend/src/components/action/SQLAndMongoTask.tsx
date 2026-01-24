@@ -14,6 +14,7 @@ interface FileResponse {
   originalFile?: string;
   processedFile?: string;
   nextContinuationToken?: string;
+  successfulRows?: string;
   summary?: {
     totalRows: number;
     successfulRows: number;
@@ -62,33 +63,40 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
   clearTaskLog,
 }) => {
   const [loading, setLoading] = useState<boolean>(false);
-  const [clientCode, setClientCode] = useState<string>('');
+  const [clientCode, setClientCode] = useState<string>("");
 
-  const handleTransferToMongo = useCallback(async (updateAll: boolean, clientCode: string) => {
-    setLoading(true);
-    clearTaskLog("sqlAndMongo");
-    const taskMessage = updateAll ? "Updating Mongo transactions" : "Transferring data to MongoDB";
-    updateTaskLog("sqlAndMongo", taskMessage);
-    
-    try {
-      const url = updateAll 
-        ? "http://localhost:3000/update-mongo-transactions" 
-        : "http://localhost:3000/transfer-to-mongo";
-      const res = await axios.post<FileResponse>(url, { clientCode });
-      updateTaskLog("sqlAndMongo", res.data);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog(
-          "sqlAndMongo",
-          error.response?.data || { message: "An unknown error occurred." }
-        );
-      } else {
-        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
+  const handleTransferToMongo = useCallback(
+    async (updateAll: boolean, clientCode: string) => {
+      setLoading(true);
+      clearTaskLog("sqlAndMongo");
+      const taskMessage = updateAll
+        ? "Updating Mongo transactions"
+        : "Transferring data to MongoDB";
+      updateTaskLog("sqlAndMongo", taskMessage);
+
+      try {
+        const url = updateAll
+          ? "http://localhost:3000/update-mongo-transactions"
+          : "http://localhost:3000/transfer-to-mongo";
+        const res = await axios.post<FileResponse>(url, { clientCode });
+        updateTaskLog("sqlAndMongo", res.data);
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+          updateTaskLog(
+            "sqlAndMongo",
+            error.response?.data || { message: "An unknown error occurred." }
+          );
+        } else {
+          updateTaskLog("sqlAndMongo", {
+            message: "An unknown error occurred.",
+          });
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, clearTaskLog]);
+    },
+    [updateTaskLog, clearTaskLog]
+  );
 
   const handleGenerateSql = useCallback(async () => {
     setLoading(true);
@@ -122,7 +130,13 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
         "http://localhost:3000/process-sql-mongo",
         { action: "executeSql" }
       );
-      const { totalRows = 0, successfulRows = 0, badRows = 0, message: resMessage, ...restData } = res.data;
+      const {
+        totalRows = 0,
+        successfulRows = 0,
+        badRows = 0,
+        message: resMessage,
+        ...restData
+      } = res.data;
 
       let finalMessage = resMessage || "SQL execution completed.";
       let finalStatus: "success" | "failed" = "success";
@@ -160,52 +174,64 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     }
   }, [updateTaskLog, clearTaskLog]);
 
-  const handleupdateFolioAndTransaction = useCallback(async (updateAll: boolean) => {
-    setLoading(true);
-    clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Updating folio and transaction");
-    try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/process-sql-mongo",
-        { action: "updateFolioAndTransaction", updateAll }
-      );
-      const { updatedFolioRows = 0, updatedTransactionRows = 0, badRows = 0, message: resMessage, ...restData } = res.data;
-
-      let finalMessage = resMessage || "Folio and Transaction update completed.";
-      let finalStatus: "success" | "failed" = "success";
-
-      if (badRows > 0) {
-        finalMessage = `Folio and Transaction update completed: Folio Rows Updated: ${updatedFolioRows}, Transaction Rows Updated: ${updatedTransactionRows}, Bad Rows: ${badRows}.`;
-        finalStatus = "failed";
-      } else if (updatedFolioRows > 0 || updatedTransactionRows > 0) {
-        finalMessage = `Folio and Transaction updated successfully. Folio Rows: ${updatedFolioRows}, Transaction Rows: ${updatedTransactionRows}.`;
-        finalStatus = "success";
-      } else {
-        finalMessage = resMessage || "No Folio or Transaction rows updated.";
-        finalStatus = "success";
-      }
-
-      updateTaskLog("sqlAndMongo", {
-        message: finalMessage,
-        status: finalStatus,
-        updatedFolioRows: updatedFolioRows,
-        updatedTransactionRows: updatedTransactionRows,
-        badRows: badRows,
-        ...restData,
-      });
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog(
-          "sqlAndMongo",
-          error.response?.data || { message: "An unknown error occurred." }
+  const handleupdateFolioAndTransaction = useCallback(
+    async (updateAll: boolean) => {
+      setLoading(true);
+      clearTaskLog("sqlAndMongo");
+      updateTaskLog("sqlAndMongo", "Updating folio and transaction");
+      try {
+        const res = await axios.post<FileResponse>(
+          "http://localhost:3000/process-sql-mongo",
+          { action: "updateFolioAndTransaction", updateAll }
         );
-      } else {
-        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
+        const {
+          updatedFolioRows = 0,
+          updatedTransactionRows = 0,
+          badRows = 0,
+          message: resMessage,
+          ...restData
+        } = res.data;
+
+        let finalMessage =
+          resMessage || "Folio and Transaction update completed.";
+        let finalStatus: "success" | "failed" = "success";
+
+        if (badRows > 0) {
+          finalMessage = `Folio and Transaction update completed: Folio Rows Updated: ${updatedFolioRows}, Transaction Rows Updated: ${updatedTransactionRows}, Bad Rows: ${badRows}.`;
+          finalStatus = "failed";
+        } else if (updatedFolioRows > 0 || updatedTransactionRows > 0) {
+          finalMessage = `Folio and Transaction updated successfully. Folio Rows: ${updatedFolioRows}, Transaction Rows: ${updatedTransactionRows}.`;
+          finalStatus = "success";
+        } else {
+          finalMessage = resMessage || "No Folio or Transaction rows updated.";
+          finalStatus = "success";
+        }
+
+        updateTaskLog("sqlAndMongo", {
+          message: finalMessage,
+          status: finalStatus,
+          updatedFolioRows: updatedFolioRows,
+          updatedTransactionRows: updatedTransactionRows,
+          badRows: badRows,
+          ...restData,
+        });
+      } catch (error: unknown) {
+        if (axios.isAxiosError(error)) {
+          updateTaskLog(
+            "sqlAndMongo",
+            error.response?.data || { message: "An unknown error occurred." }
+          );
+        } else {
+          updateTaskLog("sqlAndMongo", {
+            message: "An unknown error occurred.",
+          });
+        }
+      } finally {
+        setLoading(false);
       }
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, clearTaskLog]);
+    },
+    [updateTaskLog, clearTaskLog]
+  );
 
   const handleReconnect = useCallback(async () => {
     setLoading(true);
