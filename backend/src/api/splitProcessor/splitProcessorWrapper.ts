@@ -18,8 +18,8 @@ const logger = winston.createLogger({
   ],
 });
 
-const baseFolder = path.join(__dirname, "../../output");
-const splitFolder = path.join(__dirname, "../../split_output");
+const baseFolder = path.join(process.cwd(), "output");
+const splitFolder = path.join(process.cwd(), "split_output");
 
 export class SplitProcessorWrapper {
   private splitProcessorUtil: SplitProcessorUtil;
@@ -36,6 +36,7 @@ export class SplitProcessorWrapper {
     logger.info("Starting file splitting");
 
     await fs.mkdir(splitFolder, { recursive: true });
+    await fs.mkdir(baseFolder, { recursive: true });
 
     const scanAndProcessDirectory = async (
       inputDir: string,

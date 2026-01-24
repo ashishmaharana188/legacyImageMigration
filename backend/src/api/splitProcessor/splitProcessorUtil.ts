@@ -6,9 +6,9 @@ import { parse } from "csv-parse/sync"; // Import csv-parse
 
 
 export class SplitProcessorUtil { // Renamed class
-  private readonly baseFolder = path.join(__dirname, "../../output");
-  private readonly splitFolder = path.join(__dirname, "../../split_output");
-  private readonly processedFolder = path.join(__dirname, "../../processed");
+  private readonly baseFolder = path.join(process.cwd(), "output");
+  private readonly splitFolder = path.join(process.cwd(), "split_output");
+  private readonly processedFolder = path.join(process.cwd(), "processed");
   private readonly logger = winston.createLogger({
     level: "info",
     format: winston.format.json(),
@@ -20,6 +20,14 @@ export class SplitProcessorUtil { // Renamed class
       new winston.transports.File({ filename: "logs/combined.log" }),
     ],
   });
+
+  constructor() {
+    // Ensure directories exist on instantiation
+    fs.mkdir(this.processedFolder, { recursive: true }).catch((err) => {
+      this.logger.error(`Failed to create processed directory: ${this.processedFolder}`, { error: err });
+    });
+    // Note: baseFolder and splitFolder are handled in SplitProcessorWrapper
+  }
 
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";

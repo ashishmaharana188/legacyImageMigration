@@ -1,6 +1,6 @@
 import { SplitProcessorWrapper } from "./splitProcessorWrapper";
 import { Request, Response } from "express";
-import logger from "../../../services/logger";
+import logger from "../../utils/logger";
 
 class SplitFilesController {
   private splitProcessorWrapper: SplitProcessorWrapper;

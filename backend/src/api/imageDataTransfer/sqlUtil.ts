@@ -11,9 +11,13 @@ import {
   getPgPool,
   reconnectPgPool,
   warmupPgPool,
-} from "../../../controllers/dbConnect"; // Adjusted path
+} from "../../utils/dbConnect"; // Adjusted path
 import Cursor from "pg-cursor";
-import { SqlLog, AifDocumentDetail, IPgQueryResult } from "./imageDataTransferTypes"; // Adjusted path
+import {
+  SqlLog,
+  AifDocumentDetail,
+  IPgQueryResult,
+} from "./imageDataTransferTypes"; // Adjusted path
 import {
   pgQuery,
   pgBegin,
@@ -45,7 +49,6 @@ export class SqlUtil {
     SWOF: "SWP",
   };
 
-
   private async reconnectPool(): Promise<void> {
     await reconnectPgPool();
   }
@@ -69,7 +72,8 @@ export class SqlUtil {
     params.forEach((param, index) => {
       // Replace $1, $2, etc., with the actual parameter value
       // Handle strings by quoting them, numbers directly
-      const replacement = typeof param === "string" ? `"${param}"` : String(param);
+      const replacement =
+        typeof param === "string" ? `"${param}"` : String(param);
       formattedQuery = formattedQuery.replace(`$${index + 1}`, replacement);
     });
     return formattedQuery;
@@ -300,8 +304,14 @@ export class SqlUtil {
             const format = ext.replace(".", "").toUpperCase();
             const clientId = data.id_fund;
 
-            const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${String(data.id_fund)}/`;
-            const docPath = `${basePath}CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+            const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${String(
+              data.id_fund
+            )}/`;
+            const docPath = `${basePath}CLIENT_CODE_${String(
+              data.id_fund
+            )}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${String(
+              data.id_fund
+            )}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
             const sql = `(
 '${this.trxnMap[data.id_trtype] || "Unknown"}', 'Image Upload', '${
@@ -352,7 +362,10 @@ ${data.page_count}, ${clientId}
         return { sql: "", transactions: [], logs };
       }
 
-      const sql = SQL_INSERT_AIF_DOCUMENT_DETAILS.replace("%VALUES%", values.join(", "));
+      const sql = SQL_INSERT_AIF_DOCUMENT_DETAILS.replace(
+        "%VALUES%",
+        values.join(", ")
+      );
 
       this.logger.info({
         function: "generateSql",
@@ -434,17 +447,23 @@ ${data.page_count}, ${clientId}
         `executeSql: found ${uniqueIdFunds.length} unique id_fund values`
       );
 
-interface ClientMasterRow { id: number; client_code: string; }
-
+      interface ClientMasterRow {
+        id: number;
+        client_code: string;
+      }
 
       const clientIdMap: Map<string, number> = new Map();
       if (uniqueIdFunds.length > 0) {
-        const clientMasterRes = await pgQuery(client, SQL_SELECT_CLIENT_MASTER_BY_CODES, [
-          uniqueIdFunds,
-        ]);
-        (clientMasterRes.rows as ClientMasterRow[]).forEach((row: ClientMasterRow) => {
-          clientIdMap.set(row.client_code, row.id);
-        });
+        const clientMasterRes = await pgQuery(
+          client,
+          SQL_SELECT_CLIENT_MASTER_BY_CODES,
+          [uniqueIdFunds]
+        );
+        (clientMasterRes.rows as ClientMasterRow[]).forEach(
+          (row: ClientMasterRow) => {
+            clientIdMap.set(row.client_code, row.id);
+          }
+        );
         this.logger.info(
           `executeSql: fetched ${clientIdMap.size} client_id mappings`
         );
@@ -517,8 +536,14 @@ interface ClientMasterRow { id: number; client_code: string; }
             continue; // Skip this row entirely from valueParams and valueStrings
           }
 
-          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${String(data.id_fund)}/`;
-          const docPath = `${basePath}CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${String(data.id_fund)}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${String(
+            data.id_fund
+          )}/`;
+          const docPath = `${basePath}CLIENT_CODE_${String(
+            data.id_fund
+          )}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${String(
+            data.id_fund
+          )}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
           const mime = mimeType[ext.replace(".", "")] || "Unknown";
 
           const rowValues = [
@@ -568,7 +593,11 @@ interface ClientMasterRow { id: number; client_code: string; }
           this.logger.info(
             `executeSql: executing batch of ${valueStrings.length} rows.`
           );
-          const result = await pgQuery(client, queryText, valueParams) as IPgQueryResult;
+          const result = (await pgQuery(
+            client,
+            queryText,
+            valueParams
+          )) as IPgQueryResult;
           insertedRows += result.rowCount || 0;
         }
       }
@@ -795,11 +824,11 @@ interface ClientMasterRow { id: number; client_code: string; }
           updateAll ? "all" : processedFolioNumbers.length
         } folios`
       );
-      const insertResult = await pgQuery(
+      const insertResult = (await pgQuery(
         client,
         insertTempQuery,
         updateAll ? [] : [processedFolioNumbers]
-      ) as IPgQueryResult;
+      )) as IPgQueryResult;
       logs.push({
         row: 0,
         status: "executed",
@@ -816,19 +845,23 @@ interface ClientMasterRow { id: number; client_code: string; }
         updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"
       );
       this.logger.info("updateFolioAndTransaction: updating folio_id");
-interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
+      interface FolioUpdateRow {
+        user_attr1: string;
+        user_attr2: string;
+      }
 
-
-      const updateFolioResult = await pgQuery(
+      const updateFolioResult = (await pgQuery(
         client,
         updateFolioQuery,
         updateAll ? [] : [processedFolioNumbers]
-      ) as IPgQueryResult;
-      (updateFolioResult.rows as FolioUpdateRow[]).forEach((row: FolioUpdateRow) => {
-        updatedTransactionIdentifiers.add(
-          `${row.user_attr1}-${row.user_attr2}`
-        );
-      });
+      )) as IPgQueryResult;
+      (updateFolioResult.rows as FolioUpdateRow[]).forEach(
+        (row: FolioUpdateRow) => {
+          updatedTransactionIdentifiers.add(
+            `${row.user_attr1}-${row.user_attr2}`
+          );
+        }
+      );
       logs.push({
         row: 0,
         status: "updated",
@@ -840,23 +873,26 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
       );
 
       // Query 4: Update transaction_reference_id using temp_transaction_data
-      const updateTransactionQuery = SQL_UPDATE_TRANSACTION_REFERENCE_ID.replace(
-        "%WHERE_CLAUSE%",
-        updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"
-      );
+      const updateTransactionQuery =
+        SQL_UPDATE_TRANSACTION_REFERENCE_ID.replace(
+          "%WHERE_CLAUSE%",
+          updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"
+        );
       this.logger.info(
         "updateFolioAndTransaction: updating transaction_reference_id"
       );
-      const updateTransactionResult = await pgQuery(
+      const updateTransactionResult = (await pgQuery(
         client,
         updateTransactionQuery,
         updateAll ? [] : [processedFolioNumbers]
-      ) as IPgQueryResult;
-      (updateTransactionResult.rows as FolioUpdateRow[]).forEach((row: FolioUpdateRow) => {
-        updatedTransactionIdentifiers.add(
-          `${row.user_attr1}-${row.user_attr2}`
-        );
-      });
+      )) as IPgQueryResult;
+      (updateTransactionResult.rows as FolioUpdateRow[]).forEach(
+        (row: FolioUpdateRow) => {
+          updatedTransactionIdentifiers.add(
+            `${row.user_attr1}-${row.user_attr2}`
+          );
+        }
+      );
       logs.push({
         row: 0,
         status: "updated",
@@ -918,10 +954,14 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
       }
 
       if (client) {
-        this.logger.warn("updateFolioAndTransaction: error occurred, attempting ROLLBACK");
+        this.logger.warn(
+          "updateFolioAndTransaction: error occurred, attempting ROLLBACK"
+        );
         try {
           await pgRollback(client);
-          this.logger.info("updateFolioAndTransaction: transaction rolled back");
+          this.logger.info(
+            "updateFolioAndTransaction: transaction rolled back"
+          );
         } catch (e) {
           const m = e instanceof Error ? e.message : "Unknown error";
           this.logger.error({
@@ -958,10 +998,6 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
     }
   }
 
-
-
-
-
   public async reconnect(): Promise<void> {
     this.logger.info("Manual reconnection triggered.");
     await reconnectPgPool();
@@ -978,7 +1014,9 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
       const res = await pgQuery(client, SQL_SELECT_CLIENT_ID_BY_CODE, [
         clientCode,
       ]);
-      const clientRow: { id: number } | undefined = res.rows[0] as { id: number } | undefined;
+      const clientRow: { id: number } | undefined = res.rows[0] as
+        | { id: number }
+        | undefined;
       logger.info({
         category: "task-steps",
         message: `Fetched client ID for code ${clientCode}: ${
@@ -1001,7 +1039,9 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
     }
   }
 
-  public async getAifDocumentDetails(clientId?: number): Promise<AifDocumentDetail[]> {
+  public async getAifDocumentDetails(
+    clientId?: number
+  ): Promise<AifDocumentDetail[]> {
     let client: PoolClient | null = null;
     try {
       const processedFolioNumbers = await this.getProcessedFolioNumbers();
@@ -1101,7 +1141,7 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
       let rows: unknown[];
       do {
         rows = await new Promise<unknown[]>((resolve, reject) => {
-            cursor.read(batchSize, (err: Error | undefined, rows: unknown[]) => {
+          cursor.read(batchSize, (err: Error | undefined, rows: unknown[]) => {
             if (err) {
               logger.error({
                 category: "task-steps",
@@ -1151,12 +1191,18 @@ interface FolioUpdateRow { user_attr1: string; user_attr2: string; }
 
     const timestamp = new Date().toISOString().replace(/[:.-]/g, "_");
     const fullFileName = `bad_rows_${timestamp}_${fileName}`;
-    const filePath = path.join(__dirname, "../../../../processed", fullFileName);
+    const filePath = path.join(
+      __dirname,
+      "../../../../processed",
+      fullFileName
+    );
 
     try {
       const header = Object.keys(badRows[0] || {}).join(",");
       const rows = badRows.map((row) =>
-        Object.values(row as Record<string, unknown>).map(value => `"${String(value).replace(/"/g, '""')}"`).join(",")
+        Object.values(row as Record<string, unknown>)
+          .map((value) => `"${String(value).replace(/"/g, '""')}"`)
+          .join(",")
       );
       const content = [header, ...rows].join("\n");
       await fs.writeFile(filePath, content, "utf8");

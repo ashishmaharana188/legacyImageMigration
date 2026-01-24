@@ -26,7 +26,9 @@ if (fs.existsSync(envPath)) {
     console.log("Connected to Dev database");
   }
 } else {
-  console.warn(`Warning: Environment file not found at: ${envPath}. Please ensure it exists.`);
+  console.warn(
+    `Warning: Environment file not found at: ${envPath}. Please ensure it exists.`
+  );
 }
 // --- End of Environment Variable Loading ---
 
@@ -37,20 +39,22 @@ import s3ProcessorRouter from "./src/api/s3Processor/s3ProcessorApp";
 import duplicateProcessorRouter from "./src/api/dataClean/dataCleanApp";
 import cors from "cors";
 import { startSshTunnel } from "./src/utils/tunnel";
-import { connectMongo, disconnectMongo } from "./controllers/dbConnect"
-import { warmupPgPool } from "./controllers/dbConnect";
-import { verifyS3Connection } from "./services/s3Manager";
+import { connectMongo, disconnectMongo } from "./src/utils/dbConnect";
+import { warmupPgPool } from "./src/utils/dbConnect";
+import { verifyS3Connection } from "./src/api/s3Processor/s3Manager";
 import { initWebSocket } from "./src/utils/webSocketService";
 
 import { Server } from "net";
 
 const app = express();
-const port = process.env.NODE_ENV === 'production' ? 3000 : 3000;
+const port = process.env.NODE_ENV === "production" ? 3000 : 3000;
 
-app.use(cors({
-  origin: process.env.API_FRONTEND_URL || "http://localhost:5173", // Allow requests from frontend
-  credentials: true,
-}));
+app.use(
+  cors({
+    origin: process.env.API_FRONTEND_URL || "http://localhost:5173", // Allow requests from frontend
+    credentials: true,
+  })
+);
 app.use(express.json());
 
 app.get("/config", (req, res) => {
@@ -101,7 +105,10 @@ const startServer = async () => {
     console.log("Express server listening, initializing WebSocket server...");
   });
 
-  console.log("Type of expressServer before initWebSocket:", typeof expressServer);
+  console.log(
+    "Type of expressServer before initWebSocket:",
+    typeof expressServer
+  );
   initWebSocket(expressServer);
   console.log("WebSocket server initialization attempted.");
 

@@ -8,13 +8,8 @@ import {
   getPgPool,
   reconnectPgPool,
   warmupPgPool,
-} from "../../../controllers/dbConnect";
-import {
-  SqlLog,
-
-  DryRunResultRow,
-
-} from "./dataCleanTypes";
+} from "../../utils/dbConnect";
+import { SqlLog, DryRunResultRow } from "./dataCleanTypes";
 import {
   pgQuery,
   pgBegin,
@@ -62,7 +57,11 @@ export class DuplicateProcessorSqlUtil {
 
     const timestamp = new Date().toISOString().replace(/[:.-]/g, "_");
     const filenameWithTimestamp = `${timestamp}_${baseFilename}`;
-    const filePath = path.join(__dirname, "../../../../logs", filenameWithTimestamp);
+    const filePath = path.join(
+      __dirname,
+      "../../../../logs",
+      filenameWithTimestamp
+    );
     let content = "";
 
     if (badRows[0].id_ihno !== undefined) {
@@ -132,11 +131,9 @@ export class DuplicateProcessorSqlUtil {
 
       let clientId: number | null = null;
       if (clientCode) {
-        const clientRes = await pgQuery(
-          client,
-          SQL_SELECT_CLIENT_ID_BY_CODE,
-          [clientCode]
-        );
+        const clientRes = await pgQuery(client, SQL_SELECT_CLIENT_ID_BY_CODE, [
+          clientCode,
+        ]);
         if (clientRes.rows.length === 0) {
           await pgRollback(client);
           return {
@@ -167,36 +164,41 @@ export class DuplicateProcessorSqlUtil {
       };
 
       // Dry Run Query: Gathers all necessary info to simulate the logic in the backend.
-      const dryRunSql = SQL_DRY_RUN_DUPLICATES
-        .replace(/%KEY_EXPR%/g, keyExpr())
+      const dryRunSql = SQL_DRY_RUN_DUPLICATES.replace(/%KEY_EXPR%/g, keyExpr())
         .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
         .replace(/%CLIENT_FILTER%/g, clientFilter())
         .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
 
       // Deletion Rule 1: Delete imperfect rows if a perfect row exists in the group.
-      const deleteImperfectSql = SQL_DELETE_IMPERFECT_DUPLICATES
-        .replace(/%KEY_EXPR%/g, keyExpr())
+      const deleteImperfectSql = SQL_DELETE_IMPERFECT_DUPLICATES.replace(
+        /%KEY_EXPR%/g,
+        keyExpr()
+      )
         .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
         .replace(/%CLIENT_FILTER%/g, clientFilter())
         .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
 
       // Deletion Rule 2: If all rows in a group are perfect, keep only the latest one.
-      const deleteOlderPerfectSql = SQL_DELETE_OLDER_PERFECT_DUPLICATES
-        .replace(/%KEY_EXPR%/g, keyExpr())
+      const deleteOlderPerfectSql = SQL_DELETE_OLDER_PERFECT_DUPLICATES.replace(
+        /%KEY_EXPR%/g,
+        keyExpr()
+      )
         .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
         .replace(/%CLIENT_FILTER%/g, clientFilter())
         .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
 
       // Deletion Rule 3: If all rows in a group are imperfect and there are duplicates, keep only the latest one.
-      const deleteImperfectDuplicatesSql = SQL_DELETE_OLDER_IMPERFECT_DUPLICATES
-        .replace(/%KEY_EXPR%/g, keyExpr())
-        .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
-        .replace(/%CLIENT_FILTER%/g, clientFilter())
-        .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
+      const deleteImperfectDuplicatesSql =
+        SQL_DELETE_OLDER_IMPERFECT_DUPLICATES.replace(/%KEY_EXPR%/g, keyExpr())
+          .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
+          .replace(/%CLIENT_FILTER%/g, clientFilter())
+          .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
 
       // Query to find groups of duplicates where no perfect row exists.
-      const imperfectDuplicatesSql = SQL_SELECT_IMPERFECT_DUPLICATES
-        .replace(/%KEY_EXPR%/g, keyExpr())
+      const imperfectDuplicatesSql = SQL_SELECT_IMPERFECT_DUPLICATES.replace(
+        /%KEY_EXPR%/g,
+        keyExpr()
+      )
         .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
         .replace(/%KEY_EXPR_P%/g, keyExpr("p"))
         .replace(/%CLIENT_FILTER%/g, clientFilter())

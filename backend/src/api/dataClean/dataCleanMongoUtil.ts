@@ -3,102 +3,72 @@ import {
   disconnectMongo,
   getMongoModel,
   getMongoDb,
-} from "../../../controllers/dbConnect";
+} from "../../utils/dbConnect";
 import mongoose, { Document, PipelineStage } from "mongoose";
 import logger from "../../utils/logger";
-import { MongoDuplicateCheckResult, SqlLog, MongoCountResult, MongoDuplicateGroupResult } from "./dataCleanTypes";
+import {
+  MongoDuplicateCheckResult,
+  SqlLog,
+  MongoCountResult,
+  MongoDuplicateGroupResult,
+} from "./dataCleanTypes";
 import { mongoAggregate, mongoDeleteMany } from "./dataCleanCore";
+import { IAifDocument } from "../imageDataTransfer/imageDataTransferTypes";
 
 export class DuplicateProcessorMongoUtil {
-
-  private model: mongoose.Model<Document>;
-
+  private model: mongoose.Model<IAifDocument>;
 
   constructor() {
-
-    this.model = getMongoModel();
-
+    this.model = getMongoModel() as mongoose.Model<IAifDocument>;
   }
-
 
   public async connect(): Promise<void> {
-
     await connectMongo();
-
   }
-
-
 
   public getDb() {
-
     return getMongoDb();
-
   }
-
-
 
   public async disconnect(): Promise<void> {
-
     await disconnectMongo();
-
   }
 
-
-
   private convertCutoffTmsToDate(cutoffTms: string): Date | null {
-
     try {
-
       // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
 
       const date = new Date(cutoffTms);
 
       if (isNaN(date.getTime())) {
-
         logger.error({
-
           category: "task-steps",
 
           message: `Invalid cutoffTms date string: ${cutoffTms}`,
-
         });
 
         return null;
-
       }
 
       return date;
-
-    }
-
-    catch (error) {
-
+    } catch (error) {
       logger.error({
-
         category: "task-steps",
 
         message: `Error converting cutoffTms to Date: ${error}`,
-
       });
 
       return null;
-
     }
-
   }
 
-
-
   public async sanityCheckMongoDuplicates(params: {
-
     dryRun?: boolean;
 
     cutoffTms?: string;
 
     clientId?: string;
-
   }): Promise<{
-
     result: "success" | "failed";
 
     dryRun: boolean;
@@ -110,9 +80,7 @@ export class DuplicateProcessorMongoUtil {
     totalDuplicateDocuments: number;
 
     logs: SqlLog[];
-
   }> {
-
     const logs: SqlLog[] = [];
     const { dryRun = true, cutoffTms: cutoffDateString, clientId } = params;
     let cutoffDate: Date | null = null;
@@ -147,7 +115,9 @@ export class DuplicateProcessorMongoUtil {
 
     logger.debug({
       category: "task-steps",
-      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}, clientId: ${clientId || 'N/A'}`,
+      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}, clientId: ${
+        clientId || "N/A"
+      }`,
     });
 
     try {
@@ -281,20 +251,28 @@ export class DuplicateProcessorMongoUtil {
       ];
 
       // Log the count of documents after the cutoff date filter
-      const documentsAfterCutoff = await mongoAggregate<MongoCountResult>(this.model, [
-        ...pipeline.slice(
-          0,
-          pipeline.findIndex((stage) => "$group" in stage)
-        ), // Get stages up to the group stage
-        { $count: "count" },
-      ]);
+      const documentsAfterCutoff = await mongoAggregate<MongoCountResult>(
+        this.model as any,
+        [
+          ...pipeline.slice(
+            0,
+            pipeline.findIndex((stage) => "$group" in stage)
+          ), // Get stages up to the group stage
+          { $count: "count" },
+        ]
+      );
 
       logger.info({
         category: "task-steps",
-        message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${documentsAfterCutoff[0]?.count || 0}`,
+        message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${
+          documentsAfterCutoff[0]?.count || 0
+        }`,
       });
 
-      const duplicates = await mongoAggregate<MongoDuplicateGroupResult>(this.model, pipeline);
+      const duplicates = await mongoAggregate<MongoDuplicateGroupResult>(
+        this.model as any,
+        pipeline
+      );
 
       const totalDuplicateGroups = duplicates.length;
       const totalDuplicateDocuments = duplicates.reduce(
@@ -335,7 +313,7 @@ export class DuplicateProcessorMongoUtil {
         }
 
         if (allDocumentsToDeleteIds.length > 0) {
-          const deleteResult = await mongoDeleteMany(this.model, {
+          const deleteResult = await mongoDeleteMany(this.model as any, {
             _id: { $in: allDocumentsToDeleteIds },
           });
           logs.push({
