@@ -9,12 +9,20 @@ export const generateSql = async (): Promise<FileResponse> => {
 };
 
 export const executeSql = async (): Promise<FileResponse> => {
-  const res = await axios.post<FileResponse>(`${API_BASE_URL}/process-sql-mongo`, { action: "executeSql" });
+  const res = await axios.post<FileResponse>(
+    `${API_BASE_URL}/process-sql-mongo/sql/executeSql`,
+    { action: "executeSql" }
+  );
   return res.data;
 };
 
-export const updateFolioAndTransaction = async (updateAll: boolean): Promise<FileResponse> => {
-  const res = await axios.post<FileResponse>(`${API_BASE_URL}/process-sql-mongo`, { action: "updateFolioAndTransaction", updateAll });
+export const updateFolioAndTransaction = async (
+  updateAll: boolean
+): Promise<FileResponse> => {
+  const res = await axios.post<FileResponse>(
+    `${API_BASE_URL}/process-sql-mongo/sql/update-folio-transaction`,
+    { action: "updateFolioAndTransaction", updateAll }
+  );
   return res.data;
 };
 

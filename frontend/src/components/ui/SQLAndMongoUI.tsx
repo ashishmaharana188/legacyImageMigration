@@ -4,8 +4,10 @@ interface SQLAndMongoUIProps {
   loading: boolean;
   clientCode: string;
   setClientCode: (code: string) => void;
-  handleTransferToMongo: (updateAll: boolean, clientCode: string) => Promise<void>;
-  handleGenerateSql: () => Promise<void>;
+  handleTransferToMongo: (
+    updateAll: boolean,
+    clientCode: string
+  ) => Promise<void>;
   handleExecuteSql: () => Promise<void>;
   handleupdateFolioAndTransaction: (updateAll: boolean) => Promise<void>;
   handleReconnect: () => Promise<void>;
@@ -84,7 +86,10 @@ const SQLAndMongoUI: React.FC<SQLAndMongoUIProps> = ({
               MongoDB.
             </p>
             <div className="mb-4">
-              <label htmlFor="clientCode" className="block text-sm font-medium text-gray-700 mb-1">
+              <label
+                htmlFor="clientCode"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
                 Client Code (Optional)
               </label>
               <input

@@ -76,8 +76,8 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
 
       try {
         const url = updateAll
-          ? "http://localhost:3000/update-mongo-transactions"
-          : "http://localhost:3000/transfer-to-mongo";
+          ? "http://localhost:3000/process-sql-mongo/sql/update-mongo-transactions"
+          : "http://localhost:3000/process-sql-mongo/sql/transfer-to-mongo";
         const res = await axios.post<FileResponse>(url, { clientCode });
         updateTaskLog("sqlAndMongo", res.data);
       } catch (error: unknown) {
@@ -98,36 +98,13 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     [updateTaskLog, clearTaskLog]
   );
 
-  const handleGenerateSql = useCallback(async () => {
-    setLoading(true);
-    clearTaskLog("sqlAndMongo");
-    updateTaskLog("sqlAndMongo", "Generating SQL");
-    try {
-      const res = await axios.post<FileResponse>(
-        "http://localhost:3000/generate-sql"
-      );
-      updateTaskLog("sqlAndMongo", res.data);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog(
-          "sqlAndMongo",
-          error.response?.data || { message: "An unknown error occurred." }
-        );
-      } else {
-        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, clearTaskLog]);
-
   const handleExecuteSql = useCallback(async () => {
     setLoading(true);
     clearTaskLog("sqlAndMongo");
     updateTaskLog("sqlAndMongo", "Executing SQL");
     try {
       const res = await axios.post<FileResponse>(
-        "http://localhost:3000/process-sql-mongo",
+        "http://localhost:3000/process-sql-mongo/sql/executeSql",
         { action: "executeSql" }
       );
       const {
@@ -181,7 +158,7 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
       updateTaskLog("sqlAndMongo", "Updating folio and transaction");
       try {
         const res = await axios.post<FileResponse>(
-          "http://localhost:3000/process-sql-mongo",
+          "http://localhost:3000/process-sql-mongo/sql/update-folio-transaction",
           { action: "updateFolioAndTransaction", updateAll }
         );
         const {
@@ -260,7 +237,6 @@ const SQLAndMongoTask: React.FC<SQLAndMongoTaskProps> = ({
     <SQLAndMongoUI
       loading={loading}
       handleTransferToMongo={handleTransferToMongo}
-      handleGenerateSql={handleGenerateSql}
       handleExecuteSql={handleExecuteSql}
       handleupdateFolioAndTransaction={handleupdateFolioAndTransaction}
       handleReconnect={handleReconnect}

@@ -166,7 +166,6 @@ export const useSQLTaskHook = ({
 
   return {
     loading,
-    handleGenerateSql,
     handleExecuteSql,
     handleUpdateFolioAndTransaction,
     handleReconnect,

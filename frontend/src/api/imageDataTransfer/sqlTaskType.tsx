@@ -2,7 +2,6 @@ import { TaskLogContextType } from "../../types/index";
 
 export interface SQLTaskUIProps {
   loading: boolean;
-  handleGenerateSql: () => Promise<void>;
   handleExecuteSql: () => Promise<void>;
   handleUpdateFolioAndTransaction: (updateAll: boolean) => Promise<void>;
   handleReconnect: () => Promise<void>;
