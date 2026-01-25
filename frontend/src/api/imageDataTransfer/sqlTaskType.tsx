@@ -1,4 +1,4 @@
-import { TaskLogContextType } from '../../types/index';
+import { TaskLogContextType } from "../../types/index";
 
 export interface SQLTaskUIProps {
   loading: boolean;
@@ -11,7 +11,7 @@ export interface SQLTaskUIProps {
 }
 
 export interface UseSQLTaskHookProps {
-  updateTaskLog: TaskLogContextType['updateTaskLog'];
+  updateTaskLog: TaskLogContextType["updateTaskLog"];
   clearTaskLog: (task: string) => void;
 }
 
@@ -24,7 +24,10 @@ export interface FileResponse {
   totalRows?: number;
   successfulRows?: number;
   badRows?: number;
+  // LOGICAL BRIDGE: Added insertedRows and errorRows to match backend JSON
   summary?: {
+    insertedRows?: number;
+    errorRows?: number;
     errors: number;
     notFound: number;
     successfulInserts: number;
