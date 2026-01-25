@@ -1,5 +1,8 @@
 import React, { useState } from "react";
-import { UploadProgressDisplay, BadRowsDetailsTable } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
+import {
+  UploadProgressDisplay,
+  BadRowsDetailsTable,
+} from "../../api/uploadProcessor/uploadProcessorSummaryUI";
 import SanityCheckSummaryDisplay from "../../api/dataClean/sanityCheckSummaryUI";
 import { LogEntry } from "../../types";
 
