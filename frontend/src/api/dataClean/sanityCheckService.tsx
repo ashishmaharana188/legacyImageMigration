@@ -5,7 +5,10 @@ let API_BASE_URL: string = "http://localhost:3000"; // Default to backend port
 
 const initConfiguration = async () => {
   try {
-    const response = await axios.get<{ apiBaseUrl: string, frontendUrl: string }>(`http://localhost:3000/config`);
+    const response = await axios.get<{
+      apiBaseUrl: string;
+      frontendUrl: string;
+    }>(`http://localhost:3000/config`);
     if (response.data.apiBaseUrl) {
       API_BASE_URL = response.data.apiBaseUrl;
     }
@@ -14,16 +17,24 @@ const initConfiguration = async () => {
     }
     console.log(`Frontend using API_BASE_URL: ${API_BASE_URL}`);
   } catch (error) {
-    console.error("Failed to fetch configuration, using default API_BASE_URL:", error);
+    console.error(
+      "Failed to fetch configuration, using default API_BASE_URL:",
+      error
+    );
   }
 };
 
 const configPromise = initConfiguration();
 
-export const sanityCheckPgDuplicates = async (dryRun: boolean, normalize: boolean, cutoffTms: string, clientCode: string): Promise<SanityCheckResponse> => {
+export const sanityCheckPgDuplicates = async (
+  dryRun: boolean,
+  normalize: boolean,
+  cutoffTms: string,
+  clientCode: string
+): Promise<SanityCheckResponse> => {
   await configPromise;
   const res = await axios.post<SanityCheckResponse>(
-    `${API_BASE_URL}/sanity-check-duplicates`,
+    `${API_BASE_URL}/sql/sanity-check-duplicates`,
     {
       dryRun,
       normalize,
@@ -34,10 +45,14 @@ export const sanityCheckPgDuplicates = async (dryRun: boolean, normalize: boolea
   return res.data;
 };
 
-export const sanityCheckMongoDuplicates = async (dryRun: boolean, cutoffTms: string, clientCode: string): Promise<SanityCheckResponse> => {
+export const sanityCheckMongoDuplicates = async (
+  dryRun: boolean,
+  cutoffTms: string,
+  clientCode: string
+): Promise<SanityCheckResponse> => {
   await configPromise;
   const res = await axios.post<SanityCheckResponse>(
-    `${API_BASE_URL}/sanity-check-duplicate-mongo`,
+    `${API_BASE_URL}/mongo/sanity-check-duplicates`,
     {
       dryRun,
       cutoffTms,

@@ -21,7 +21,9 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   const [clientCode, setClientCode] = useState("");
   const [isLoadingPg, setIsLoadingPg] = useState(false);
   const [isLoadingMongo, setIsLoadingMongo] = useState(false);
-  const [duplicateMongoCheckResult, setDuplicateMongoCheckResult] = useState<any | null>(null);
+  const [duplicateMongoCheckResult, setDuplicateMongoCheckResult] = useState<
+    any | null
+  >(null);
 
   const handlePgSanityCheck = useCallback(
     async (dryRun: boolean) => {
@@ -40,7 +42,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
 
       try {
         const res = await axios.post(
-          "http://localhost:3000/sanity-check-duplicates",
+          "http://localhost:3000/sql/sanity-check-duplicates",
           {
             dryRun,
             normalize,
@@ -81,7 +83,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
 
       try {
         const mongoRes = await axios.post(
-          "http://localhost:3000/sanity-check-duplicate-mongo",
+          "http://localhost:3000/mongo/sanity-check-duplicates",
           {
             dryRun,
             cutoffTms,
@@ -97,7 +99,9 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
         updateTaskLog("mongoSanityCheck", {
           message: `MongoDB sanity check failed: ${errorMessage}`,
         });
-        setDuplicateMongoCheckResult({ message: `Mongo check failed: ${errorMessage}` });
+        setDuplicateMongoCheckResult({
+          message: `Mongo check failed: ${errorMessage}`,
+        });
       } finally {
         setIsLoadingMongo(false);
       }

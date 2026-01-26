@@ -5,13 +5,17 @@ import { duplicateProcessorController } from "./dataCleanController";
 
 const duplicateProcessorRouter = express.Router();
 
-duplicateProcessorRouter.get(
+duplicateProcessorRouter.post(
   "/sql/sanity-check-duplicates",
-  duplicateProcessorController.sanityCheckDuplicates.bind(duplicateProcessorController)
+  duplicateProcessorController.sanityCheckDuplicates.bind(
+    duplicateProcessorController
+  )
 );
-duplicateProcessorRouter.get(
+duplicateProcessorRouter.post(
   "/mongo/sanity-check-duplicates",
-  duplicateProcessorController.sanityCheckMongoDuplicates.bind(duplicateProcessorController)
+  duplicateProcessorController.sanityCheckMongoDuplicates.bind(
+    duplicateProcessorController
+  )
 );
 
 export default duplicateProcessorRouter;
