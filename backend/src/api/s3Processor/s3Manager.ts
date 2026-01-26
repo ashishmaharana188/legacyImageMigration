@@ -20,32 +20,23 @@ const agent = new https.Agent({
   maxSockets: 200,
 });
 
-// Check for essential AWS credentials
-const accessKeyId = AWS_ACCESS_KEY_ID;
-const secretAccessKey = AWS_SECRET_ACCESS_KEY;
-const sessionToken = AWS_SESSION_TOKEN; // Often required for temporary credentials
-const region = AWS_DEFAULT_REGION;
-
-if (!accessKeyId || !secretAccessKey || !S3_BUCKET_NAME) {
+if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !S3_BUCKET_NAME) {
   const errorMessage =
-    "AWS credentials or S3 bucket name are not configured properly. Please ensure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and S3_BUCKET_NAME are provided in the .env file.";
-  console.error(errorMessage);
+    "AWS credentials or S3 bucket name are not configured properly in the .env file.";
   throw new Error(errorMessage);
 }
 
 const s3 = new S3Client({
-  region: region,
+  region: AWS_DEFAULT_REGION,
   credentials: {
-    accessKeyId: accessKeyId,
-    secretAccessKey: secretAccessKey,
-    sessionToken: sessionToken, // Pass sessionToken if it exists
+    accessKeyId: AWS_ACCESS_KEY_ID,
+    secretAccessKey: AWS_SECRET_ACCESS_KEY,
+    sessionToken: AWS_SESSION_TOKEN,
   },
   requestHandler: new NodeHttpHandler({
     httpsAgent: agent,
   }),
 });
-
-
 
 export async function verifyS3Connection(): Promise<void> {
   try {
@@ -54,9 +45,12 @@ export async function verifyS3Connection(): Promise<void> {
     console.log("S3 connection successful.");
   } catch (error: unknown) {
     if (isAuthError(error)) {
-      console.error("S3 connection failed: Authentication token expired or invalid. Please refresh your credentials.");
+      console.error(
+        "S3 connection failed: Authentication token expired or invalid."
+      );
     } else {
-      console.error("S3 connection failed:", error instanceof Error ? error.message : error);
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`S3 connection failed: ${msg}`);
     }
   }
 }
@@ -71,7 +65,6 @@ export async function listFiles(
   prefix: string,
   continuationToken?: string
 ): Promise<S3ListResponse> {
-
   const command = new ListObjectsV2Command({
     Bucket: S3_BUCKET_NAME,
     Prefix: prefix,
@@ -80,46 +73,38 @@ export async function listFiles(
   });
 
   try {
-    const { Contents, CommonPrefixes, NextContinuationToken } =
-      await s3.send(command);
-
-
-    const page: S3ListResponse = {
+    const { Contents, CommonPrefixes, NextContinuationToken } = await s3.send(
+      command
+    );
+    return {
       directories: CommonPrefixes?.map((p) => p.Prefix!) || [],
       files:
         Contents?.map((c) => ({ key: c.Key!, lastModified: c.LastModified })) ||
         [],
       nextContinuationToken: NextContinuationToken,
     };
-
-    return page;
   } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
     if (isAuthError(err)) {
-      console.error("S3 listFiles failed: Authentication token expired or invalid. Please refresh your credentials.");
-      throw new Error("S3 operation failed due to expired or invalid credentials.");
+      console.error("S3 listFiles failed: Authentication expired.");
+      throw new Error("S3 Credentials Expired");
     } else {
-      console.error("S3 listFiles error:", err);
-      throw err; // Re-throw to be handled by controller
+      console.error(`S3 listFiles error: ${msg}`);
+      throw new Error(msg);
     }
   }
 }
 
 export async function deleteFiles(keys: string[]): Promise<string[]> {
   const filesToDelete = keys.filter((key) => !key.endsWith("/"));
+  if (filesToDelete.length === 0) return [];
 
-  if (filesToDelete.length === 0) {
-    console.log("No files to delete.");
-    return [];
-  }
-
-  const deleteParams = {
+  const command = new DeleteObjectsCommand({
     Bucket: S3_BUCKET_NAME,
     Delete: {
       Objects: filesToDelete.map((key) => ({ Key: key })) as ObjectIdentifier[],
     },
-  };
-
-  const command = new DeleteObjectsCommand(deleteParams);
+  });
 
   try {
     const { Deleted } = await s3.send(command);
@@ -128,10 +113,11 @@ export async function deleteFiles(keys: string[]): Promise<string[]> {
     return deletedKeys;
   } catch (err: unknown) {
     if (isAuthError(err)) {
-      console.error("S3 deleteFiles failed: Authentication token expired or invalid. Please refresh your credentials.");
-      throw new Error("S3 operation failed due to expired or invalid credentials.");
+      console.error("S3 deleteFiles failed: Authentication expired.");
+      throw new Error("S3 Credentials Expired");
     } else {
-      console.error("Error deleting files from S3:", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`Error deleting files from S3: ${msg}`);
       return [];
     }
   }
@@ -141,34 +127,19 @@ export async function searchFiles(
   prefix: string,
   pattern: string,
   continuationToken?: string
-): Promise<{
-  files: { key: string; lastModified: Date | undefined }[];
-  nextContinuationToken?: string;
-}> {
+) {
   const matchedFiles: { key: string; lastModified: Date | undefined }[] = [];
   const regex = new RegExp(pattern);
 
   try {
-
     const command = new ListObjectsV2Command({
       Bucket: S3_BUCKET_NAME,
       Prefix: prefix,
       ContinuationToken: continuationToken,
       MaxKeys: 100,
     });
-
-    const { Contents, NextContinuationToken } = await s3.send(
-      command
-    );
-
-
+    const { Contents, NextContinuationToken } = await s3.send(command);
     if (Contents) {
-      // Log the keys before filtering
-      console.log(
-        "Keys from S3:",
-        Contents.map((c) => c.Key)
-      );
-
       const matchingObjects = Contents.filter(
         (c) => c.Key && regex.test(c.Key)
       );
@@ -179,19 +150,14 @@ export async function searchFiles(
         }))
       );
     }
-
     return {
       files: matchedFiles,
       nextContinuationToken: NextContinuationToken,
     };
   } catch (err: unknown) {
-    if (isAuthError(err)) {
-      console.error("S3 searchFiles failed: Authentication token expired or invalid. Please refresh your credentials.");
-      throw new Error("S3 operation failed due to expired or invalid credentials.");
-    } else {
-      console.error("Error searching files:", err);
-      throw err;
-    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Error searching files: ${msg}`);
+    throw new Error(msg);
   }
 }
 
@@ -199,10 +165,7 @@ export async function searchFolders(
   prefix: string,
   pattern: string,
   continuationToken?: string
-): Promise<{
-  directories: string[];
-  nextContinuationToken?: string;
-}> {
+) {
   const matchedDirectories: string[] = [];
   const regex = new RegExp(pattern, "i");
 
@@ -213,36 +176,24 @@ export async function searchFolders(
       Delimiter: "/",
       ContinuationToken: continuationToken,
     });
-
-    const { CommonPrefixes, NextContinuationToken } =
-      await s3.send(command);
-
+    const { CommonPrefixes, NextContinuationToken } = await s3.send(command);
     if (CommonPrefixes) {
       const matchingPrefixes =
         CommonPrefixes.filter((p) => {
           if (!p.Prefix) return false;
-          // Extract the last part of the prefix (the folder name)
           const parts = p.Prefix.split("/").filter(Boolean);
           const folderName = parts.pop();
           return folderName ? regex.test(folderName) : false;
         }).map((p) => p.Prefix!) || [];
       matchedDirectories.push(...matchingPrefixes);
     }
-
     return {
       directories: matchedDirectories,
       nextContinuationToken: NextContinuationToken,
     };
   } catch (err: unknown) {
-    if (isAuthError(err)) {
-      console.error("S3 searchFolders failed: Authentication token expired or invalid. Please refresh your credentials.");
-      throw new Error("S3 operation failed due to expired or invalid credentials.");
-    } else {
-      console.error("Error searching folders:", err);
-      throw err;
-    }
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`Error searching folders: ${msg}`);
+    throw new Error(msg);
   }
 }
-
-
-
