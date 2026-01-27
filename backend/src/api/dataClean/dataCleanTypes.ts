@@ -15,6 +15,30 @@ export interface SanityCheckRow {
   total_rows_in_group: number;
 }
 
+// backend/src/api/duplicateProcessor/dataCleanTypes.ts (or similar)
+export interface SanityCheckResult {
+  // <--- Ensure 'export' is here
+  result: "success" | "failed";
+  dryRun: boolean;
+  cutoffTms: string;
+  logs: SqlLog[];
+  rows?: DryRunResultRow[];
+  imperfectDuplicates?: string[];
+  totalDuplicatesFound?: number;
+  deletedCount?: number;
+}
+
+export interface SanityCheckResponse {
+  result: "success" | "failed";
+  dryRun: boolean;
+  cutoffTms: string;
+  deletedCount?: number;
+  rows?: DryRunResultRow[];
+  logs: SqlLog[];
+  imperfectDuplicates?: string[];
+  totalDuplicatesFound?: number;
+}
+
 export interface DryRunResultRow extends SanityCheckRow {
   wouldBeDeleted: boolean;
   reason: string;
@@ -36,7 +60,12 @@ export interface MongoCountResult {
 }
 
 export interface MongoDuplicateGroupResult {
-  _id: { clientId: string; transactionNo: string; modifiedDocumentPathNo: string; sourceUser: string; };
+  _id: {
+    clientId: string;
+    transactionNo: string;
+    modifiedDocumentPathNo: string;
+    sourceUser: string;
+  };
   count: number;
   documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
 }

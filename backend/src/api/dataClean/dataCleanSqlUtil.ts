@@ -22,6 +22,7 @@ import {
   SQL_DELETE_OLDER_IMPERFECT_DUPLICATES,
   SQL_SELECT_IMPERFECT_DUPLICATES,
 } from "./dataCleanCore";
+import { SanityCheckResult } from "./dataCleanTypes";
 
 export class DuplicateProcessorSqlUtil {
   private async reconnectPool(): Promise<void> {
@@ -63,7 +64,7 @@ export class DuplicateProcessorSqlUtil {
     normalize?: boolean;
     cutoffTms?: string;
     clientCode?: string;
-  }) {
+  }): Promise<SanityCheckResult> {
     const logs: SqlLog[] = [];
     // FIX: Default to safety. If dryRun is not explicitly FALSE, it is TRUE
     const dryRun = params.dryRun !== false;
@@ -201,11 +202,11 @@ export class DuplicateProcessorSqlUtil {
     } catch (err) {
       if (client) await pgRollback(client);
       return {
-        result: "failed",
+        result: "failed" as const,
         dryRun,
         cutoffTms,
         logs: [{ row: 0, status: "error", message: String(err) }],
-      };
+      } as SanityCheckResult;
     } finally {
       if (client) client.release();
     }

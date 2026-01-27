@@ -1,8 +1,13 @@
 // backend/src/api/duplicateProcessor/duplicateProcessorWrapper.ts
 
-import { SqlLog, MongoDuplicateCheckResult, DryRunResultRow } from "./dataCleanTypes";
+import {
+  SqlLog,
+  MongoDuplicateCheckResult,
+  DryRunResultRow,
+} from "./dataCleanTypes";
 import { DuplicateProcessorSqlUtil } from "./dataCleanSqlUtil";
 import { DuplicateProcessorMongoUtil } from "./dataCleanMongoUtil";
+import { SanityCheckResult } from "./dataCleanTypes";
 
 export class DuplicateProcessorWrapper {
   private duplicateProcessorSqlUtil: DuplicateProcessorSqlUtil;
@@ -18,17 +23,8 @@ export class DuplicateProcessorWrapper {
     normalize?: boolean;
     cutoffTms?: string;
     clientCode?: string;
-  }): Promise<{
-    result: "success" | "failed";
-    dryRun: boolean;
-    cutoffTms: string;
-    deletedCount?: number;
-    rows?: DryRunResultRow[];
-    logs: SqlLog[];
-    imperfectDuplicates?: string[];
-    imperfectDuplicatesFilePath?: string | null;
-    totalDuplicatesFound?: number;
-  }> {
+  }): Promise<SanityCheckResult> {
+    // Correct: Returns the Interface directly
     return this.duplicateProcessorSqlUtil.sanityCheckDuplicates(params);
   }
 
