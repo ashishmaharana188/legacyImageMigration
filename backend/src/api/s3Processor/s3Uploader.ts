@@ -130,6 +130,9 @@ async function performIterativeUpload(
   bucket: string,
   prefix: string
 ) {
+  if (!localDir || localDir.trim() === "") {
+    throw new Error("Local directory path is empty or undefined.");
+  }
   console.log(`S3 upload process initiated for ${localDir}.`);
   let totalDirectories = 0;
   const directoryQueue: {
