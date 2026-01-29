@@ -1,53 +1,28 @@
 import React, { useState, useEffect } from "react";
-import ProgressTrackingTask from "../action/ProgressTrackingTask";
-import DetailsDisplayTask from "../action/DetailsDisplayTask";
+// Adjust paths based on your file location: frontend/src/api/Global/
+import { UploadStatus, LogEntry } from "../../types/index";
+import ProgressTrackingTask from "../../components/action/ProgressTrackingTask";
+import DetailsDisplayTask from "../../components/action/DetailsDisplayTask";
 
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  totalFiles?: number;
-  processedFiles?: number;
-  successfulFiles?: number;
-  errorFiles?: number;
-  notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
-}
-
-interface SummaryDisplayProps {
-  taskLogs: { [key: string]: any[] };
+export interface SummaryDisplayProps {
+  taskLogs: { [key: string]: LogEntry[] };
   uploadStatuses: UploadStatus[];
   onClearLogs: (taskKey: string) => void;
 }
 
-const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
+export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   taskLogs,
   uploadStatuses,
   onClearLogs,
 }) => {
-  const [allTaskLogs, setAllTaskLogs] = useState<{ [key: string]: any[] }>({});
+  const [allTaskLogs, setAllTaskLogs] = useState<{ [key: string]: LogEntry[] }>(
+    {}
+  );
 
-  const getLogIdentifier = (log: any): string => {
-    if (typeof log === "string") return log;
-    if (log.id) return log.id; // Prioritize log.id for unique identification
-    if (log.splitSummary) return "splitSummary";
-    if (log.originalFile) return `file-upload-${log.originalFile}`;
-    if (log.dryRun !== undefined) return "sanity-check-duplicates";
-    if (log.successfulRows !== undefined) return "sql-execution-summary";
-    if (log.transferredCount !== undefined) return "mongodb-transfer-summary";
-    if (log.updatedFolioRows !== undefined)
-      return "folio-transaction-update-summary";
-    if (log.updatedDocuments) return "mongo-update-summary";
-    if (log.duplicates) return "mongo-duplicate-check-summary";
+  const getLogIdentifier = (log: LogEntry): string => {
+    if (log.id) return log.id;
+    // Stable ID for split summary ensures we don't get duplicates if they slip through
+    if (log.splitSummary) return "split-summary-card";
     if (log.message) return `${log.message}-${log.timestamp || Date.now()}`;
     return JSON.stringify(log);
   };
@@ -56,7 +31,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
     setAllTaskLogs((prevLogs) => {
       const newLogs = { ...prevLogs };
       let hasChanges = false;
-      // First, remove any taskKeys from allTaskLogs that are no longer present in taskLogs from context
+
       for (const taskKey in newLogs) {
         if (!(taskKey in taskLogs)) {
           delete newLogs[taskKey];
@@ -64,7 +39,6 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         }
       }
 
-      // Then, update or add taskLogs from context to allTaskLogs
       for (const taskKey in taskLogs) {
         if (taskLogs[taskKey].length === 0) {
           if (newLogs[taskKey] && newLogs[taskKey].length > 0) {
@@ -77,6 +51,7 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
         const existingLogs = new Map(
           newLogs[taskKey]?.map((log) => [getLogIdentifier(log), log]) || []
         );
+
         taskLogs[taskKey].forEach((log) => {
           const id = getLogIdentifier(log);
           if (
@@ -97,39 +72,44 @@ const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   }, [taskLogs]);
 
   return (
-    <div className="mt-4 text-black h-full flex flex-col">
+    <div className="mt-4 text-black h-full flex flex-col font-sans">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
-      <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30">
+      <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30 shadow-inner">
         {Object.entries(allTaskLogs).map(([task, logsArray]) => (
           <div key={task} className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-semibold capitalize">{task}</h4>
+            <div className="flex items-center justify-between mb-2 px-1">
+              <h4 className="font-bold uppercase text-xs text-gray-600">
+                {task === "splitFiles" ? "Split Processor" : task}
+              </h4>
               <button
                 onClick={() => onClearLogs(task)}
-                className="ml-2 px-3 py-1 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+                className="text-xs text-red-600 font-semibold hover:underline"
               >
-                Clear Logs
+                Clear
               </button>
             </div>
-            <div className="bg-gray-100 p-2 rounded">
-              {task === "uploadAndScript" && (
+            <div className="bg-white p-3 rounded shadow-sm border border-gray-300">
+              {/* 1. The Summary Bar (Aggregated View) - ALWAYS SHOW THIS */}
+              {/* The Summary Bar */}
+              {(task === "uploadAndScript" || task === "splitFiles") && (
                 <ProgressTrackingTask
                   uploadStatuses={uploadStatuses}
                   taskLogs={allTaskLogs}
+                  taskName={task} // <--- FIX: PASS THE ID HERE
                 />
               )}
-              {logsArray.map((logItem: any) => (
-                <div key={getLogIdentifier(logItem)} className="mb-2 last:mb-0">
-                  {typeof logItem === "string" ? (
-                    <p>{logItem}</p>
-                  ) : (
-                    <DetailsDisplayTask
-                      log={logItem}
-                      logKey={getLogIdentifier(logItem)}
-                    />
-                  )}
-                </div>
-              ))}
+
+              {/* 2. The Detailed List - HIDE THIS for Split Files */}
+              {/* This prevents the "Duplicate Tabs" issue. We only want the summary bar above. */}
+              {task !== "splitFiles" &&
+                logsArray.map((logItem) => (
+                  <div
+                    key={getLogIdentifier(logItem)}
+                    className="mb-2 last:mb-0 border-t pt-2 first:border-0 first:pt-0"
+                  >
+                    <DetailsDisplayTask log={logItem} logKey={task} />
+                  </div>
+                ))}
             </div>
           </div>
         ))}

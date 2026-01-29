@@ -1,112 +1,77 @@
 import React from "react";
-import {UploadProcessDisplayProps} from "./uploadProcessorType";
 
-
-export const UploadProcessDisplay: React.FC<UploadProcessDisplayProps> = ({
+// The error log said "Did you mean 'UploadProcessDisplay'?" - So we export it as that.
+export const UploadProcessDisplay: React.FC<any> = ({
   title,
-  progress = 0,
+  progress,
   total,
   processed,
   successful,
   errors,
   notFound,
-  badRowsDetails,
-  displayType = "default",
-  unit = "files",
+  unit,
 }) => {
-  const percentage = Math.round(progress);
-
-  if (displayType === "aggregate") {
-    return (
-      <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
-        <h4 className="font-semibold text-black mb-2">{title}</h4>
-        <div className="w-full bg-gray-300 rounded-full h-6">
-          <div
-            className="bg-black h-6 rounded-full text-lg font-medium text-white text-center leading-6"
-            style={{ width: `${percentage}%` }}
-          >
-            {percentage}%
-          </div>
-        </div>
-        <div className="text-center mt-2 font-mono text-black">
-          {(processed || 0).toLocaleString()} / {(total || 0).toLocaleString()}{" "}
-          {unit} uploaded
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="mt-4">
-      <h5 className="font-semibold">{title}</h5>
-      <div className="bg-gray-100 p-2 rounded">
-        {progress !== undefined && (
-          <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
-            <div
-              className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
-              style={{ width: `${percentage}%` }}
-            >
-              {percentage}%
-            </div>
-          </div>
-        )}
-        <div className="text-sm">
-          {total !== undefined && (
-            <p>
-              <strong>Total:</strong> {total}
-            </p>
-          )}
-          {processed !== undefined && (
-            <p>
-              <strong>Processing:</strong> {processed}
-            </p>
-          )}
-          {successful !== undefined && (
-            <p>
-              <strong>Successful:</strong> {successful}
-            </p>
-          )}
-          {errors !== undefined && (
-            <p>
-              <strong>Errors:</strong> {errors}
-            </p>
-          )}
-          {notFound !== undefined && (
-            <p>
-              <strong>Not Found:</strong> {notFound}
-            </p>
-          )}
+    <div className="p-4 bg-gray-100 rounded-lg shadow-inner mb-4">
+      <h4 className="font-semibold text-black mb-2">{title}</h4>
+      <div className="w-full bg-gray-300 rounded-full h-4 mb-2">
+        <div
+          className="bg-black h-4 rounded-full text-xs font-medium text-white text-center p-0.5 leading-none"
+          style={{ width: `${Math.round(progress || 0)}%` }}
+        >
+          {Math.round(progress || 0)}%
         </div>
-        {badRowsDetails && badRowsDetails.length > 0 && (
-          <div className="mt-2">
-            <h6 className="font-semibold">Bad Rows Details:</h6>
-            <table className="w-full text-sm text-left">
-              <thead className="text-xs uppercase bg-gray-50">
-                <tr>
-                  <th scope="col" className="px-2 py-1">
-                    IH No
-                  </th>
-                  <th scope="col" className="px-2 py-1">
-                    AC No
-                  </th>
-                  <th scope="col" className="px-2 py-1">
-                    Reason
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {badRowsDetails.map((row, index) => (
-                  <tr key={index} className="bg-white border-b">
-                    <td className="px-2 py-1">{row.id_ihno}</td>
-                    <td className="px-2 py-1">{row.id_acno}</td>
-                    <td className="px-2 py-1">{row.page_count_status}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
       </div>
+      <div className="text-sm grid grid-cols-2 gap-2">
+        <div>
+          <strong>Total:</strong> {total}
+        </div>
+        <div>
+          <strong>Processed:</strong> {processed}
+        </div>
+        <div className="text-green-700">
+          <strong>Success:</strong> {successful}
+        </div>
+        <div className="text-red-600">
+          <strong>Errors:</strong> {errors}
+        </div>
+        <div>
+          <strong>Not Found:</strong> {notFound}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Also ensuring this is exported, as it was missing in the error log
+export const BadRowsDetailsTable: React.FC<{ parsedBadRows: any[] }> = ({
+  parsedBadRows,
+}) => {
+  if (!parsedBadRows || parsedBadRows.length === 0) return null;
+  return (
+    <div className="overflow-x-auto mt-2">
+      <table className="min-w-full text-xs text-left text-gray-500">
+        <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+          <tr>
+            {Object.keys(parsedBadRows[0]).map((key) => (
+              <th key={key} className="px-2 py-1">
+                {key}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {parsedBadRows.map((row, i) => (
+            <tr key={i} className="bg-white border-b">
+              {Object.values(row).map((val: any, j) => (
+                <td key={j} className="px-2 py-1">
+                  {val}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 };

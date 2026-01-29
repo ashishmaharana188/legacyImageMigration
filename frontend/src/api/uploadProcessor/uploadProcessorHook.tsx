@@ -1,11 +1,17 @@
-import { useState, useEffect} from "react";
+import { useState, useEffect } from "react";
 import {
   handleFileChange as utilHandleFileChange,
   handleUpload as utilHandleUpload,
-  handleFallback as utilHandleFallback,
 } from "./uploadProcessorUtil";
-import { UploadStatus } from "./uploadProcessorType";
-import { useUploadProcessorProps, useUploadProgressSummaryProps} from "./uploadProcessorType";
+import { webSocketService } from "../../services/webSocketService";
+import { UploadStatus, LogEntry } from "../../types/index";
+
+// Internal interface for props
+interface useUploadProcessorProps {
+  updateTaskLog: (task: string, log: any) => void;
+  clearTaskLog: (task: string) => void;
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
+}
 
 export const useUploadProcessorHook = ({
   updateTaskLog,
@@ -17,66 +23,88 @@ export const useUploadProcessorHook = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    utilHandleFileChange(event, setSelectedFile, setUploadMessage);
-  };
+  useEffect(() => {
+    const handleMessage = (msg: any) => {
+      // Aligned with Backend Controller 'excelProcessingUpdate'
+      if (
+        msg.type === "excelProcessingUpdate" ||
+        msg.type === "excelProcessingComplete"
+      ) {
+        const progress =
+          msg.totalRows > 0 ? (msg.processedRows / msg.totalRows) * 100 : 0;
 
-  const handleUpload = async () => {
-    await utilHandleUpload(
-      selectedFile,
-      updateTaskLog,
-      clearTaskLog,
-      setUploadMessage,
-      setLoading,
-      setIsUploading,
-      setUploadStatuses
-    );
-  };
+        setUploadStatuses((prev: UploadStatus[]) => {
+          const others = prev.filter(
+            (s: UploadStatus) => s.fileName !== "excel_processing"
+          );
+          return [
+            ...others,
+            {
+              fileName: "excel_processing",
+              status: msg.status || "Processing...",
+              progress: progress,
+              totalFiles: msg.totalRows,
+              processedFiles: msg.processedRows,
+              successfulFiles: msg.successfulRows || 0,
+              errorFiles: msg.errorRows || 0,
+            },
+          ];
+        });
 
-  const handleFallback = async () => {
-    await utilHandleFallback(
-      selectedFile,
-      updateTaskLog,
-      clearTaskLog,
-      setUploadMessage,
-      setLoading
-    );
-  };
+        if (msg.type === "excelProcessingComplete") {
+          setUploadMessage("Processing Complete.");
+          setLoading(false);
+          setIsUploading(false);
+        }
+      }
+    };
+
+    webSocketService.addListener(handleMessage);
+    return () => webSocketService.removeListener(handleMessage);
+  }, [setUploadStatuses]);
 
   return {
     selectedFile,
     uploadMessage,
     loading,
     isUploading,
-    handleFileChange,
-    handleUpload,
-    handleFallback,
+    handleFileChange: (e: any) =>
+      utilHandleFileChange(e, setSelectedFile, setUploadMessage),
+    handleUpload: () =>
+      utilHandleUpload(
+        selectedFile,
+        updateTaskLog,
+        clearTaskLog,
+        setUploadMessage,
+        setLoading,
+        setIsUploading,
+        setUploadStatuses
+      ),
   };
 };
 
 export const useUploadProgressSummary = ({
   uploadStatuses,
-  taskLogs,
-}: useUploadProgressSummaryProps) => {
-  const [excelProcessingStatus, setExcelProcessingStatus] =
-    useState<UploadStatus | null>(null);
-  const [s3UploadStatus, setS3UploadStatus] = useState<UploadStatus | null>(null);
+}: {
+  uploadStatuses: UploadStatus[];
+}) => {
+  const excelProcessingStatus =
+    uploadStatuses.find((s) => s.fileName === "excel_processing") || null;
+  const s3UploadStatus =
+    uploadStatuses.find((s) => s.fileName === "s3_upload_progress") || null;
+  return { excelProcessingStatus, s3UploadStatus };
+};
 
-  useEffect(() => {
-    const excelStatus = uploadStatuses.find(
-      (s) => s.fileName === "excel_upload_progress"
-    );
-    setExcelProcessingStatus(excelStatus || null);
+export const useBadRowsDisplay = ({ logKey: _logKey }: { logKey: string }) => {
+  const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
-    const s3Status = uploadStatuses.find(
-      (s) => s.fileName === "s3_upload_progress"
-    );
-    setS3UploadStatus(s3Status || null);
-
-  }, [uploadStatuses, taskLogs]);
+  const toggleBadRowsDisplay = (_filePath: string, logId: string) => {
+    setExpandedLogId((prev) => (prev === logId ? null : logId));
+  };
 
   return {
-    excelProcessingStatus,
-    s3UploadStatus,
+    parsedBadRows: null, // Logic for parsing rows can be added here if needed
+    expandedLogId,
+    toggleBadRowsDisplay,
   };
 };

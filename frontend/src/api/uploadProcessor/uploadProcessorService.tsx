@@ -1,11 +1,13 @@
 import axios from "axios";
 import { FileResponse } from "./uploadProcessorType";
 
-let API_BASE_URL: string | undefined;
-
+export let API_BASE_URL: string = "http://localhost:3000";
 const initConfiguration = async () => {
   try {
-    const response = await axios.get<{ apiBaseUrl: string, frontendUrl: string }>(`http://localhost:3000/config`);
+    const response = await axios.get<{
+      apiBaseUrl: string;
+      frontendUrl: string;
+    }>(`http://localhost:3000/config`);
     API_BASE_URL = response.data.apiBaseUrl;
     // If frontendUrl is needed elsewhere in the service, you can store it here as well.
     // For now, we'll just log it if it's present.
@@ -19,7 +21,7 @@ const initConfiguration = async () => {
   }
 };
 
-const configPromise = initConfiguration();
+export const configPromise = initConfiguration();
 
 export const uploadExcelFile = async (
   endpoint: string,

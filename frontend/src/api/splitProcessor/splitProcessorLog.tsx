@@ -1,16 +1,19 @@
 import { UploadStatus, SplitFileResponse } from "./splitProcessorType";
 
-type UpdateTaskLogFunction = (task: string, log: unknown) => void;
+type UpdateTaskLogFunction = (task: string, log: any) => void;
 type ClearTaskLogFunction = (task: string) => void;
+
+// STRICT TASK KEY: Matches SummaryDisplay
+const TASK_KEY = "splitFiles";
 
 export const logSplitStart = (
   updateTaskLog: UpdateTaskLogFunction,
   operationName: string,
   logId: string
 ) => {
-  updateTaskLog("splitFiles", {
+  updateTaskLog(TASK_KEY, {
     id: logId,
-    message: `${operationName}...`,
+    message: `${operationName} initiated...`,
     status: "in-progress",
   });
 };
@@ -21,11 +24,26 @@ export const logSplitSuccess = (
   logId: string,
   resData: SplitFileResponse
 ) => {
-  const message = resData.message || `${operationName} successful`;
-  updateTaskLog("splitFiles", {
+  // 1. Get the summary object (checking both possible keys)
+  const summary = resData.splitSummary ||
+    resData.summary || {
+      totalExpectedPagesFromCsv: 0,
+      totalSplitFilesGenerated: 0,
+      splitErrors: 0,
+    };
+
+  updateTaskLog(TASK_KEY, {
     id: logId,
-    message: message,
-    status: "success",
+    message: resData.message || `${operationName} complete`,
+    status: summary.splitErrors > 0 ? "failed" : "success",
+
+    // 2. MAP TO SIDEBAR KEYS
+    // DetailsDisplayTask looks for these exact keys:
+    totalRows: summary.totalExpectedPagesFromCsv, // Mapped from totalExpected
+    successfulRows: summary.totalSplitFilesGenerated, // Mapped from generated
+    badRows: summary.splitErrors, // Mapped from errors
+
+    splitSummary: summary,
     ...resData,
   });
 };
@@ -36,7 +54,7 @@ export const logSplitFailure = (
   logId: string,
   errorMessage: string
 ) => {
-  updateTaskLog("splitFiles", {
+  updateTaskLog(TASK_KEY, {
     id: logId,
     message: `${operationName} failed: ${errorMessage}`,
     status: "failed",
@@ -44,7 +62,7 @@ export const logSplitFailure = (
 };
 
 export const clearSplitLogs = (clearTaskLog: ClearTaskLogFunction) => {
-  clearTaskLog("splitFiles");
+  clearTaskLog(TASK_KEY);
 };
 
 export const updateSplitStatuses = (
@@ -57,27 +75,17 @@ export const updateSplitStatuses = (
       const newStatuses = prev.filter(
         (s) => s.fileName !== "splitting_progress"
       );
-
-      if (finalStatus === "in-progress") {
-        newStatuses.push({
-          fileName: "splitting_progress",
-          status: "Starting",
-          progress: 0,
-        });
-      } else if (finalStatus === "success") {
-        newStatuses.push({
-          fileName: "splitting_progress",
-          status: "Done",
-          progress: 100,
-        });
-      } else {
-        newStatuses.push({
-          fileName: "splitting_progress",
-          status: "Failed",
-          progress: 0,
-          errorMessage: errorMessage,
-        });
-      }
+      newStatuses.push({
+        fileName: "splitting_progress",
+        status:
+          finalStatus === "in-progress"
+            ? "Splitting..."
+            : finalStatus === "success"
+            ? "Done"
+            : "Failed",
+        progress: finalStatus === "success" ? 100 : 0,
+        errorMessage: errorMessage,
+      });
       return newStatuses;
     });
   }

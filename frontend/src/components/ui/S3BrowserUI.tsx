@@ -24,6 +24,9 @@ interface S3BrowserUIProps {
   handleDirectoryClick: (directoryKey: string) => void;
   handleBreadcrumbClick: (index: number) => void;
   handleReload: () => void;
+  // New Upload Props
+  handleUploadToS3: () => Promise<void>;
+  handleUploadSplitFilesToS3: () => Promise<void>;
 }
 
 const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
@@ -44,12 +47,30 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
   handleDirectoryClick,
   handleBreadcrumbClick,
   handleReload,
+  handleUploadToS3,
+  handleUploadSplitFilesToS3,
 }) => {
   return (
     <div className="mt-8 w-full">
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-xl font-bold text-black">S3 Browser</h2>
         <div className="flex gap-2">
+          {/* Added Upload Buttons */}
+          <button
+            onClick={handleUploadToS3}
+            className="btn"
+            disabled={isLoading}
+          >
+            Upload Originals
+          </button>
+          <button
+            onClick={handleUploadSplitFilesToS3}
+            className="btn"
+            disabled={isLoading}
+          >
+            Upload Split Files
+          </button>
+
           <button onClick={handleReload} className="btn" disabled={isLoading}>
             {isLoading ? "Loading..." : "Reload"}
           </button>
@@ -103,17 +124,20 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
       ) : (
         <div>
           <div className="flex items-center gap-2 p-2 bg-gray-100 rounded-t-md">
-            {currentPrefix.split("/").filter(Boolean).map((part, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <span
-                  onClick={() => handleBreadcrumbClick(index)}
-                  className="cursor-pointer hover:underline"
-                >
-                  {part}
-                </span>
-                <span>/</span>
-              </div>
-            ))}
+            {currentPrefix
+              .split("/")
+              .filter(Boolean)
+              .map((part, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span
+                    onClick={() => handleBreadcrumbClick(index)}
+                    className="cursor-pointer hover:underline"
+                  >
+                    {part}
+                  </span>
+                  <span>/</span>
+                </div>
+              ))}
           </div>
           <div className="bg-white p-2 rounded-b-md min-h-[400px]">
             {isLoading && items.length === 0 ? (
@@ -158,8 +182,12 @@ const S3BrowserUI: React.FC<S3BrowserUIProps> = ({
 
             {hasNextPage && (
               <div className="flex justify-center mt-4">
-                <button onClick={handleLoadMore} className="btn" disabled={isLoading}>
-                  {isLoading ? 'Loading...' : 'Load More'}
+                <button
+                  onClick={handleLoadMore}
+                  className="btn"
+                  disabled={isLoading}
+                >
+                  {isLoading ? "Loading..." : "Load More"}
                 </button>
               </div>
             )}

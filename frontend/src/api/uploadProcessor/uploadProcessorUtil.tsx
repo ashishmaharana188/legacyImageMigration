@@ -1,13 +1,23 @@
 import React from "react";
-import { UploadStatus, FileResponse, RequestConfig } from "./uploadProcessorType";
+import {
+  UploadStatus,
+  FileResponse,
+  RequestConfig,
+} from "./uploadProcessorType";
 import { uploadExcelFile, runFallbackCheck } from "./uploadProcessorService";
-import { logUploadStart, logUploadSuccess, logUploadFailure, updateUploadStatuses } from "./uploadProcessorLog";
+import {
+  logUploadStart,
+  logUploadSuccess,
+  logUploadFailure,
+  updateUploadStatuses,
+} from "./uploadProcessorLog";
 
+const TASK_NAME = "uploadAndScript";
 
 export const handleFileChange = (
   event: React.ChangeEvent<HTMLInputElement>,
   setSelectedFile: React.Dispatch<React.SetStateAction<File | null>>,
-  setUploadMessage: React.Dispatch<React.SetStateAction<string>>,
+  setUploadMessage: React.Dispatch<React.SetStateAction<string>>
 ) => {
   const file = event.target.files?.[0];
   if (file && file.type.includes("spreadsheetml")) {
@@ -32,12 +42,12 @@ const _executeRequest = async ({
   setLoading(true);
   if (setIsUploading) setIsUploading(true);
   setUploadMessage(`${operationName}...`);
-  logUploadStart(updateTaskLog, operationName, logId);
+
+  logUploadStart(updateTaskLog, TASK_NAME, operationName, logId);
+
   if (setUploadStatuses) {
     updateUploadStatuses(setUploadStatuses, "in-progress", undefined);
   }
-
-
 
   try {
     let resData: FileResponse;
@@ -50,33 +60,51 @@ const _executeRequest = async ({
     }
     setUploadMessage(resData.message || `${operationName} successful`);
     const { summary, ...restData } = resData;
-    const totalRows = summary?.totalRows || 0;
-    const badRows = summary?.errors || 0;
 
     let finalStatus: "success" | "failed" | "in-progress" = "success";
+    const badRows = summary?.errors || 0;
+
     if (badRows > 0) {
       finalStatus = "failed";
-    } else if (totalRows > 0) {
-      finalStatus = "success";
     } else {
       finalStatus = "success";
     }
 
-    logUploadSuccess(updateTaskLog, operationName, logId, summary, restData);
+    logUploadSuccess(
+      updateTaskLog,
+      TASK_NAME,
+      operationName,
+      logId,
+      summary,
+      restData
+    );
+
     if (setUploadStatuses) {
       updateUploadStatuses(setUploadStatuses, finalStatus, summary);
     }
   } catch (error: unknown) {
-    const errorMessage =
-      (error as Error).message;
+    const errorMessage = (error as Error).message;
     setUploadMessage(`${operationName} failed: ${errorMessage}`);
-    logUploadFailure(updateTaskLog, operationName, logId, errorMessage);
+
+    logUploadFailure(
+      updateTaskLog,
+      TASK_NAME,
+      operationName,
+      logId,
+      errorMessage
+    );
+
     if (setUploadStatuses) {
-      updateUploadStatuses(setUploadStatuses, "failed", undefined, errorMessage);
+      updateUploadStatuses(
+        setUploadStatuses,
+        "failed",
+        undefined,
+        errorMessage
+      );
     }
   } finally {
     setLoading(false);
-    if (setIsUploading) setIsUploading(true);
+    if (setIsUploading) setIsUploading(false);
   }
 };
 
@@ -93,7 +121,9 @@ export const handleUpload = async (
     setUploadMessage("Please select a file first.");
     return;
   }
-  clearTaskLog("uploadAndScript");
+
+  clearTaskLog(TASK_NAME);
+
   await _executeRequest({
     endpoint: "upload-excel",
     selectedFile,
@@ -118,7 +148,9 @@ export const handleFallback = async (
     setUploadMessage("Please select a file first.");
     return;
   }
-  clearTaskLog("uploadAndScript");
+
+  clearTaskLog(TASK_NAME);
+
   await _executeRequest({
     endpoint: "run-fallback",
     selectedFile,

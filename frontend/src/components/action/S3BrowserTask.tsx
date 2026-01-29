@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from "react";
+import React, { useState, useCallback, useMemo, useEffect } from "react";
 import axios from "axios";
 import {
   useInfiniteQuery,
@@ -7,6 +7,11 @@ import {
 } from "@tanstack/react-query";
 import S3BrowserUI from "../ui/S3BrowserUI";
 import { useDebounce } from "../../hooks/useDebounce";
+import { webSocketService } from "../../services/webSocketService";
+import {
+  API_BASE_URL,
+  configPromise,
+} from "../../api/uploadProcessor/uploadProcessorService";
 
 interface S3File {
   key: string;
@@ -28,6 +33,12 @@ interface S3ApiResponse {
 interface S3BrowserTaskProps {
   updateTaskLog: (task: string, log: any) => void;
   clearTaskLog: (task: string) => void;
+}
+
+interface FileResponse {
+  successfulFilesCount?: number;
+  failedFilesCount?: number;
+  message?: string;
 }
 
 const fetchS3Objects = async ({
@@ -58,13 +69,129 @@ const searchS3Folders = async ({
   return data;
 };
 
-const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
+const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({
+  updateTaskLog,
+  clearTaskLog,
+}) => {
   const queryClient = useQueryClient();
   const [currentPrefix, setCurrentPrefix] = useState<string>("Data/");
   const [isFilterMode, setIsFilterMode] = useState<boolean>(false);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
+  // --- WebSocket Listener for S3 Progress ---
+  useEffect(() => {
+    const handleMessage = (message: any) => {
+      if (message.type === "s3-upload-total-directories") {
+        updateTaskLog("s3Browser", {
+          message: `Starting S3 Upload: ${message.totalDirectories} directories to process.`,
+          status: "in-progress",
+        });
+      } else if (message.type === "s3-directory-progress") {
+        const percent =
+          message.totalDirectories > 0
+            ? Math.round(
+                (message.completedDirectories / message.totalDirectories) * 100
+              )
+            : 0;
+
+        updateTaskLog("s3Browser", {
+          id: "s3-progress-monitor",
+          message: `Uploading: ${message.currentDirectory} (${percent}%)`,
+          status: "in-progress",
+        });
+      }
+    };
+
+    webSocketService.addListener(handleMessage);
+    return () => webSocketService.removeListener(handleMessage);
+  }, [updateTaskLog]);
+
+  // --- S3 Upload Handlers ---
+  const handleUploadToS3 = useCallback(async () => {
+    updateTaskLog("s3Browser", {
+      message: "Initiating S3 upload...",
+      status: "in-progress",
+    });
+
+    try {
+      await configPromise;
+      const res = await axios.post<FileResponse>(
+        `${API_BASE_URL}/upload-to-s3`
+      );
+      const {
+        successfulFilesCount = 0,
+        failedFilesCount = 0,
+        message: resMessage,
+      } = res.data;
+
+      let finalMessage = resMessage || "S3 upload completed.";
+      if (failedFilesCount > 0 && successfulFilesCount > 0) {
+        finalMessage = `S3 upload completed: ${successfulFilesCount} Successful - ${failedFilesCount} Failed.`;
+      } else if (successfulFilesCount > 0 || failedFilesCount === 0) {
+        finalMessage = `S3 upload completed successfully. Total: ${successfulFilesCount}.`;
+      }
+
+      updateTaskLog("s3Browser", {
+        message: finalMessage,
+        status: "success",
+        ...res.data,
+      });
+      queryClient.invalidateQueries({ queryKey: ["s3Objects"] });
+    } catch (error: any) {
+      const errorMessage = `Upload to S3 failed: ${
+        error.response?.data?.message || error.message
+      }`;
+      updateTaskLog("s3Browser", {
+        message: errorMessage,
+        status: "failed",
+      });
+    }
+  }, [updateTaskLog, queryClient]);
+
+  const handleUploadSplitFilesToS3 = useCallback(async () => {
+    updateTaskLog("s3Browser", {
+      message: "Initiating split file S3 upload...",
+      status: "in-progress",
+    });
+
+    try {
+      await configPromise;
+      const res = await axios.post<FileResponse>(
+        `${API_BASE_URL}/upload-split-to-s3`,
+        {}
+      );
+      const {
+        successfulFilesCount = 0,
+        failedFilesCount = 0,
+        message: resMessage,
+      } = res.data;
+
+      let finalMessage = resMessage || "S3 split files upload completed.";
+      if (failedFilesCount > 0) {
+        finalMessage = `Result: ${successfulFilesCount} Successful, ${failedFilesCount} Failed`;
+      } else if (successfulFilesCount > 0) {
+        finalMessage = `Success. Total uploaded: ${successfulFilesCount}.`;
+      }
+
+      updateTaskLog("s3Browser", {
+        message: finalMessage,
+        status: "success",
+        ...res.data,
+      });
+      queryClient.invalidateQueries({ queryKey: ["s3Objects"] });
+    } catch (error: any) {
+      const errorMessage = `Upload of split files to S3 failed: ${
+        error.response?.data?.message || error.message
+      }`;
+      updateTaskLog("s3Browser", {
+        message: errorMessage,
+        status: "failed",
+      });
+    }
+  }, [updateTaskLog, queryClient]);
+
+  // --- S3 Fetching Logic ---
   const {
     data: s3Data,
     fetchNextPage: fetchNextS3Page,
@@ -135,8 +262,12 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
   const allS3Items = useMemo(() => {
     const items: S3Item[] = [];
     s3Data?.pages.forEach((page: S3ApiResponse) => {
-      page.directories.forEach((dir: string) => items.push({ key: dir, type: "dir" }));
-      page.files.forEach((file: S3File) => items.push({ ...file, type: "file" }));
+      page.directories.forEach((dir: string) =>
+        items.push({ key: dir, type: "dir" })
+      );
+      page.files.forEach((file: S3File) =>
+        items.push({ ...file, type: "file" })
+      );
     });
     return items;
   }, [s3Data]);
@@ -144,7 +275,9 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
   const searchResults = useMemo(() => {
     const items: S3Item[] = [];
     searchData?.pages.forEach((page: S3ApiResponse) => {
-      page.directories.forEach((dir: string) => items.push({ key: dir, type: "dir" }));
+      page.directories.forEach((dir: string) =>
+        items.push({ key: dir, type: "dir" })
+      );
     });
     return items;
   }, [searchData]);
@@ -187,6 +320,8 @@ const S3BrowserTask: React.FC<S3BrowserTaskProps> = ({ updateTaskLog }) => {
       handleDirectoryClick={handleDirectoryClick}
       handleBreadcrumbClick={handleBreadcrumbClick}
       handleReload={handleReload}
+      handleUploadToS3={handleUploadToS3}
+      handleUploadSplitFilesToS3={handleUploadSplitFilesToS3}
     />
   );
 };

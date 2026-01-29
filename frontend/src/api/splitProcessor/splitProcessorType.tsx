@@ -1,26 +1,18 @@
 export interface splitProcessorUIProps {
-    loading: boolean;
-    handleSplitFiles: () => Promise<void>;
-    handleSplitFilesWithMuPDF: () => Promise<void>;
+  loading: boolean;
+  handleSplitFiles: (file: File) => Promise<void>;
+  handleSplitFilesWithMuPDF: (file: File) => Promise<void>;
+  selectedFile: File | null;
+  setSelectedFile: React.Dispatch<React.SetStateAction<File | null>>;
+  splitFiles: string[];
 }
 
-export interface useSplitProcessorProps {
-    updateTaskLog: (task: string, log: unknown) => void;
-    clearTaskLog: (task: string) => void;
-    setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
-}
-
-
-
-export interface SplitFileResponse {
-  statusCode?: number;
-  message?: string;
-  summary?: {
-    totalSplitFilesGenerated: number;
-    splitErrors: number;
-    totalExpectedPagesFromCsv: number;
-  };
-  error?: string;
+export interface UploadStatus {
+  fileName: string;
+  progress?: number;
+  status: string; // FIXED: Changed from optional to required
+  isDirectory?: boolean;
+  errorMessage?: string;
 }
 
 export interface RequestConfig {
@@ -32,35 +24,41 @@ export interface RequestConfig {
   operationName: string;
   setUploadStatuses?: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
   setIsUploading?: React.Dispatch<React.SetStateAction<boolean>>;
-
 }
 
 export interface SplitSummary {
-  totalSplits: number;
-  totalSuccessfulSplits: number;
-  errors: number;
-  totalUnsuccessfulSplits: number;
-  totalPageCount: number;
+  totalSplitFilesGenerated: number;
+  splitErrors: number;
+  totalExpectedPagesFromCsv: number;
 }
 
-export interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  errorMessage?: string;
+export interface SplitFileResponse {
+  statusCode?: number;
+  message?: string;
+  splitFiles?: string[];
+  splitSummary?: SplitSummary;
+  summary?: {
+    totalSplitFilesGenerated: number;
+    splitErrors: number;
+    totalExpectedPagesFromCsv: number;
+  };
+}
+
+export interface useSplitProcessorProps {
+  updateTaskLog: (task: string, log: unknown) => void;
+  clearTaskLog: (task: string) => void;
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
+}
+
+export interface SplitProcessorSummaryUIProps {
+  splitMessage: string;
+  totalSplitFilesGenerated: number;
 }
 
 export interface SplitProgressMessage {
   type: "splitProgressUpdate" | "splitProgressComplete";
-  // Removed totalExpectedSplits
   totalSplitFilesGenerated: number;
   splitErrors: number;
-  totalExpectedPagesFromCsv?: number; // Added this field
+  totalExpectedPagesFromCsv?: number;
   status?: string;
 }
-
-export interface SplitProcessorSummaryUIProps {
-    splitMessage: string;
-    totalSplitFilesGenerated: number;
-  }

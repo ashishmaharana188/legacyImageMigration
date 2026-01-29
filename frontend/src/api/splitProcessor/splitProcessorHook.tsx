@@ -1,119 +1,106 @@
-import { useState, useCallback, useEffect, useRef } from "react";
-import {useSplitProcessorProps, SplitProgressMessage} from "./splitProcessorType"
+import { useState, useCallback, useEffect } from "react";
 import {
-    handleSplitFiles as utilHandleSplitFiles,
-    handleSplitFilesWithMuPDF as utilHandleSplitFilesWithMuPDF
+  useSplitProcessorProps,
+  SplitProgressMessage,
+} from "./splitProcessorType";
+import {
+  handleSplitFiles as utilHandleSplitFiles,
+  handleSplitFilesWithMuPDF as utilHandleSplitFilesWithMuPDF,
 } from "./splitProcessorUtil";
 import { webSocketService } from "../../services/webSocketService";
-
+import { WebSocketMessage } from "../../services/webSocketMessageProcessor";
 
 export const useSplitProcessorHook = ({
-    updateTaskLog,
-    clearTaskLog,
-    setUploadStatuses
+  updateTaskLog,
+  clearTaskLog,
+  setUploadStatuses,
 }: useSplitProcessorProps) => {
-    const [loading, setLoading] = useState<boolean>(false);
-    const [splitMessage, setSplitMessage] = useState<string>("");
-    const [isUploading, setIsUploading] = useState<boolean>(false);
-    const [totalSplitFilesGenerated, setTotalSplitFilesGenerated] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [splitMessage, setSplitMessage] = useState<string>("");
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+  const [totalSplitFilesGenerated, setTotalSplitFilesGenerated] =
+    useState<number>(0);
+  const [splitFiles, setSplitFiles] = useState<string[]>([]);
 
-    // Refs for throttling
-    const splitProgressLatestRef = useRef<SplitProgressMessage | null>(null);
-    const throttleTimerRef = useRef<number | null>(null);
-    const THROTTLE_INTERVAL = 200; // Update UI every 200ms
+  const applyThrottledUpdates = useCallback(
+    (message: SplitProgressMessage) => {
+      setUploadStatuses((prev) => {
+        const newStatuses = prev.filter(
+          (s) => s.fileName !== "splitting_progress"
+        );
+        const isComplete = message.type === "splitProgressComplete";
+        const progress = isComplete
+          ? 100
+          : message.totalExpectedPagesFromCsv &&
+            message.totalExpectedPagesFromCsv > 0
+          ? (message.totalSplitFilesGenerated /
+              message.totalExpectedPagesFromCsv) *
+            100
+          : 0;
 
-    const applyThrottledUpdates = useCallback(() => {
-        // Apply latest split progress
-        const latestSplitMessage = splitProgressLatestRef.current;
-        if (latestSplitMessage) {
-            setUploadStatuses((prev) => {
-                const newStatuses = prev.filter(
-                    (s) => s.fileName !== "splitting_progress"
-                );
-                const isComplete = latestSplitMessage.type === "splitProgressComplete";
-                const progress = isComplete
-                    ? 100
-                    : (latestSplitMessage.totalExpectedPagesFromCsv && latestSplitMessage.totalExpectedPagesFromCsv > 0)
-                        ? (latestSplitMessage.totalSplitFilesGenerated / latestSplitMessage.totalExpectedPagesFromCsv) * 100
-                        : 0;
+        newStatuses.push({
+          fileName: "splitting_progress",
+          status: isComplete ? "Done" : message.status || "In Progress",
+          progress: progress,
+          ...message,
+        });
+        return newStatuses;
+      });
 
-                newStatuses.push({
-                    fileName: "splitting_progress",
-                    status: isComplete
-                        ? "Done"
-                        : latestSplitMessage.status || "In Progress",
-                    progress: progress,
-                    ...latestSplitMessage,
-                });
-                return newStatuses;
-            });
-            updateTaskLog("splitFiles", { splitSummary: latestSplitMessage });
-            setTotalSplitFilesGenerated(latestSplitMessage.totalSplitFilesGenerated);
-            splitProgressLatestRef.current = null;
-        }
+      updateTaskLog("splitFiles", {
+        id: "splitting-status",
+        splitSummary: message,
+      });
 
-        throttleTimerRef.current = null;
-    }, [setUploadStatuses, updateTaskLog]);
+      setTotalSplitFilesGenerated(message.totalSplitFilesGenerated);
+    },
+    [setUploadStatuses, updateTaskLog]
+  );
 
-    useEffect(() => {
-        const handleMessage = (message: SplitProgressMessage) => {
-            let needsUpdate = false;
-
-            if (
-                message.type === "splitProgressUpdate" ||
-                message.type === "splitProgressComplete"
-            ) {
-                splitProgressLatestRef.current = message;
-                needsUpdate = true;
-            }
-
-            if (needsUpdate && !throttleTimerRef.current) {
-                throttleTimerRef.current = window.setTimeout(
-                    applyThrottledUpdates,
-                    THROTTLE_INTERVAL
-                );
-            }
-        };
-
-        webSocketService.addListener(handleMessage);
-
-        return () => {
-            webSocketService.removeListener(handleMessage);
-            if (throttleTimerRef.current) {
-                window.clearTimeout(throttleTimerRef.current);
-            }
-        };
-    }, [applyThrottledUpdates]);
-
-
-    const handleSplitFiles = async () => {
-        await utilHandleSplitFiles(
-            updateTaskLog,
-            clearTaskLog,
-            setSplitMessage,
-            setLoading,
-            setIsUploading,
-            setUploadStatuses
-        )
+  useEffect(() => {
+    const handleMessage = (message: WebSocketMessage) => {
+      if (
+        message.type === "splitProgressUpdate" ||
+        message.type === "splitProgressComplete"
+      ) {
+        applyThrottledUpdates(message as SplitProgressMessage);
+      }
     };
 
-    const handleSplitFilesWithMuPDF = async () => {
-        await utilHandleSplitFilesWithMuPDF(
-            updateTaskLog,
-            clearTaskLog,
-            setSplitMessage,
-            setLoading,
-            setIsUploading,
-            setUploadStatuses
-        )
-    };
+    webSocketService.addListener(handleMessage);
+    return () => webSocketService.removeListener(handleMessage);
+  }, [applyThrottledUpdates]);
 
-    return {
-        loading,
-        splitMessage,
-        isUploading,
-        handleSplitFiles,
-        handleSplitFilesWithMuPDF,
-        totalSplitFilesGenerated,
-    }
+  const handleSplitFiles = async () => {
+    await utilHandleSplitFiles(
+      updateTaskLog,
+      clearTaskLog,
+      setSplitMessage,
+      setLoading,
+      setIsUploading,
+      setUploadStatuses
+    );
+  };
+
+  const handleSplitFilesWithMuPDF = async () => {
+    await utilHandleSplitFilesWithMuPDF(
+      updateTaskLog,
+      clearTaskLog,
+      setSplitMessage,
+      setLoading,
+      setIsUploading,
+      setUploadStatuses
+    );
+  };
+
+  return {
+    loading,
+    splitMessage,
+    isUploading,
+    handleSplitFiles,
+    handleSplitFilesWithMuPDF,
+    totalSplitFilesGenerated,
+    splitFiles,
+    setSplitFiles,
+  };
 };

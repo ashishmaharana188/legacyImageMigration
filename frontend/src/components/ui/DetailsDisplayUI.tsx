@@ -1,10 +1,15 @@
 import React, { useState } from "react";
+// 1. Upload Logic
 import {
-  UploadProgressDisplay,
+  UploadProcessDisplay,
   BadRowsDetailsTable,
 } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
+
+// 2. Split Logic (Crucial Fix: Import the Named Export)
+import { SplitProcessDisplay } from "../../api/splitProcessor/splitProcessorSummaryUI";
+
 import SanityCheckSummaryDisplay from "../../api/dataClean/sanityCheckSummaryUI";
-import { LogEntry } from "../../types";
+import { LogEntry } from "../../types/index";
 
 interface DetailsDisplayUIProps {
   log: LogEntry;
@@ -28,28 +33,15 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
   };
 
   const renderContent = () => {
-    if (log.message) {
-      const statusText =
-        log.status && log.status !== "in-progress" ? ` (${log.status})` : "";
-      const statusColor =
-        log.status === "success"
-          ? "text-black"
-          : log.status === "failed"
-          ? "text-black"
-          : "text-black";
-      return (
-        <div className={`${statusColor} font-bold text-lg`}>
-          {log.message}
-          {statusText}
-        </div>
-      );
-    } else if (
+    if (typeof log === "string") return <div>{log}</div>;
+
+    // --- CASE 1: EXCEL UPLOAD ---
+    if (
       log.fileName === "excel_upload_progress" &&
       log.totalFiles !== undefined
     ) {
-      // This condition is for the excel upload progress
       return (
-        <UploadProgressDisplay
+        <UploadProcessDisplay
           title={`Upload Progress for Excel File`}
           progress={log.progress}
           total={log.totalFiles}
@@ -60,77 +52,44 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
           unit="rows"
         />
       );
-    } else if (log.splitSummary) {
-      return null; // Handled by ProgressTrackingUI
-    } else if (log.originalFile !== undefined && log.fileUrls !== undefined) {
+    }
+
+    // --- CASE 2: SPLIT PROCESSOR ---
+    else if (log.splitSummary) {
+      const total = log.splitSummary.totalExpectedPagesFromCsv || 0;
+      const success = log.splitSummary.totalSplitFilesGenerated || 0;
+      const errors = log.splitSummary.splitErrors || 0;
+      const progress =
+        total > 0 ? (success / total) * 100 : success > 0 ? 100 : 0;
+
+      // This now uses the correct, dedicated Split component
       return (
-        <div>
-          <h5 className="font-semibold">File Upload Summary:</h5>
-          <div className="flex flex-wrap items-center">
-            <p className="mr-4">Original File: {log.originalFile}</p> │
-            <p className="mr-4">Processed File: {log.processedFile}</p> │
-          </div>
-          <button onClick={toggleExpansion}>
-            {isExpanded ? "Hide Details" : "Show Details"}
-          </button>
-          {isExpanded && (
-            <>
-              <h5 className="font-semibold mt-2">Processed Files Details:</h5>
-              {log.fileUrls.length > 0 ? (
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-2 py-1">
-                        Row
-                      </th>
-                      <th scope="col" className="px-2 py-1">
-                        Page Count
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {log.fileUrls.map((item: any, index: number) => (
-                      <tr key={index} className="bg-white border-b">
-                        <td className="px-2 py-1">{item.row}</td>
-                        <td className="px-2 py-1">{item.pageCount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              ) : (
-                <p className="mt-2">No files were successfully processed.</p>
-              )}
-            </>
-          )}
-        </div>
+        <SplitProcessDisplay
+          title="PDF Split Progress"
+          progress={progress}
+          total={total}
+          successful={success}
+          errors={errors}
+        />
       );
-    } else if (
-      ("dryRun" in log && log.dryRun !== undefined) ||
-      ("duplicates" in log && Array.isArray(log.duplicates))
-    ) {
-      return <SanityCheckSummaryDisplay log={log} logKey={logKey} />;
-    } else if ("successfulRows" in log && "badRows" in log) {
+    }
+
+    // --- CASE 3: GENERIC EXECUTION ---
+    else if (log.successfulRows !== undefined) {
       return (
         <div>
-          <h5 className="font-semibold">SQL Execution Summary:</h5>
-          <p>
-            Total Inserts: {log.totalRows !== undefined ? log.totalRows : "N/A"}
-          </p>
-          <p>
-            Total Successful:{" "}
-            {log.successfulRows !== undefined ? log.successfulRows : "N/A"}
-          </p>
-          <p>Total Failed: {log.badRows !== undefined ? log.badRows : "N/A"}</p>
-          <table className="w-full text-sm text-left">
-            {/* ... summary table ... */}
-          </table>
-          {log.badRowsFilePath && log.badRows > 0 && (
+          <h5 className="font-semibold">Execution Summary:</h5>
+          <p>Total: {log.totalRows ?? "N/A"}</p>
+          <p>Successful: {log.successfulRows ?? "N/A"}</p>
+          <p>Failed: {log.badRows ?? "N/A"}</p>
+
+          {log.badRowsFilePath && (log.badRows || 0) > 0 && (
             <>
               <button
                 onClick={() =>
                   toggleBadRowsDisplay(log.badRowsFilePath!, logKey)
                 }
-                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+                className="mt-2 px-3 py-1 text-sm font-medium text-white bg-black rounded-md hover:bg-gray-700"
               >
                 {expandedLogId === logKey ? "Hide Bad Rows" : "Show Bad Rows"}
               </button>
@@ -141,76 +100,35 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
           )}
         </div>
       );
-    } else if (
-      log.transferredCount !== undefined &&
-      log.documents !== undefined
+    }
+
+    // --- CASE 4: SANITY CHECKS ---
+    else if (
+      log.dryRun !== undefined ||
+      (log.duplicates && Array.isArray(log.duplicates))
     ) {
+      return <SanityCheckSummaryDisplay log={log} logKey={logKey} />;
+    }
+
+    // --- CASE 5: STANDARD MESSAGE ---
+    else if (log.message) {
+      const statusText =
+        log.status && log.status !== "in-progress" ? ` (${log.status})` : "";
+      const statusColor =
+        log.status === "success"
+          ? "text-green-600"
+          : log.status === "failed"
+          ? "text-red-600"
+          : "text-black";
       return (
-        <div>
-          <h5 className="font-semibold">MongoDB Transfer Summary:</h5>
-          <p>Total Documents Transferred: {log.transferredCount}</p>
-          <button onClick={toggleExpansion}>
-            {isExpanded ? "Hide Details" : "Show Details"}
-          </button>
-          {isExpanded && log.documents && log.documents.length > 0 && (
-            <div className="bg-gray-100 p-2 rounded mt-2">
-              {/* ... transferred documents table ... */}
-            </div>
-          )}
-        </div>
-      );
-    } else if (
-      log.updatedFolioRows !== undefined &&
-      log.updatedTransactionRows !== undefined
-    ) {
-      return (
-        <div>
-          <h5 className="font-semibold">
-            Folio and Transaction Update Summary:
-          </h5>
-          <table className="w-full text-sm text-left">
-            <p>
-              Total FolioId Updated:{" "}
-              {log.updatedFolioRows !== undefined
-                ? log.updatedFolioRows
-                : "N/A"}
-            </p>
-            <p>
-              Total TransactionId Updated:{" "}
-              {log.updatedTransactionRows !== undefined
-                ? log.updatedTransactionRows
-                : "N/A"}
-            </p>
-            <p>
-              Total Failed: {log.badRows !== undefined ? log.badRows : "N/A"}
-            </p>
-          </table>
-        </div>
-      );
-    } else if ("updatedDocuments" in log) {
-      return (
-        <div>
-          <h5 className="font-semibold">Mongo Transactions Update Summary:</h5>
-          <p>Updated Count: {log.updatedCount}</p>
-          {log.updatedDocuments && log.updatedDocuments.length > 0 && (
-            <button onClick={toggleExpansion}>
-              {isExpanded ? "Hide Details" : "Show Details"}
-            </button>
-          )}
-          {isExpanded && (
-            <div className="bg-gray-100 p-2 rounded mt-2">
-              {/* ... updated documents table ... */}
-            </div>
-          )}
+        <div className={`${statusColor} font-bold text-lg`}>
+          {log.message}
+          {statusText}
         </div>
       );
     }
 
-    return (
-      <pre style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
-        {JSON.stringify(log, null, 2)}
-      </pre>
-    );
+    return <pre>{JSON.stringify(log, null, 2)}</pre>;
   };
 
   return <div>{renderContent()}</div>;
