@@ -7,75 +7,26 @@
       "request": "launch",
       "url": "http://localhost:5173",
       "webRoot": "${workspaceFolder}/frontend",
-      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir",
-      "preLaunchTask": "Start Frontend DEV"
+      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
     },
     {
-      "name": "Launch Chrome (PROD)",
+      "name": "Launch Chrome (Prod)",
       "type": "chrome",
       "request": "launch",
       "url": "http://localhost:5174",
       "webRoot": "${workspaceFolder}/frontend",
-      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir",
-      "preLaunchTask": "Start Frontend PROD"
+      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
     },
     {
-      "name": "Launch Firefox DEV",
+      "name": "Launch Firefox with Persistent Profile",
       "type": "firefox",
       "request": "launch",
       "url": "http://localhost:5173",
       "webRoot": "${workspaceFolder}",
+      // OPTION A: Points to a specific folder for this project
       "profileDir": "${workspaceFolder}/.vscode/firefox-profile",
       "keepProfileChanges": true,
-      "skipFiles": ["<node_internals>/**"],
-      "preLaunchTask": "Start Frontend DEV"
-    },
-    {
-      "name": "Launch Firefox PROD",
-      "type": "firefox",
-      "request": "launch",
-      "url": "http://localhost:5174",
-      "webRoot": "${workspaceFolder}",
-      "profileDir": "${workspaceFolder}/.vscode/firefox-profile",
-      "keepProfileChanges": true,
-      "skipFiles": ["<node_internals>/**"],
-      "preLaunchTask": "Start Frontend PROD"
-    },
-    {
-      "name": "Backend: Node",
-      "type": "node",
-      "request": "launch",
-      "args": ["backend/app.ts"],
-      "runtimeArgs": ["-r", "ts-node/register"],
-      "env": {
-        // This forces ts-node to use your specific backend flags
-        "TS_NODE_PROJECT": "${workspaceFolder}/backend/tsconfig.json",
-        "TS_NODE_TRANSPILE_ONLY": "true"
-      },
-      "cwd": "${workspaceFolder}",
-      "console": "integratedTerminal"
-    }
-  ],
-  "compounds": [
-    {
-      "name": "Full System (Chrome)",
-      "configurations": ["Launch Chrome (Dev)", "Backend: Node"],
-      "stopAll": true
-    },
-    {
-      "name": "Full System (Chrome)",
-      "configurations": ["Launch Chrome (PROD)", "Backend: Node"],
-      "stopAll": true
-    },
-    {
-      "name": "Full System (Firefox)",
-      "configurations": ["Launch Firefox DEV", "Backend: Node"],
-      "stopAll": true
-    },
-    {
-      "name": "Full System (Firefox)",
-      "configurations": ["Launch Firefox PROD", "Backend: Node"],
-      "stopAll": true
+      "skipFiles": ["<node_internals>/**"]
     }
   ]
 }
