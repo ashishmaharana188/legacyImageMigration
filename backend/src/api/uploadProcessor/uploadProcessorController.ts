@@ -1,5 +1,4 @@
 import { Request, Response } from "express";
-// FIX: Import from the current folder, NOT imageDataTransfer
 import { processExcelFile as wrapperProcessExcelFile } from "./uploadProcessorWrapper";
 
 class UploadProcessorController {
@@ -11,7 +10,7 @@ class UploadProcessorController {
         const wss = req.app.get("wss");
         if (wss) {
           const message = {
-            type: "excelProcessingUpdate", // Aligned with frontend
+            type: "excelProcessingUpdate",
             totalRows: stats.totalRows,
             processedRows: stats.processedRows,
             successfulRows: stats.successfulRows,
@@ -20,16 +19,13 @@ class UploadProcessorController {
             status: "Transferring Files...",
           };
           wss.clients.forEach((client: any) => {
-            if (client.readyState === 1) {
-              client.send(JSON.stringify(message));
-            }
+            if (client.readyState === 1) client.send(JSON.stringify(message));
           });
         }
       };
 
       const result = await wrapperProcessExcelFile(req.file.path, onProgress);
 
-      // FIX: Map the result into the format the UI expects
       res.status(200).json({
         statusCode: 200,
         summary: {
@@ -46,7 +42,7 @@ class UploadProcessorController {
   }
 
   async runFallback(req: Request, res: Response) {
-    // Fallback logic
+    /* fallback logic */
   }
 }
 
