@@ -1,4 +1,4 @@
-import React from "react";
+import React from "react"; // Removed useEffect
 import UploadProcessorUI from "../ui/UploadAndScriptUI";
 import { useUploadProcessorHook } from "../../api/uploadProcessor/uploadProcessorHook";
 import { UploadStatus } from "../../api/uploadProcessor/uploadProcessorType";
@@ -27,8 +27,6 @@ const UploadAndScriptTask: React.FC<UploadAndScriptTaskProps> = ({
     clearTaskLog,
     setUploadStatuses,
   });
-
-  // REDUNDANT POLLING REMOVED: Progress is now single-source from WebSocket.
 
   return (
     <UploadProcessorUI

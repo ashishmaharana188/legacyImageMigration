@@ -1,5 +1,17 @@
 import { TaskLogContextType, UploadStatus } from "../types/index";
 
+// Add this to webSocketMessageProcessor.ts or types/index.ts
+export interface WebSocketMessage {
+  type: string;
+  totalRows?: number;
+  processedRows?: number;
+  successfulRows?: number;
+  errors?: number;
+  notFound?: number;
+  status?: string;
+  [key: string]: any;
+}
+
 export const createWebSocketMessageProcessor = ({
   updateTaskLog,
   setUploadStatuses,
