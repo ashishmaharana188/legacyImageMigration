@@ -6,6 +6,8 @@ import {
 
 type UpdateTaskLogFunction = (task: string, log: unknown) => void;
 
+const LOG_KEY = "excel_processing";
+
 export const logUploadStart = (
   updateTaskLog: UpdateTaskLogFunction,
   operationName: string,
@@ -27,11 +29,13 @@ export const logUploadSuccess = (
 ) => {
   const totalRows = summary?.totalRows || 0;
   const successfulRows = summary?.successfulRows || 0;
-  const badRows = summary?.errors || 0;
+
+  // FIX: Combine actual errors AND missing files into "Failed" count
+  const badRows = (summary?.errors || 0) + (summary?.notFound || 0);
 
   const finalMessage =
     badRows > 0
-      ? `${operationName} completed with ${badRows} errors.`
+      ? `${operationName} completed with ${badRows} issues.`
       : `${operationName} successful.`;
 
   updateTaskLog("uploadAndScript", {
@@ -65,11 +69,11 @@ export const updateUploadStatuses = (
   errorMessage?: string
 ) => {
   setUploadStatuses((prev) => {
-    const filtered = prev.filter((s) => s.fileName !== "excel_upload_progress");
+    const filtered = prev.filter((s) => s.fileName !== LOG_KEY);
     return [
       ...filtered,
       {
-        fileName: "excel_upload_progress",
+        fileName: LOG_KEY,
         status:
           finalStatus === "in-progress"
             ? "Uploading"
@@ -78,9 +82,13 @@ export const updateUploadStatuses = (
             : "Failed",
         progress: finalStatus === "success" ? 100 : 0,
         totalFiles: summary?.totalRows,
-        processedFiles: (summary?.successfulRows || 0) + (summary?.errors || 0),
+        processedFiles:
+          (summary?.successfulRows || 0) +
+          (summary?.errors || 0) +
+          (summary?.notFound || 0),
         successfulFiles: summary?.successfulRows,
         errorFiles: summary?.errors,
+        notFoundFiles: summary?.notFound,
         errorMessage,
       },
     ];

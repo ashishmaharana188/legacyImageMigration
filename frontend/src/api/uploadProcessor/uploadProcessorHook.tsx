@@ -4,9 +4,8 @@ import {
   handleUpload as utilHandleUpload,
 } from "./uploadProcessorUtil";
 import { webSocketService } from "../../services/webSocketService";
-import { UploadStatus, LogEntry } from "../../types/index";
+import { UploadStatus } from "../../types/index";
 
-// Internal interface for props
 interface useUploadProcessorProps {
   updateTaskLog: (task: string, log: any) => void;
   clearTaskLog: (task: string) => void;
@@ -25,15 +24,20 @@ export const useUploadProcessorHook = ({
 
   useEffect(() => {
     const handleMessage = (msg: any) => {
-      // Aligned with Backend Controller 'excelProcessingUpdate'
-      if (
-        msg.type === "excelProcessingUpdate" ||
-        msg.type === "excelProcessingComplete"
-      ) {
+      // Listen for all excel-related message types
+      const isExcelMsg = [
+        "progressUpdate",
+        "progressComplete",
+        "excelProcessingUpdate",
+        "excelProcessingComplete",
+      ].includes(msg.type);
+
+      if (isExcelMsg) {
         const progress =
           msg.totalRows > 0 ? (msg.processedRows / msg.totalRows) * 100 : 0;
 
         setUploadStatuses((prev: UploadStatus[]) => {
+          // Use "excel_processing" as the unique identifier for UI bars
           const others = prev.filter(
             (s: UploadStatus) => s.fileName !== "excel_processing"
           );
@@ -41,17 +45,18 @@ export const useUploadProcessorHook = ({
             ...others,
             {
               fileName: "excel_processing",
-              status: msg.status || "Processing...",
+              status: msg.type.includes("Complete") ? "Done" : "Processing...",
               progress: progress,
               totalFiles: msg.totalRows,
               processedFiles: msg.processedRows,
               successfulFiles: msg.successfulRows || 0,
               errorFiles: msg.errorRows || 0,
+              notFoundFiles: msg.notFound || 0,
             },
           ];
         });
 
-        if (msg.type === "excelProcessingComplete") {
+        if (msg.type.includes("Complete")) {
           setUploadMessage("Processing Complete.");
           setLoading(false);
           setIsUploading(false);
@@ -88,6 +93,7 @@ export const useUploadProgressSummary = ({
 }: {
   uploadStatuses: UploadStatus[];
 }) => {
+  // Fixed: Look for the stable key used by the WebSocket processor
   const excelProcessingStatus =
     uploadStatuses.find((s) => s.fileName === "excel_processing") || null;
   const s3UploadStatus =
@@ -95,6 +101,7 @@ export const useUploadProgressSummary = ({
   return { excelProcessingStatus, s3UploadStatus };
 };
 
+// FIX: Added 'export' keyword to resolve SyntaxError
 export const useBadRowsDisplay = ({ logKey: _logKey }: { logKey: string }) => {
   const [expandedLogId, setExpandedLogId] = useState<string | null>(null);
 
@@ -103,7 +110,7 @@ export const useBadRowsDisplay = ({ logKey: _logKey }: { logKey: string }) => {
   };
 
   return {
-    parsedBadRows: null, // Logic for parsing rows can be added here if needed
+    parsedBadRows: null,
     expandedLogId,
     toggleBadRowsDisplay,
   };

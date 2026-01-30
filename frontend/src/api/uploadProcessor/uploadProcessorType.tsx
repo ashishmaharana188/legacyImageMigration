@@ -12,6 +12,7 @@ export interface FileResponse {
   summary?: FileResponseSummary;
   successfulFilesCount?: number;
   failedFilesCount?: number;
+  outputFileName?: string; // Added to match controller response
 }
 
 export interface UploadStatus {
@@ -25,15 +26,19 @@ export interface UploadStatus {
   errorFiles?: number;
   notFoundFiles?: number;
   errorMessage?: string;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
+}
+
+// FIX: Added missing RequestConfig interface
+export interface RequestConfig {
+  endpoint: string;
+  selectedFile: File;
+  updateTaskLog: (task: string, log: unknown) => void;
+  setUploadMessage: React.Dispatch<React.SetStateAction<string>>;
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>;
+  logId: string;
+  operationName: string;
+  setUploadStatuses?: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
+  setIsUploading?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 export interface useUploadProcessorProps {

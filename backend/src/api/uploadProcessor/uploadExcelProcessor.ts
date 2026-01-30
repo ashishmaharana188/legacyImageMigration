@@ -7,11 +7,8 @@ import { buildDestinationFilePath } from "./uploadProcessorUtil";
 import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
-import sharp from "sharp";
-import { PDFDocument } from "pdf-lib";
 import winston from "winston";
 
-// Define the callback type locally to avoid extra imports
 type ProgressCallback = (stats: {
   totalRows: number;
   processedRows: number;
@@ -26,95 +23,110 @@ export async function processExcelRows(
   trxnMap: Record<string, string>,
   logger: winston.Logger,
   getFileExtension: (filePath: string) => string,
-  onProgress?: ProgressCallback // <--- Added for dynamic progress
+  onProgress?: ProgressCallback
 ): Promise<ProcessExcelRowsResult> {
   let totalRows = 0;
-  let successfulRows = 0; // FIX: Changed from const to let
+  let successfulRows = 0;
   let errors = 0;
-  let notFound = 0; // FIX: Changed from const to let
+  let notFound = 0;
   const processedRows: ProcessedRow[] = [];
-
   const lastRow = worksheet.rowCount;
-  const actualTotalRows = lastRow - 1;
-  logger.info("Total rows to process:", { lastRow });
+
+  // Common extensions to check if the Excel path is missing one
+  const possibleExtensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
 
   for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
-    if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value) {
-      logger.info(`Row ${rowNumber}: Empty or invalid row, skipping`);
+    if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value)
       continue;
-    }
 
     totalRows++;
-
-    // --- SEND DYNAMIC UPDATE TO UI ---
-    if (onProgress) {
-      onProgress({
-        totalRows: actualTotalRows,
-        processedRows: totalRows,
-        successfulRows,
-        errors,
-        notFound,
-      });
-    }
+    const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
+    const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
 
     try {
-      // ... (Data extraction logic remains the same)
-      const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
-      const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
-      const trxnType =
-        row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-      const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
+      const projectRoot = process.cwd();
+      const localFilesFolder = path.join(projectRoot, "localFiles");
+      let sourceFilePath = path.join(localFilesFolder, pathVal);
+      let finalPathVal = pathVal;
 
-      // (Source resolution logic...)
-      const localFilesFolder = path.resolve(
-        __dirname,
-        "../../../../localFiles"
-      );
-      const sourceFilePath = path.join(localFilesFolder, pathVal);
+      // 1. Try exact match
+      let fileExists = await fs
+        .access(sourceFilePath)
+        .then(() => true)
+        .catch(() => false);
 
-      if (
-        await fs
-          .access(sourceFilePath)
-          .then(() => true)
-          .catch(() => false)
-      ) {
-        const trxn = trxnMap[trxnType] || trxnType;
-        const sourceData = await fs.readFile(sourceFilePath);
+      // 2. If not found, try common extensions
+      if (!fileExists) {
+        for (const ext of possibleExtensions) {
+          const trialPath = sourceFilePath + ext;
+          const found = await fs
+            .access(trialPath)
+            .then(() => true)
+            .catch(() => false);
+          if (found) {
+            sourceFilePath = trialPath;
+            finalPathVal = pathVal + ext;
+            fileExists = true;
+            logger.info(
+              `Row ${rowNumber}: Found file with appended extension: ${ext}`
+            );
+            break;
+          }
+        }
+      }
+
+      if (fileExists) {
+        const trxnTypeRaw =
+          row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
+        const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
+        const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
+        const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
+
         const destinationFilePath = await buildDestinationFilePath(
-          trxn,
+          trnMapped,
           fund,
           ihNo,
-          pathVal,
+          finalPathVal,
           rowNumber
         );
 
-        await fs.writeFile(destinationFilePath, sourceData);
-
-        // --- FIX: INCREMENT SUCCESS COUNTER ---
+        await fs.writeFile(
+          destinationFilePath,
+          await fs.readFile(sourceFilePath)
+        );
         successfulRows++;
+
+        logger.info(`Row ${rowNumber}: Success. Path: ${sourceFilePath}`);
 
         processedRows.push({
           id_fund: fund,
-          id_trtype: trxn,
+          id_trtype: trnMapped,
           id_ihno: ihNo,
-          id_path: pathVal,
-          id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+          id_path: finalPathVal,
+          id_acno: acNo,
           page_count: "Saved",
         });
       } else {
         notFound++;
+        logger.warn(
+          `Row ${rowNumber}: NOT FOUND. Checked base and extensions for: ${pathVal}`
+        );
         processedRows.push({
           id_fund: fund,
+          id_trtype: "",
+          id_ihno: "",
           id_path: pathVal,
+          id_acno: "",
           page_count: "Not Found",
         });
       }
     } catch (err) {
       errors++;
-      logger.error(`Error processing row ${rowNumber}`, { error: err });
+      logger.error(`Row ${rowNumber} Failure:`, {
+        error: err instanceof Error ? err.message : err,
+      });
     }
   }
-
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }

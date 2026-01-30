@@ -2,14 +2,13 @@ import React from "react";
 import {
   UploadStatus,
   FileResponse,
-  RequestConfig,
+  RequestConfig, // This will now work with the fix in Step 1
 } from "./uploadProcessorType";
 import { uploadExcelFile, runFallbackCheck } from "./uploadProcessorService";
 import {
   logUploadStart,
   logUploadSuccess,
   logUploadFailure,
-  updateUploadStatuses,
 } from "./uploadProcessorLog";
 
 const TASK_NAME = "uploadAndScript";
@@ -20,7 +19,11 @@ export const handleFileChange = (
   setUploadMessage: React.Dispatch<React.SetStateAction<string>>
 ) => {
   const file = event.target.files?.[0];
-  if (file && file.type.includes("spreadsheetml")) {
+  // FIX: Use file.name instead of file.originalname
+  if (
+    file &&
+    (file.type.includes("spreadsheetml") || file.name.endsWith(".xlsx"))
+  ) {
     setSelectedFile(file);
     setUploadMessage("");
   } else {
@@ -28,7 +31,7 @@ export const handleFileChange = (
   }
 };
 
-const _executeRequest = async ({
+export const _executeRequest = async ({
   endpoint,
   selectedFile,
   updateTaskLog,
@@ -36,18 +39,13 @@ const _executeRequest = async ({
   setLoading,
   logId,
   operationName,
-  setUploadStatuses,
   setIsUploading,
 }: RequestConfig) => {
   setLoading(true);
   if (setIsUploading) setIsUploading(true);
   setUploadMessage(`${operationName}...`);
 
-  logUploadStart(updateTaskLog, TASK_NAME, operationName, logId);
-
-  if (setUploadStatuses) {
-    updateUploadStatuses(setUploadStatuses, "in-progress", undefined);
-  }
+  logUploadStart(updateTaskLog, operationName, logId);
 
   try {
     let resData: FileResponse;
@@ -58,50 +56,22 @@ const _executeRequest = async ({
     } else {
       throw new Error(`Unknown endpoint: ${endpoint}`);
     }
+
     setUploadMessage(resData.message || `${operationName} successful`);
-    const { summary, ...restData } = resData;
 
-    let finalStatus: "success" | "failed" | "in-progress" = "success";
-    const badRows = summary?.errors || 0;
-
-    if (badRows > 0) {
-      finalStatus = "failed";
-    } else {
-      finalStatus = "success";
-    }
-
+    // Log the success to the sidebar table
     logUploadSuccess(
       updateTaskLog,
-      TASK_NAME,
       operationName,
       logId,
-      summary,
-      restData
+      resData.summary,
+      resData
     );
-
-    if (setUploadStatuses) {
-      updateUploadStatuses(setUploadStatuses, finalStatus, summary);
-    }
   } catch (error: unknown) {
     const errorMessage = (error as Error).message;
     setUploadMessage(`${operationName} failed: ${errorMessage}`);
 
-    logUploadFailure(
-      updateTaskLog,
-      TASK_NAME,
-      operationName,
-      logId,
-      errorMessage
-    );
-
-    if (setUploadStatuses) {
-      updateUploadStatuses(
-        setUploadStatuses,
-        "failed",
-        undefined,
-        errorMessage
-      );
-    }
+    logUploadFailure(updateTaskLog, operationName, logId, errorMessage);
   } finally {
     setLoading(false);
     if (setIsUploading) setIsUploading(false);

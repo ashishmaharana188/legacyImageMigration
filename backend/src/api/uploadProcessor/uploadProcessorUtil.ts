@@ -1,21 +1,10 @@
 import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
-import winston from "winston";
-import { ProcessedRow } from "../uploadProcessor/uploadProcessorTypes"; // <-- NEW IMPORT
+import { ProcessedRow } from "../uploadProcessor/uploadProcessorTypes";
 
-const baseFolder = path.join(__dirname, "../../../../output"); // Adjusted path
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.File({
-      filename: "logs/error.log",
-      level: "error",
-    }),
-    new winston.transports.File({ filename: "logs/combined.log" }),
-  ],
-});
+// FIX: Target 'output' folder at project root
+const baseFolder = path.join(process.cwd(), "output");
 
 export async function buildDestinationFilePath(
   trxn: string,
@@ -24,26 +13,19 @@ export async function buildDestinationFilePath(
   pathVal: string,
   rowNumber: number
 ): Promise<string> {
-  if (!fund || !ihNo || /[<>:"|?*]/.test(fund) || /[<>:"|?*]/.test(ihNo)) {
-    throw new Error(`Invalid fund (${fund}) or ihNo (${ihNo}) for file path`);
-  }
-  const clientPath =
-    trxn === "DD"
-      ? path.join(baseFolder, trxn, `CLIENT_CODE_${fund}`)
-      : path.join(baseFolder, `CLIENT_CODE_${fund}`);
-  logger.info(`Row ${rowNumber}: Creating clientPath: ${clientPath}`);
+  if (!fund || !ihNo) throw new Error(`Invalid fund/ihNo at row ${rowNumber}`);
+
+  const clientPath = path.join(baseFolder, `CLIENT_CODE_${fund}`);
   await fs.mkdir(clientPath, { recursive: true });
 
-  const fileFolderPath =
-    trxn === "DD"
-      ? path.join(clientPath, `CLIENT_CODE_${fund}_BATCH_NUMBER_${ihNo}`)
-      : path.join(clientPath, `CLIENT_CODE_${fund}_TRANSACTION_NUMBER_${ihNo}`);
-  logger.info(`Row ${rowNumber}: Creating fileFolderPath: ${fileFolderPath}`);
+  const fileFolderPath = path.join(
+    clientPath,
+    `CLIENT_CODE_${fund}_TRANSACTION_NUMBER_${ihNo}`
+  );
   await fs.mkdir(fileFolderPath, { recursive: true });
 
-  const parsedPath = path.parse(pathVal);
+  const fileExt = path.extname(pathVal).toLowerCase();
   const baseFileName = path.basename(fileFolderPath);
-  const fileExt = parsedPath.ext.toLowerCase();
 
   return path.join(fileFolderPath, `${baseFileName}${fileExt}`);
 }
@@ -63,21 +45,24 @@ export async function createProcessedExcelFile(
     { header: "page_count", key: "page_count" },
   ];
 
-  processedRows.forEach((row) => {
-    csvWorksheet.addRow(row);
-  });
+  processedRows.forEach((row) => csvWorksheet.addRow(row));
 
-  logger.info("Finished processing rows");
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const outputFileName = `processed_${timestamp}.csv`;
-  const outputPath = path.join("processed", outputFileName);
-  logger.info(`Saving processed file to: ${outputPath}`);
+  const processedDir = path.join(process.cwd(), "processed");
+
+  if (
+    !(await fs
+      .access(processedDir)
+      .then(() => true)
+      .catch(() => false))
+  ) {
+    await fs.mkdir(processedDir, { recursive: true });
+  }
+
+  const outputPath = path.join(processedDir, outputFileName);
   await csvWorkbook.csv.writeFile(outputPath);
-  logger.info("Processed file saved");
 
-  logger.info("Deleting input file:", { inputFilePath });
   await fs.unlink(inputFilePath);
-  logger.info("Input file deleted");
-
   return outputFileName;
 }
