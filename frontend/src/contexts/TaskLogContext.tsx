@@ -8,22 +8,17 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
   const [taskLogs, setTaskLogs] = useState<{ [key: string]: LogEntry[] }>({});
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
 
-  // [FIX] useCallback prevents the function from being recreated on every render
+  // [FIX] Wrap in useCallback to keep function reference stable across renders
   const updateTaskLog = useCallback((taskKey: string, log: LogEntry) => {
     if (!log) return;
 
     setTaskLogs((prevLogs) => {
-      const currentTaskLogs = prevLogs[taskKey] || [];
-
-      // LOG: Confirm update is triggering
-      if (
-        typeof log === "object" &&
-        "id" in log &&
-        log.id === "upload-status"
-      ) {
-        // Keep this log for one more check
-        // console.log("[DEBUG-STATE] Context Update:", (log as any).successfulRows);
+      const newLogs = { ...prevLogs };
+      if (!newLogs[taskKey]) {
+        newLogs[taskKey] = [];
       }
+
+      const currentTaskLogs = newLogs[taskKey];
 
       if (typeof log === "object" && log !== null && "id" in log) {
         const existingIndex = currentTaskLogs.findIndex(
@@ -31,19 +26,25 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
         );
 
         if (existingIndex > -1) {
-          const updatedLogs = [...currentTaskLogs];
-          updatedLogs[existingIndex] = {
-            ...updatedLogs[existingIndex],
+          // Create new array reference for the list
+          const updatedList = [...currentTaskLogs];
+          // Update the specific item
+          updatedList[existingIndex] = {
+            ...updatedList[existingIndex],
             ...(log as object),
           };
-          return { ...prevLogs, [taskKey]: updatedLogs };
+          newLogs[taskKey] = updatedList;
+        } else {
+          newLogs[taskKey] = [...currentTaskLogs, log];
         }
-        return { ...prevLogs, [taskKey]: [...currentTaskLogs, log] };
+      } else {
+        newLogs[taskKey] = [...currentTaskLogs, log];
       }
-      return { ...prevLogs, [taskKey]: [...currentTaskLogs, log] };
+      return newLogs;
     });
-  }, []); // Empty dependency array ensures stability
+  }, []);
 
+  // [FIX] Stable clear function
   const onClearLogs = useCallback((taskKey: string) => {
     setTaskLogs((prevLogs) => {
       const newLogs = { ...prevLogs };
@@ -52,6 +53,9 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
     });
   }, []);
 
+  // Alias for compatibility
+  const setSummaryData = setTaskLogs;
+
   return (
     <TaskLogContext.Provider
       value={{
@@ -59,7 +63,7 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
         uploadStatuses,
         updateTaskLog,
         onClearLogs,
-        setSummaryData: setTaskLogs,
+        setSummaryData,
         setUploadStatuses,
       }}
     >
