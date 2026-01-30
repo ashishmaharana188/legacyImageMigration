@@ -5,6 +5,7 @@ import DetailsDisplayTask from "../action/DetailsDisplayTask";
 
 export const SummaryDisplay: React.FC = () => {
   const { taskLogs, activeProgress, onClearLogs } = useTaskLog();
+  console.log("[SummaryDisplay] Rendered with ActiveProgress:", activeProgress);
 
   return (
     <div className="mt-4 text-black h-full flex flex-col font-sans">
