@@ -31,9 +31,11 @@ export async function processExcelRows(
   let notFound = 0;
   const processedRows: ProcessedRow[] = [];
   const lastRow = worksheet.rowCount;
+  const actualTotalRows = lastRow - 1;
 
-  // Common extensions to check if the Excel path is missing one
   const possibleExtensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
+  let lastUpdateTime = Date.now();
+  const BROADCAST_INTERVAL = 10000; // 10 seconds
 
   for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -42,47 +44,77 @@ export async function processExcelRows(
 
     totalRows++;
     const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
+    const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
+    const trxnTypeRaw =
+      row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
     const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
+    const serverId =
+      row.getCell(headerIndices["id_serverip"]).text?.trim() || "";
+    const drivePath =
+      row.getCell(headerIndices["id_drivepath"]).text?.trim() || "";
+    const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
+    const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
 
     try {
-      const projectRoot = process.cwd();
-      const localFilesFolder = path.join(projectRoot, "localFiles");
-      let sourceFilePath = path.join(localFilesFolder, pathVal);
+      let sourceFilePath = "";
+      let foundFile = false;
       let finalPathVal = pathVal;
 
-      // 1. Try exact match
-      let fileExists = await fs
-        .access(sourceFilePath)
-        .then(() => true)
-        .catch(() => false);
+      // TIER 1: Local File Check
+      const localFilesFolder = path.join(process.cwd(), "localFiles");
+      const localTrialPath = path.join(localFilesFolder, pathVal);
 
-      // 2. If not found, try common extensions
-      if (!fileExists) {
+      if (
+        await fs
+          .access(localTrialPath)
+          .then(() => true)
+          .catch(() => false)
+      ) {
+        sourceFilePath = localTrialPath;
+        foundFile = true;
+      } else {
         for (const ext of possibleExtensions) {
-          const trialPath = sourceFilePath + ext;
-          const found = await fs
-            .access(trialPath)
-            .then(() => true)
-            .catch(() => false);
-          if (found) {
-            sourceFilePath = trialPath;
+          const trial = localTrialPath + ext;
+          if (
+            await fs
+              .access(trial)
+              .then(() => true)
+              .catch(() => false)
+          ) {
+            sourceFilePath = trial;
             finalPathVal = pathVal + ext;
-            fileExists = true;
-            logger.info(
-              `Row ${rowNumber}: Found file with appended extension: ${ext}`
-            );
+            foundFile = true;
             break;
           }
         }
       }
 
-      if (fileExists) {
-        const trxnTypeRaw =
-          row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-        const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
-        const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
-        const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
+      // TIER 2: Network / SMB Path Check (Restored Logic)
+      if (!foundFile && serverId && pathVal) {
+        // Construct SMB path exactly as old code did
+        let smbPath = path
+          .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
+          .replace(/^(\.\.[\/\\])+/, "");
 
+        // Handle image/common folder replacement
+        if (smbPath.includes("image"))
+          smbPath = smbPath.replace(/image/g, drivePath);
+        else if (smbPath.includes("common"))
+          smbPath = smbPath.replace(/common/g, drivePath);
+
+        if (
+          await fs
+            .access(smbPath)
+            .then(() => true)
+            .catch(() => false)
+        ) {
+          sourceFilePath = smbPath;
+          foundFile = true;
+          logger.info(`Row ${rowNumber}: Found on Network at ${smbPath}`);
+        }
+      }
+
+      if (foundFile) {
         const destinationFilePath = await buildDestinationFilePath(
           trnMapped,
           fund,
@@ -91,14 +123,15 @@ export async function processExcelRows(
           rowNumber
         );
 
-        await fs.writeFile(
-          destinationFilePath,
-          await fs.readFile(sourceFilePath)
+        // Detailed log to Winston (File Only)
+        logger.info(
+          `Row ${rowNumber}: Copying ${sourceFilePath} to ${destinationFilePath}`
         );
+
+        const sourceData = await fs.readFile(sourceFilePath);
+        await fs.writeFile(destinationFilePath, sourceData);
+
         successfulRows++;
-
-        logger.info(`Row ${rowNumber}: Success. Path: ${sourceFilePath}`);
-
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
@@ -110,23 +143,46 @@ export async function processExcelRows(
       } else {
         notFound++;
         logger.warn(
-          `Row ${rowNumber}: NOT FOUND. Checked base and extensions for: ${pathVal}`
+          `Row ${rowNumber}: File not found locally or on network: ${pathVal}`
         );
         processedRows.push({
           id_fund: fund,
-          id_trtype: "",
-          id_ihno: "",
+          id_trtype: trnMapped,
+          id_ihno: ihNo,
           id_path: pathVal,
-          id_acno: "",
+          id_acno: acNo,
           page_count: "Not Found",
         });
       }
+
+      // THROTTLED WEBSOCKET BROADCAST
+      const currentTime = Date.now();
+      if (onProgress && currentTime - lastUpdateTime >= BROADCAST_INTERVAL) {
+        onProgress({
+          totalRows: actualTotalRows,
+          processedRows: totalRows,
+          successfulRows,
+          errors,
+          notFound,
+        });
+        lastUpdateTime = currentTime;
+      }
     } catch (err) {
       errors++;
-      logger.error(`Row ${rowNumber} Failure:`, {
-        error: err instanceof Error ? err.message : err,
-      });
+      logger.error(`Row ${rowNumber} Critical Failure:`, { error: err });
     }
   }
+
+  // Final Broadcast to ensure 100% completion
+  if (onProgress) {
+    onProgress({
+      totalRows: actualTotalRows,
+      processedRows: totalRows,
+      successfulRows,
+      errors,
+      notFound,
+    });
+  }
+
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }
