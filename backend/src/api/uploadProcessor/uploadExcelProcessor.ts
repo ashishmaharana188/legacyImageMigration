@@ -35,7 +35,10 @@ export async function processExcelRows(
 
   const possibleExtensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
   let lastUpdateTime = Date.now();
-  const BROADCAST_INTERVAL = 10000; // 10 seconds
+  const BROADCAST_INTERVAL = 10000;
+
+  // Simple terminal start message
+  console.log(`Processing Excel: Reading ${actualTotalRows} rows...`);
 
   for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -43,27 +46,25 @@ export async function processExcelRows(
       continue;
 
     totalRows++;
-    const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
-    const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
-    const trxnTypeRaw =
-      row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-    const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
-    const serverId =
-      row.getCell(headerIndices["id_serverip"]).text?.trim() || "";
-    const drivePath =
-      row.getCell(headerIndices["id_drivepath"]).text?.trim() || "";
-    const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
-    const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
 
     try {
+      const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
+      const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
+      const serverId =
+        row.getCell(headerIndices["id_serverip"]).text?.trim() || "";
+      const drivePath =
+        row.getCell(headerIndices["id_drivepath"]).text?.trim() || "";
+      const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
+      const trxnTypeRaw =
+        row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
+      const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
+
       let sourceFilePath = "";
       let foundFile = false;
       let finalPathVal = pathVal;
 
-      // TIER 1: Local File Check
-      const localFilesFolder = path.join(process.cwd(), "localFiles");
-      const localTrialPath = path.join(localFilesFolder, pathVal);
-
+      // Tier 1: Local Check
+      const localTrialPath = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
           .access(localTrialPath)
@@ -89,14 +90,11 @@ export async function processExcelRows(
         }
       }
 
-      // TIER 2: Network / SMB Path Check (Restored Logic)
+      // Tier 2: Network Check (SMB)
       if (!foundFile && serverId && pathVal) {
-        // Construct SMB path exactly as old code did
         let smbPath = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
           .replace(/^(\.\.[\/\\])+/, "");
-
-        // Handle image/common folder replacement
         if (smbPath.includes("image"))
           smbPath = smbPath.replace(/image/g, drivePath);
         else if (smbPath.includes("common"))
@@ -110,7 +108,6 @@ export async function processExcelRows(
         ) {
           sourceFilePath = smbPath;
           foundFile = true;
-          logger.info(`Row ${rowNumber}: Found on Network at ${smbPath}`);
         }
       }
 
@@ -122,40 +119,33 @@ export async function processExcelRows(
           finalPathVal,
           rowNumber
         );
-
-        // Detailed log to Winston (File Only)
-        logger.info(
-          `Row ${rowNumber}: Copying ${sourceFilePath} to ${destinationFilePath}`
+        await fs.writeFile(
+          destinationFilePath,
+          await fs.readFile(sourceFilePath)
         );
+        successfulRows++; // Iterative increment
 
-        const sourceData = await fs.readFile(sourceFilePath);
-        await fs.writeFile(destinationFilePath, sourceData);
-
-        successfulRows++;
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
           id_ihno: ihNo,
           id_path: finalPathVal,
-          id_acno: acNo,
+          id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
           page_count: "Saved",
         });
       } else {
-        notFound++;
-        logger.warn(
-          `Row ${rowNumber}: File not found locally or on network: ${pathVal}`
-        );
+        notFound++; // Iterative increment
         processedRows.push({
           id_fund: fund,
-          id_trtype: trnMapped,
-          id_ihno: ihNo,
           id_path: pathVal,
-          id_acno: acNo,
+          id_ihno: ihNo,
+          id_trtype: trnMapped,
+          id_acno: "",
           page_count: "Not Found",
         });
       }
 
-      // THROTTLED WEBSOCKET BROADCAST
+      // BROADCAST: Every 10 seconds for UI bar movement
       const currentTime = Date.now();
       if (onProgress && currentTime - lastUpdateTime >= BROADCAST_INTERVAL) {
         onProgress({
@@ -169,12 +159,14 @@ export async function processExcelRows(
       }
     } catch (err) {
       errors++;
-      logger.error(`Row ${rowNumber} Critical Failure:`, { error: err });
+      logger.error(`Row ${rowNumber} Error:`, err);
     }
   }
 
-  // Final Broadcast to ensure 100% completion
-  if (onProgress) {
+  // Final terminal completion message
+  console.log(`Processing Complete.`);
+
+  if (onProgress)
     onProgress({
       totalRows: actualTotalRows,
       processedRows: totalRows,
@@ -182,7 +174,6 @@ export async function processExcelRows(
       errors,
       notFound,
     });
-  }
 
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }

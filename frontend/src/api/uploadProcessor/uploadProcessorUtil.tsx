@@ -2,7 +2,7 @@ import React from "react";
 import {
   UploadStatus,
   FileResponse,
-  RequestConfig, // This will now work with the fix in Step 1
+  RequestConfig,
 } from "./uploadProcessorType";
 import { uploadExcelFile, runFallbackCheck } from "./uploadProcessorService";
 import {
@@ -19,7 +19,7 @@ export const handleFileChange = (
   setUploadMessage: React.Dispatch<React.SetStateAction<string>>
 ) => {
   const file = event.target.files?.[0];
-  // FIX: Use file.name instead of file.originalname
+  // FIX: Browser File objects use .name
   if (
     file &&
     (file.type.includes("spreadsheetml") || file.name.endsWith(".xlsx"))
@@ -43,23 +43,21 @@ export const _executeRequest = async ({
 }: RequestConfig) => {
   setLoading(true);
   if (setIsUploading) setIsUploading(true);
-  setUploadMessage(`${operationName}...`);
 
+  // Trigger Sidebar Start Message
   logUploadStart(updateTaskLog, operationName, logId);
 
   try {
     let resData: FileResponse;
     if (endpoint === "upload-excel") {
       resData = await uploadExcelFile(endpoint, selectedFile);
-    } else if (endpoint === "run-fallback") {
-      resData = await runFallbackCheck(endpoint, selectedFile);
     } else {
-      throw new Error(`Unknown endpoint: ${endpoint}`);
+      resData = await runFallbackCheck(endpoint, selectedFile);
     }
 
     setUploadMessage(resData.message || `${operationName} successful`);
 
-    // Log the success to the sidebar table
+    // Final Summary Log once API returns
     logUploadSuccess(
       updateTaskLog,
       operationName,
@@ -70,7 +68,6 @@ export const _executeRequest = async ({
   } catch (error: unknown) {
     const errorMessage = (error as Error).message;
     setUploadMessage(`${operationName} failed: ${errorMessage}`);
-
     logUploadFailure(updateTaskLog, operationName, logId, errorMessage);
   } finally {
     setLoading(false);
@@ -91,9 +88,7 @@ export const handleUpload = async (
     setUploadMessage("Please select a file first.");
     return;
   }
-
   clearTaskLog(TASK_NAME);
-
   await _executeRequest({
     endpoint: "upload-excel",
     selectedFile,
@@ -101,33 +96,8 @@ export const handleUpload = async (
     setUploadMessage,
     setLoading,
     logId: "upload-status",
-    operationName: "Uploading",
+    operationName: "Transferring Files",
     setUploadStatuses,
     setIsUploading,
-  });
-};
-
-export const handleFallback = async (
-  selectedFile: File | null,
-  updateTaskLog: (task: string, log: unknown) => void,
-  clearTaskLog: (task: string) => void,
-  setUploadMessage: React.Dispatch<React.SetStateAction<string>>,
-  setLoading: React.Dispatch<React.SetStateAction<boolean>>
-) => {
-  if (!selectedFile) {
-    setUploadMessage("Please select a file first.");
-    return;
-  }
-
-  clearTaskLog(TASK_NAME);
-
-  await _executeRequest({
-    endpoint: "run-fallback",
-    selectedFile,
-    updateTaskLog,
-    setUploadMessage,
-    setLoading,
-    logId: "fallback-status",
-    operationName: "Running fallback",
   });
 };

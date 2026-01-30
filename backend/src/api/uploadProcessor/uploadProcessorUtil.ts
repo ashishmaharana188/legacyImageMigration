@@ -3,9 +3,11 @@ import fs from "fs/promises";
 import path from "path";
 import { ProcessedRow } from "../uploadProcessor/uploadProcessorTypes";
 
-// FIX: Target 'output' folder at project root
 const baseFolder = path.join(process.cwd(), "output");
 
+/**
+ * Generates the absolute path for file transfers
+ */
 export async function buildDestinationFilePath(
   trxn: string,
   fund: string,
@@ -13,7 +15,11 @@ export async function buildDestinationFilePath(
   pathVal: string,
   rowNumber: number
 ): Promise<string> {
-  if (!fund || !ihNo) throw new Error(`Invalid fund/ihNo at row ${rowNumber}`);
+  if (!fund || !ihNo) {
+    throw new Error(
+      `Row ${rowNumber}: Missing fund or ihNo for path generation.`
+    );
+  }
 
   const clientPath = path.join(baseFolder, `CLIENT_CODE_${fund}`);
   await fs.mkdir(clientPath, { recursive: true });
@@ -30,12 +36,16 @@ export async function buildDestinationFilePath(
   return path.join(fileFolderPath, `${baseFileName}${fileExt}`);
 }
 
+/**
+ * Creates the final processed CSV summary
+ */
 export async function createProcessedExcelFile(
   processedRows: ProcessedRow[],
   inputFilePath: string
 ): Promise<string> {
   const csvWorkbook = new ExcelJS.Workbook();
   const csvWorksheet = csvWorkbook.addWorksheet("Processed");
+
   csvWorksheet.columns = [
     { header: "id_fund", key: "id_fund" },
     { header: "id_trtype", key: "id_trtype" },
@@ -64,5 +74,6 @@ export async function createProcessedExcelFile(
   await csvWorkbook.csv.writeFile(outputPath);
 
   await fs.unlink(inputFilePath);
+
   return outputFileName;
 }
