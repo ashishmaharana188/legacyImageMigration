@@ -2,25 +2,24 @@ import React from "react";
 import { UploadStatus, LogEntry } from "../../types/index";
 import ProgressTrackingUI from "../ui/ProgressTrackingUI";
 
+// [FIX] Correct interface for the logic component
 interface ProgressTrackingTaskProps {
-  uploadStatuses: UploadStatus[];
+  uploadStatuses: UploadStatus[]; // Kept in interface for compatibility, but ignored in logic
   taskLogs: { [key: string]: LogEntry[] };
   taskName: string;
 }
 
 const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
-  uploadStatuses,
+  // [FIX] Removed 'uploadStatuses' from here to silence the "unused variable" warning
   taskLogs,
   taskName,
 }) => {
-  // 1. Get the logs specifically for this task (e.g., "uploadAndScript")
   const currentLogs = taskLogs[taskName] || [];
 
-  // 2. PRIORITY CHECK: Look for the specific 'upload-status' ID
-  // This is the exact ID your WebSocket and Backend are updating.
+  // 1. Find the exact log entry the WebSocket is updating
   const liveLog = currentLogs.find((log) => log.id === "upload-status");
 
-  // 3. If we find that log and it has data, RENDER IT immediately.
+  // 2. Render from LOG data (Context)
   if (
     liveLog &&
     typeof liveLog.totalRows === "number" &&
@@ -30,13 +29,10 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     const success = liveLog.successfulRows || 0;
     const errors = liveLog.badRows || 0;
     const notFound = liveLog.notFoundFiles || 0;
-
-    // We calculate processed as the sum of outcomes to ensure sync
     const processed = success + errors;
-
-    // Calculate percentage, guarding against divide-by-zero
     const progress = total > 0 ? Math.round((processed / total) * 100) : 0;
 
+    // [FIX] Passes props that MATCH ProgressTrackingUIProps (title, etc.)
     return (
       <ProgressTrackingUI
         title="Excel Processing Progress"
@@ -44,7 +40,7 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
         total={total}
         processed={processed}
         successful={success}
-        errors={errors} // This combines 'errors' + 'notFound' usually, or separate if UI supports it
+        errors={errors}
         notFound={notFound}
         displayType="aggregate"
         unit="rows"
@@ -52,7 +48,7 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     );
   }
 
-  // 4. SECONDARY CHECK: Split Processor Logic (for PDF splitting task)
+  // 3. Fallback for Split Processor
   if (taskName === "splitFiles") {
     const splitLog = currentLogs.find((l) => l.splitSummary);
     if (splitLog && splitLog.splitSummary) {
@@ -60,7 +56,6 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
       const success = splitLog.splitSummary.totalSplitFilesGenerated || 0;
       const errors = splitLog.splitSummary.splitErrors || 0;
       const currentProcessed = success + errors;
-
       const progress =
         total > 0 ? Math.round((currentProcessed / total) * 100) : 0;
 
@@ -79,7 +74,6 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     }
   }
 
-  // 5. Default: If no relevant logs found, render nothing to keep UI clean
   return null;
 };
 
