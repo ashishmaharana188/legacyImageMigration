@@ -1,29 +1,12 @@
-import {
-  TaskLogContextType,
-  UploadStatus,
-  S3UploadProgress,
-} from "../types/index";
+import { UploadStatus, LogEntry, S3UploadProgress } from "../types";
+import React from "react";
 
-interface WebSocketProcessorProps {
-  updateTaskLog: TaskLogContextType["updateTaskLog"];
-  setUploadStatuses: TaskLogContextType["setUploadStatuses"];
-  setS3UploadProgress?: React.Dispatch<React.SetStateAction<S3UploadProgress>>;
-  setIsConnected?: React.Dispatch<React.SetStateAction<boolean>>;
-  progressAccumulator?: React.MutableRefObject<S3UploadProgress>;
-}
-
-export interface WebSocketMessage {
-  type: string;
-  totalRows?: number;
-  processedRows?: number;
-  successfulRows?: number;
-  errors?: number;
-  notFound?: number;
-  status?: string;
-  processedDirectories?: number;
-  totalDirectories?: number;
-  currentDirectory?: string;
-  [key: string]: any;
+interface MessageProcessorProps {
+  updateTaskLog: (taskKey: string, log: LogEntry) => void;
+  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
+  setS3UploadProgress: React.Dispatch<React.SetStateAction<S3UploadProgress>>;
+  setIsConnected: React.Dispatch<React.SetStateAction<boolean>>;
+  progressAccumulator: React.MutableRefObject<S3UploadProgress>;
 }
 
 export const createWebSocketMessageProcessor = ({
@@ -32,68 +15,90 @@ export const createWebSocketMessageProcessor = ({
   setS3UploadProgress,
   setIsConnected,
   progressAccumulator,
-}: WebSocketProcessorProps) => {
-  return {
-    processMessage: (message: WebSocketMessage) => {
-      // --- 1. EXCEL PROCESSING (Mapped to 'uploadAndScript') ---
-      if (
-        message.type === "excelProcessingUpdate" ||
-        message.type === "excelProcessingComplete"
-      ) {
-        const isComplete = message.type === "excelProcessingComplete";
-        const total = message.totalRows || 0;
-        const current = message.processedRows || 0;
-        const progress = total > 0 ? Math.round((current / total) * 100) : 0;
+}: MessageProcessorProps) => {
+  const processMessage = (data: any) => {
+    if (!data || !data.type) return;
 
-        // 1. Update Global Status List
-        setUploadStatuses((prev: UploadStatus[]) => {
-          const others = prev.filter((s) => s.fileName !== "excel_processing");
-          return [
-            ...others,
-            {
-              fileName: "excel_processing",
-              progress,
-              status: isComplete ? "Done" : "Processing",
-              totalFiles: total,
-              processedFiles: current,
-              successfulFiles: message.successfulRows,
-              errorFiles: message.errors,
-              notFoundFiles: message.notFound,
-            },
-          ];
+    switch (data.type) {
+      // 1. [FIX] Handle Excel Progress Updates
+      case "excelProcessingUpdate":
+        updateTaskLog("upload-status", {
+          id: "upload-status",
+          status: "Processing",
+          totalRows: data.totalRows,
+          processedRows: data.processedRows,
+          successfulRows: data.successfulRows,
+          errors: data.errors,
+          notFound: data.notFound,
+          progress:
+            data.totalRows > 0
+              ? Math.round((data.processedRows / data.totalRows) * 100)
+              : 0,
+          message: `Processing Row ${data.processedRows} / ${data.totalRows}`,
         });
+        break;
 
-        // 2. Update Context (The specific task key is defined HERE, not in the UI)
-        updateTaskLog("uploadAndScript", {
-          id: "upload-status", // Standard ID for the active progress card
-          message: isComplete ? "Processing Complete" : "Transferring Files...",
-          status: isComplete ? "success" : "in-progress",
-          totalRows: total,
-          successfulRows: message.successfulRows || 0,
-          badRows: (message.errors || 0) + (message.notFound || 0),
-          notFoundFiles: message.notFound || 0,
-          progress: progress,
-          processedFiles: current,
+      // 2. Handle File Upload Status
+      case "uploadProgress":
+        setUploadStatuses((prev) => {
+          const newStatus: UploadStatus = {
+            fileName: data.fileName,
+            progress: data.progress,
+            status: "Uploading",
+          };
+          const index = prev.findIndex((f) => f.fileName === data.fileName);
+          if (index > -1) {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], ...newStatus };
+            return updated;
+          }
+          return [...prev, newStatus];
         });
-      }
+        break;
 
-      // --- 2. S3 UPLOAD LOGIC ---
-      if (
-        message.type === "s3UploadProgress" &&
-        setS3UploadProgress &&
-        progressAccumulator
-      ) {
-        progressAccumulator.current = {
-          processedDirectories: message.processedDirectories || 0,
-          totalDirectories: message.totalDirectories || 0,
-          currentDirectory: message.currentDirectory || "",
-        };
-      }
+      // 3. Handle Sanity Check Updates
+      case "sanityCheckUpdate":
+        updateTaskLog("sanityCheck", {
+          id: "sanityCheck",
+          status: "Running",
+          message: data.message,
+          progress: data.progress,
+          duplicates: data.duplicates,
+        });
+        break;
 
-      // --- 3. CONNECTION LOGIC ---
-      if (message.type === "connectionStatus" && setIsConnected) {
-        setIsConnected(message.status === "connected");
-      }
-    },
+      // 4. Handle S3 Upload Progress
+      case "s3UploadProgress":
+        if (data.payload) {
+          const { processedDirectories, totalDirectories, currentDirectory } =
+            data.payload;
+
+          // Update the accumulator ref
+          progressAccumulator.current = {
+            processedDirectories,
+            totalDirectories,
+            currentDirectory,
+          };
+
+          // Update React State
+          setS3UploadProgress({
+            processedDirectories,
+            totalDirectories,
+            currentDirectory,
+          });
+        }
+        break;
+
+      // 5. Connection Status
+      case "welcome":
+        setIsConnected(true);
+        break;
+
+      default:
+        // console.warn("Unknown message type:", data.type);
+        break;
+    }
   };
+
+  return { processMessage };
 };

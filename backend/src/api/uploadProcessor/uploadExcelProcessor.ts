@@ -25,7 +25,6 @@ export async function processExcelRows(
   getFileExtension: (filePath: string) => string,
   onProgress?: ProgressCallback
 ): Promise<ProcessExcelRowsResult> {
-  // 1. THE STORE (Memory is cheap)
   let totalRows = 0;
   let successfulRows = 0;
   let errors = 0;
@@ -35,23 +34,20 @@ export async function processExcelRows(
 
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
 
-  // 2. THE TIMER
-  let lastUpdate = Date.now();
-  const BATCH_INTERVAL_MS = 1000; // 1 Second (Best balance of speed vs efficiency)
-
-  console.log(
-    `[Batcher] Starting. Strategy: Update every ${BATCH_INTERVAL_MS}ms.`
-  );
+  // --- BATCHING SETUP ---
+  let lastUpdate = 0;
+  const BATCH_INTERVAL = 1000; // 1 Second Interval
 
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
+    // Skip empty rows or rows missing the Fund ID
     if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value)
       continue;
 
     totalRows++;
 
     try {
-      // ... (Data Extraction Logic kept identical) ...
+      // 1. Extract Data
       const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
       const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
       const serverId =
@@ -68,7 +64,7 @@ export async function processExcelRows(
       let found = false;
       let finalPath = pathVal;
 
-      // ... (File System Logic Tier 1 & 2 kept identical) ...
+      // 2. Search Logic - Tier 1: Local Files
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -79,6 +75,7 @@ export async function processExcelRows(
         srcPath = localBase;
         found = true;
       } else {
+        // Check extensions if exact match fails
         for (const ext of extensions) {
           if (
             await fs
@@ -94,13 +91,17 @@ export async function processExcelRows(
         }
       }
 
+      // 3. Search Logic - Tier 2: SMB/Network Paths
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
           .replace(/^(\.\.[\/\\])+/, "");
+
+        // Handle path substitutions
         if (smb.includes("image")) smb = smb.replace(/image/g, drivePath);
         else if (smb.includes("common"))
           smb = smb.replace(/common/g, drivePath);
+
         if (
           await fs
             .access(smb)
@@ -112,6 +113,7 @@ export async function processExcelRows(
         }
       }
 
+      // 4. File Operation
       if (found) {
         const dest = await buildDestinationFilePath(
           trnMapped,
@@ -121,8 +123,6 @@ export async function processExcelRows(
           rowNumber
         );
         await fs.writeFile(dest, await fs.readFile(srcPath));
-
-        // [STORE] Increment counters (Cheap)
         successfulRows++;
         processedRows.push({
           id_fund: fund,
@@ -133,7 +133,6 @@ export async function processExcelRows(
           page_count: "Saved",
         });
       } else {
-        // [STORE] Increment counters (Cheap)
         notFound++;
         processedRows.push({
           id_fund: fund,
@@ -145,10 +144,9 @@ export async function processExcelRows(
         });
       }
 
-      // 3. THE RELEASE (The Gatekeeper)
+      // 5. [FIX] Batched Progress Update
       const now = Date.now();
-      if (onProgress && now - lastUpdate >= BATCH_INTERVAL_MS) {
-        // Only sends 1 message per second, regardless of how fast rows are processed
+      if (onProgress && now - lastUpdate >= BATCH_INTERVAL) {
         onProgress({
           totalRows: actualTotalRows,
           processedRows: totalRows,
@@ -164,8 +162,8 @@ export async function processExcelRows(
     }
   }
 
-  // Final Release (Always ensure 100% is sent at the end)
-  if (onProgress)
+  // 6. Final Completion Update (Always runs)
+  if (onProgress) {
     onProgress({
       totalRows: actualTotalRows,
       processedRows: totalRows,
@@ -173,6 +171,7 @@ export async function processExcelRows(
       errors,
       notFound,
     });
+  }
 
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }
