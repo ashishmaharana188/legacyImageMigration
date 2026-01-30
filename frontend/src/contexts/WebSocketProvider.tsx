@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo, ReactNode } from "react";
 import { S3UploadProgress } from "../types";
 import { WebSocketContext } from "./WebSocketContextDefinition";
-// [FIX] Correct Import Path (No longer using hooks/useTaskLog)
+// [CRITICAL] Ensure this points to the unified file
 import { useTaskLog } from "./TaskLogContext";
 import { webSocketService } from "../services/webSocketService";
 import { createWebSocketMessageProcessor } from "../services/webSocketMessageProcessor";
