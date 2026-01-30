@@ -1,13 +1,13 @@
 import { SanityCheckResponse } from "../api/dataClean/sanityCheckType";
 
-// 1. Define the specific shape for Split Summary
+// 1. Split Summary
 export interface SplitSummary {
   totalSplitFilesGenerated: number;
   splitErrors: number;
   totalExpectedPagesFromCsv: number;
 }
 
-// 2. Define generic Upload Status
+// 2. Upload Status
 export interface UploadStatus {
   fileName: string;
   progress: number;
@@ -22,53 +22,36 @@ export interface UploadStatus {
   errorMessage?: string;
 }
 
-// 3. A Single, Flexible LogEntry Interface
+// 3. Log Entry
 export interface LogEntry {
-  // Common Fields
   id?: string;
   message?: string;
   status?: string;
   timestamp?: number;
   fileName?: string;
-
-  // Split Processor Specifics
   splitSummary?: SplitSummary;
-
-  // Upload/Excel Specifics
   progress?: number;
   totalFiles?: number;
   processedFiles?: number;
   successfulFiles?: number;
   errorFiles?: number;
   notFoundFiles?: number;
-
-  // Execution Summary (SQL/Mongo)
   totalRows?: number;
   successfulRows?: number;
   badRows?: number;
   badRowsFilePath?: string;
-
-  // Mongo Specifics
   transferredCount?: number;
   documents?: any[];
   updatedCount?: number;
   updatedDocuments?: any[];
-
-  // Folio/Transaction Updates
   updatedFolioRows?: number;
   updatedTransactionRows?: number;
-
-  // Sanity Check
   dryRun?: boolean;
   duplicates?: any[];
-
-  // File Details
   originalFile?: string;
   processedFile?: string;
   fileUrls?: Array<{ row: number; pageCount: number }>;
   downloadUrl?: string;
-
-  // Index signature
   [key: string]: any;
 }
 
@@ -78,10 +61,11 @@ export interface S3UploadProgress {
   currentDirectory: string;
 }
 
-// [FIX] Added activeProgress to the Context Type Definition
+// 4. [CRITICAL] Context Definition with activeProgress
 export interface TaskLogContextType {
   taskLogs: { [key: string]: LogEntry[] };
   uploadStatuses: UploadStatus[];
+  // The Fast Lane
   activeProgress: {
     total: number;
     success: number;
