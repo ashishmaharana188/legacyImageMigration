@@ -1,13 +1,9 @@
 import React, { useState } from "react";
-// 1. Upload Logic
 import {
   UploadProcessDisplay,
   BadRowsDetailsTable,
 } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
-
-// 2. Split Logic
 import { SplitProcessDisplay } from "../../api/splitProcessor/splitProcessorSummaryUI";
-
 import SanityCheckSummaryDisplay from "../../api/dataClean/sanityCheckSummaryUI";
 import { LogEntry } from "../../types/index";
 
@@ -26,60 +22,42 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
   parsedBadRows,
   toggleBadRowsDisplay,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-
-  const toggleExpansion = () => {
-    setIsExpanded(!isExpanded);
-  };
-
   const renderContent = () => {
     if (typeof log === "string") return <div>{log}</div>;
 
-    // --- CASE 1: EXCEL UPLOAD & ITERATIVE TRANSFER ---
-    // Combined checks for the fileName used by the sidebar and the ID used by the task log
-    if (
-      (log.fileName === "excel_processing" || log.id === "upload-status") &&
-      log.totalRows !== undefined
-    ) {
+    // Force progress view for the upload-status ID
+    if (log.id === "upload-status" || log.fileName === "excel_processing") {
       return (
         <UploadProcessDisplay
-          title={`Excel File Transfer Progress`}
-          progress={log.progress}
-          total={log.totalRows}
-          // Fallback to calculated processed count if the specific field isn't in the log
+          title="Excel File Transfer Progress"
+          progress={log.progress || 0}
+          total={log.totalRows || 0}
           processed={
-            log.processedFiles ?? (log.successfulRows || 0) + (log.badRows || 0)
+            log.processedFiles || (log.successfulRows || 0) + (log.badRows || 0)
           }
-          successful={log.successfulRows}
+          successful={log.successfulRows || 0}
           errors={log.badRows || 0}
           notFound={log.notFoundFiles || 0}
           unit="rows"
         />
       );
-    }
-
-    // --- CASE 2: SPLIT PROCESSOR ---
-    else if (log.splitSummary) {
+    } else if (log.splitSummary) {
       const total = log.splitSummary.totalExpectedPagesFromCsv || 0;
       const success = log.splitSummary.totalSplitFilesGenerated || 0;
-      const errors = log.splitSummary.splitErrors || 0;
-      const progress =
-        total > 0 ? (success / total) * 100 : success > 0 ? 100 : 0;
-
+      const progress = total > 0 ? (success / total) * 100 : 0;
       return (
         <SplitProcessDisplay
           title="PDF Split Progress"
           progress={progress}
           total={total}
           successful={success}
-          errors={errors}
+          errors={log.splitSummary.splitErrors || 0}
         />
       );
-    }
-
-    // --- CASE 3: FINAL EXECUTION SUMMARY ---
-    // This handles the state once log.status becomes 'success' or 'failed'
-    else if (log.successfulRows !== undefined && log.totalRows !== undefined) {
+    } else if (
+      log.successfulRows !== undefined &&
+      log.totalRows !== undefined
+    ) {
       return (
         <div className="border-l-4 border-black pl-3 py-1">
           <h5 className="font-bold text-sm mb-1">Execution Summary:</h5>
@@ -95,60 +73,40 @@ const DetailsDisplayUI: React.FC<DetailsDisplayUIProps> = ({
               <span className="font-semibold">Failed:</span> {log.badRows ?? 0}
             </p>
           </div>
-
           {log.badRowsFilePath && (log.badRows || 0) > 0 && (
-            <>
-              <button
-                onClick={() =>
-                  toggleBadRowsDisplay(log.badRowsFilePath!, logKey)
-                }
-                className="mt-2 px-3 py-1 text-xs font-medium text-white bg-black rounded hover:bg-gray-800 transition-colors"
-              >
-                {expandedLogId === logKey
-                  ? "Hide Error Details"
-                  : "Show Error Details"}
-              </button>
-              {expandedLogId === logKey && parsedBadRows && (
-                <BadRowsDetailsTable parsedBadRows={parsedBadRows} />
-              )}
-            </>
+            <button
+              onClick={() => toggleBadRowsDisplay(log.badRowsFilePath!, logKey)}
+              className="mt-2 px-3 py-1 text-xs font-medium text-white bg-black rounded hover:bg-gray-800 transition-colors"
+            >
+              {expandedLogId === logKey
+                ? "Hide Error Details"
+                : "Show Error Details"}
+            </button>
+          )}
+          {expandedLogId === logKey && parsedBadRows && (
+            <BadRowsDetailsTable parsedBadRows={parsedBadRows} />
           )}
         </div>
       );
-    }
-
-    // --- CASE 4: SANITY CHECKS ---
-    else if (
-      log.dryRun !== undefined ||
-      (log.duplicates && Array.isArray(log.duplicates))
-    ) {
-      return <SanityCheckSummaryDisplay log={log} logKey={logKey} />;
-    }
-
-    // --- CASE 5: STANDARD MESSAGE (FALLBACK) ---
-    else if (log.message) {
-      const isPending = log.status === "in-progress";
+    } else if (log.message) {
       const statusColor =
         log.status === "success"
           ? "text-green-600"
           : log.status === "failed"
           ? "text-red-600"
           : "text-black";
-
       return (
-        <div
-          className={`${statusColor} font-bold text-base flex items-center gap-2`}
-        >
+        <div className={`${statusColor} font-bold text-base`}>
           {log.message}
-          {isPending && <span className="animate-pulse">...</span>}
+          {log.status === "in-progress" && "..."}
         </div>
       );
     }
 
     return (
-      <div className="text-xs text-gray-400 font-mono p-2 bg-gray-50 rounded">
+      <pre className="text-xs text-gray-400">
         {JSON.stringify(log, null, 2)}
-      </div>
+      </pre>
     );
   };
 

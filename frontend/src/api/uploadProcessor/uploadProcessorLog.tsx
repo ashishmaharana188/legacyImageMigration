@@ -9,7 +9,7 @@ type UpdateTaskLogFunction = (task: string, log: unknown) => void;
 const LOG_KEY = "excel_processing";
 
 export const logUploadStart = (
-  updateTaskLog: UpdateTaskLogFunction,
+  updateTaskLog: (task: string, log: any) => void,
   operationName: string,
   logId: string
 ) => {
@@ -17,6 +17,12 @@ export const logUploadStart = (
     id: logId,
     message: `${operationName}...`,
     status: "in-progress",
+    totalRows: 0,
+    successfulRows: 0,
+    badRows: 0,
+    progress: 0,
+    processedFiles: 0,
+    notFoundFiles: 0,
   });
 };
 

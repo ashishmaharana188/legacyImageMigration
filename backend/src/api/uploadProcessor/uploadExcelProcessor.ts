@@ -55,13 +55,13 @@ export async function processExcelRows(
       const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
       const trxnTypeRaw =
         row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
+      const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
       const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
 
       let srcPath = "";
       let found = false;
       let finalPath = pathVal;
 
-      // Tier 1: Local Check
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -87,7 +87,6 @@ export async function processExcelRows(
         }
       }
 
-      // Tier 2: Network / SMB Check
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
@@ -115,28 +114,27 @@ export async function processExcelRows(
           rowNumber
         );
         await fs.writeFile(dest, await fs.readFile(srcPath));
-        successfulRows++; //
+        successfulRows++;
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
           id_ihno: ihNo,
           id_path: finalPath,
-          id_acno: "",
+          id_acno: acNo,
           page_count: "Saved",
         });
       } else {
-        notFound++; //
+        notFound++;
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
           id_ihno: ihNo,
           id_path: pathVal,
-          id_acno: "",
+          id_acno: acNo,
           page_count: "Not Found",
         });
       }
 
-      // Throttled WebSocket Broadcast (10s interval)
       const now = Date.now();
       if (onProgress && now - lastUpdate >= 10000) {
         onProgress({
