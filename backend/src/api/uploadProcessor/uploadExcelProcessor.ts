@@ -30,15 +30,14 @@ export async function processExcelRows(
   let errors = 0;
   let notFound = 0;
   const processedRows: ProcessedRow[] = [];
-  const lastRow = worksheet.rowCount;
-  const actualTotalRows = lastRow - 1;
+  const actualTotalRows = worksheet.rowCount - 1;
 
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
   let lastUpdate = Date.now();
 
-  console.log(`Processing Excel: ${actualTotalRows} rows found.`);
+  console.log(`[DEBUG-LOOP] Starting processing for ${actualTotalRows} rows.`); // <--- TRACE
 
-  for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
+  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
     if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value)
       continue;
@@ -140,6 +139,9 @@ export async function processExcelRows(
       // Throttled Broadcast (10 seconds)
       const now = Date.now();
       if (onProgress && now - lastUpdate >= 10000) {
+        console.log(
+          `[DEBUG-LOOP] Interval Hit. Sending stats -> Success: ${successfulRows}, NotFound: ${notFound}`
+        ); // <--- TRACE
         onProgress({
           totalRows: actualTotalRows,
           processedRows: totalRows,
@@ -155,6 +157,9 @@ export async function processExcelRows(
     }
   }
 
+  console.log(
+    `[DEBUG-LOOP] Processing Complete. Final Success: ${successfulRows}`
+  ); // <--- TRACE
   if (onProgress)
     onProgress({
       totalRows: actualTotalRows,

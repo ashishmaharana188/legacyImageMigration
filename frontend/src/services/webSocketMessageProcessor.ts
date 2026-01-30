@@ -9,6 +9,12 @@ export const createWebSocketMessageProcessor = ({
 }) => {
   return {
     processMessage: (message: any) => {
+      // --- DEBUGGING BLOCK ---
+      if (message.type === "excelProcessingUpdate") {
+        console.log("[DEBUG-FRONTEND-WS] Update Received:", message);
+      }
+      // ---------------------
+
       if (
         message.type === "excelProcessingUpdate" ||
         message.type === "excelProcessingComplete"
@@ -18,7 +24,6 @@ export const createWebSocketMessageProcessor = ({
         const current = message.processedRows || 0;
         const progress = total > 0 ? Math.round((current / total) * 100) : 0;
 
-        // A. Update Sidebar Progress Bar
         setUploadStatuses((prev: UploadStatus[]) => {
           const others = prev.filter((s) => s.fileName !== "excel_processing");
           return [
@@ -36,14 +41,14 @@ export const createWebSocketMessageProcessor = ({
           ];
         });
 
-        // B. Update Live Execution Summary Log
+        // This calls the Context Updater
         updateTaskLog("uploadAndScript", {
-          id: "upload-status", // Aligns with ID set in uploadProcessorUtil.tsx
+          id: "upload-status",
           message: isComplete ? "Processing Complete" : "Transferring Files...",
           status: isComplete ? "success" : "in-progress",
           totalRows: total,
           successfulRows: message.successfulRows || 0,
-          badRows: (message.errors || 0) + (message.notFound || 0), // Combines missing + system errors
+          badRows: (message.errors || 0) + (message.notFound || 0),
           progress,
           processedFiles: current,
           notFoundFiles: message.notFound || 0,

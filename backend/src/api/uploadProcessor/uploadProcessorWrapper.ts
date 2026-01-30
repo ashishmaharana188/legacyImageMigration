@@ -33,14 +33,19 @@ export async function processExcelFile(
   const getFileExtension = (filePath: string) =>
     path.extname(filePath).toLowerCase();
 
-  // PASSING ONPROGRESS TO THE PROCESSOR
+  // DEBUG: Confirm wrapper received the callback
+  if (onProgress)
+    console.log(
+      "[DEBUG-WRAPPER] Callback function received and being passed to Processor."
+    );
+
   const result = await processExcelRows(
     worksheet,
     headerIndices,
     trxnMap,
     logger as any,
     getFileExtension,
-    onProgress
+    onProgress // <--- CRITICAL: MUST BE PASSED
   );
 
   const outputFileName = await createProcessedExcelFile(

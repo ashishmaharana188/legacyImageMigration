@@ -10,14 +10,25 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
 
   const updateTaskLog = (taskKey: string, log: LogEntry) => {
     if (!log) return;
+
     setTaskLogs((prevLogs) => {
       const currentTaskLogs = prevLogs[taskKey] || [];
+
+      // LOG THE UPDATE ATTEMPT
+      if (log.id === "upload-status") {
+        console.log(
+          "[DEBUG-STATE] Updating 'upload-status'. New Success Count:",
+          (log as any).successfulRows
+        );
+      }
+
       if (typeof log === "object" && log !== null && "id" in log) {
         const existingIndex = currentTaskLogs.findIndex(
           (item: any) => item.id === (log as any).id
         );
+
         if (existingIndex > -1) {
-          // Create new array + new object reference
+          // IMMUTABILITY FIX: Create NEW Array + NEW Object
           const updatedLogs = [...currentTaskLogs];
           updatedLogs[existingIndex] = {
             ...updatedLogs[existingIndex],
@@ -25,6 +36,7 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
           };
           return { ...prevLogs, [taskKey]: updatedLogs };
         }
+
         return { ...prevLogs, [taskKey]: [...currentTaskLogs, log] };
       }
       return { ...prevLogs, [taskKey]: [...currentTaskLogs, log] };
@@ -46,7 +58,7 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
         uploadStatuses,
         updateTaskLog,
         onClearLogs,
-        setSummaryData: setTaskLogs,
+        setSummaryData: setTaskLogs, // Alias
         setUploadStatuses,
       }}
     >

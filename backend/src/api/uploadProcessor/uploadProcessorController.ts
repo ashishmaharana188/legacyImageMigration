@@ -7,7 +7,23 @@ class UploadProcessorController {
       if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
       const onProgress = (stats: any) => {
+        // --- DEBUGGING BLOCK ---
         const wss = req.app.get("wss");
+        const clientCount = wss ? wss.clients.size : 0;
+        console.log(
+          `[DEBUG-CONTROLLER] Callback Triggered. Success: ${
+            stats.successfulRows
+          }. WSS Available: ${!!wss}. Clients: ${clientCount}`
+        );
+
+        if (!wss) {
+          console.error(
+            "[DEBUG-CRITICAL] WSS is UNDEFINED. Check server.ts/app.ts setup!"
+          );
+          return;
+        }
+        // ---------------------
+
         if (wss) {
           const message = {
             type: "excelProcessingUpdate",
