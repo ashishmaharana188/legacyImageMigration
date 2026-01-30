@@ -10,19 +10,14 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
 
   const updateTaskLog = (taskKey: string, log: LogEntry) => {
     if (!log) return;
-
     setTaskLogs((prevLogs) => {
-      // 1. Get current logs or empty array
       const currentTaskLogs = prevLogs[taskKey] || [];
-
-      // 2. If log has an ID, find and update immutably
       if (typeof log === "object" && log !== null && "id" in log) {
         const existingIndex = currentTaskLogs.findIndex(
           (item: any) => item.id === (log as any).id
         );
-
         if (existingIndex > -1) {
-          // CLONING: Create a new array and new object reference to trigger UI re-render
+          // Create new array + new object reference
           const updatedLogs = [...currentTaskLogs];
           updatedLogs[existingIndex] = {
             ...updatedLogs[existingIndex],
@@ -30,12 +25,8 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
           };
           return { ...prevLogs, [taskKey]: updatedLogs };
         }
-
-        // New log entry with ID
         return { ...prevLogs, [taskKey]: [...currentTaskLogs, log] };
       }
-
-      // 3. Fallback for non-ID logs (append new entry)
       return { ...prevLogs, [taskKey]: [...currentTaskLogs, log] };
     });
   };
