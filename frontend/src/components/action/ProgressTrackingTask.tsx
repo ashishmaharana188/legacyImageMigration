@@ -1,13 +1,11 @@
-import React, { useMemo } from "react";
-import { useUploadProgressSummary } from "../../api/uploadProcessor/uploadProcessorHook";
-import { UploadProcessDisplay } from "../../api/uploadProcessor/uploadProcessorSummaryUI";
-import { SplitProcessDisplay } from "../../api/splitProcessor/splitProcessorSummaryUI";
-import { UploadStatus, SplitSummary } from "../../types/index";
+import React from "react";
+import { UploadStatus, LogEntry } from "../../types/index";
+import ProgressTrackingUI from "../ui/ProgressTrackingUI";
 
 interface ProgressTrackingTaskProps {
   uploadStatuses: UploadStatus[];
-  taskLogs: { [key: string]: any[] };
-  taskName: string; // <--- FIX: This is key to preventing duplication
+  taskLogs: { [key: string]: LogEntry[] };
+  taskName: string;
 }
 
 const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
@@ -15,73 +13,74 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
   taskLogs,
   taskName,
 }) => {
-  const { excelProcessingStatus, s3UploadStatus } = useUploadProgressSummary({
-    uploadStatuses,
-    taskLogs,
-  });
+  // 1. Get the logs specifically for this task (e.g., "uploadAndScript")
+  const currentLogs = taskLogs[taskName] || [];
 
-  const splitSummary = useMemo((): SplitSummary | null => {
-    const statusObj = uploadStatuses.find(
-      (s) => s.fileName === "splitting_progress"
+  // 2. PRIORITY CHECK: Look for the specific 'upload-status' ID
+  // This is the exact ID your WebSocket and Backend are updating.
+  const liveLog = currentLogs.find((log) => log.id === "upload-status");
+
+  // 3. If we find that log and it has data, RENDER IT immediately.
+  if (
+    liveLog &&
+    typeof liveLog.totalRows === "number" &&
+    liveLog.totalRows > 0
+  ) {
+    const total = liveLog.totalRows;
+    const success = liveLog.successfulRows || 0;
+    const errors = liveLog.badRows || 0;
+    const notFound = liveLog.notFoundFiles || 0;
+
+    // We calculate processed as the sum of outcomes to ensure sync
+    const processed = success + errors;
+
+    // Calculate percentage, guarding against divide-by-zero
+    const progress = total > 0 ? Math.round((processed / total) * 100) : 0;
+
+    return (
+      <ProgressTrackingUI
+        title="Excel Processing Progress"
+        progress={progress}
+        total={total}
+        processed={processed}
+        successful={success}
+        errors={errors} // This combines 'errors' + 'notFound' usually, or separate if UI supports it
+        notFound={notFound}
+        displayType="aggregate"
+        unit="rows"
+      />
     );
-    if (statusObj?.splitSummary) return statusObj.splitSummary;
-    return null;
-  }, [uploadStatuses]);
+  }
 
-  const getSplitProgress = () => {
-    if (!splitSummary) return 0;
-    const total = splitSummary.totalExpectedPagesFromCsv || 0;
-    const current = splitSummary.totalSplitFilesGenerated || 0;
-    return total > 0 ? (current / total) * 100 : 0;
-  };
+  // 4. SECONDARY CHECK: Split Processor Logic (for PDF splitting task)
+  if (taskName === "splitFiles") {
+    const splitLog = currentLogs.find((l) => l.splitSummary);
+    if (splitLog && splitLog.splitSummary) {
+      const total = splitLog.splitSummary.totalExpectedPagesFromCsv || 0;
+      const success = splitLog.splitSummary.totalSplitFilesGenerated || 0;
+      const errors = splitLog.splitSummary.splitErrors || 0;
+      const currentProcessed = success + errors;
 
-  const isUploadTask = taskName === "uploadAndScript";
-  const isSplitTask = taskName === "splitFiles";
+      const progress =
+        total > 0 ? Math.round((currentProcessed / total) * 100) : 0;
 
-  return (
-    <div>
-      {/* FIX: Only show Upload bars if we are in the Upload card */}
-      {isUploadTask && (
-        <>
-          {s3UploadStatus && (
-            <UploadProcessDisplay
-              title="S3 Upload Progress"
-              progress={s3UploadStatus.progress}
-              total={s3UploadStatus.totalFiles}
-              processed={s3UploadStatus.processedFiles}
-              successful={0}
-              errors={0}
-              notFound={0}
-              unit="directories"
-            />
-          )}
-
-          {excelProcessingStatus && (
-            <UploadProcessDisplay
-              title="Excel Processing Progress"
-              progress={excelProcessingStatus.progress}
-              total={excelProcessingStatus.totalFiles}
-              processed={excelProcessingStatus.processedFiles}
-              successful={excelProcessingStatus.successfulFiles}
-              notFound={excelProcessingStatus.notFoundFiles}
-              errors={excelProcessingStatus.errorFiles}
-            />
-          )}
-        </>
-      )}
-
-      {/* FIX: Only show Split bar if we are in the Split card */}
-      {isSplitTask && splitSummary && (
-        <SplitProcessDisplay
-          title="File Splitting Progress"
-          progress={getSplitProgress()}
-          total={splitSummary.totalExpectedPagesFromCsv}
-          successful={splitSummary.totalSplitFilesGenerated}
-          errors={splitSummary.splitErrors}
+      return (
+        <ProgressTrackingUI
+          title="PDF Split Progress"
+          progress={progress}
+          total={total}
+          processed={currentProcessed}
+          successful={success}
+          errors={errors}
+          displayType="aggregate"
+          unit="pages"
         />
-      )}
-    </div>
-  );
+      );
+    }
+  }
+
+  // 5. Default: If no relevant logs found, render nothing to keep UI clean
+  return null;
 };
 
 export default ProgressTrackingTask;
