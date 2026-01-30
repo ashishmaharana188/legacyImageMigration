@@ -11,13 +11,26 @@ const initConfiguration = async () => {
     API_BASE_URL = response.data.apiBaseUrl;
     // If frontendUrl is needed elsewhere in the service, you can store it here as well.
     // For now, we'll just log it if it's present.
-    if (response.data.frontendUrl) {
-      console.log(`Frontend URL from config: ${response.data.frontendUrl}`);
+    if (response.data.apiBaseUrl) {
+      API_BASE_URL = response.data.apiBaseUrl;
+      console.log(`[Config] Frontend using API_BASE_URL: ${API_BASE_URL}`);
+    } else {
+      console.warn(
+        "[Config] Backend returned empty URL. Keeping default: http://localhost:3000"
+      );
     }
-    console.log(`Frontend using API_BASE_URL: ${API_BASE_URL}`);
+
+    if (response.data.frontendUrl) {
+      console.log(
+        `[Config] Frontend URL from config: ${response.data.frontendUrl}`
+      );
+    }
   } catch (error) {
-    console.error("Failed to fetch configuration:", error);
-    // Fallback or error handling if config cannot be loaded
+    // 3. ON FAILURE: Log it, but keep the default URL so the app still works locally
+    console.error(
+      "Failed to fetch configuration. Using default localhost:3000.",
+      error
+    );
   }
 };
 
