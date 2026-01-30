@@ -12,32 +12,29 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
   taskLogs,
   taskName,
 }) => {
+  // 1. Get logs for THIS task (generic)
   const currentLogs = taskLogs[taskName] || [];
 
-  // Find the exact log the backend is sending
-  const liveLog = currentLogs.find((log) => log.id === "upload-status");
+  // 2. DETECT: Is there an Excel-style progress log?
+  const uploadLog = currentLogs.find((log) => log.id === "upload-status");
 
-  if (liveLog) {
-    // Force convert to numbers to prevent any string/JSON issues
-    const total = Number(liveLog.totalRows || 0);
-    const success = Number(liveLog.successfulRows || 0);
-    const errors = Number(liveLog.badRows || 0);
-    const notFound = Number(liveLog.notFoundFiles || 0);
-    const processed = success + errors;
+  // 3. DETECT: Is there a Split-style progress log?
+  const splitLog = currentLogs.find((log) => log.splitSummary);
+
+  // --- RENDER EXCEL PROGRESS ---
+  if (uploadLog) {
+    const total = Number(uploadLog.totalRows || 0);
+    const success = Number(uploadLog.successfulRows || 0);
+    const errors = Number(uploadLog.badRows || 0);
+    const notFound = Number(uploadLog.notFoundFiles || 0);
 
     if (total > 0) {
-      // Calculate progress
+      const processed = success + errors;
       const progress = Math.round((processed / total) * 100);
-
-      // [DEBUG] If you see this, the bar IS rendering on screen
-      if (processed % 5 === 0) {
-        // Log occasionally to avoid spam
-        console.log(`[UI-RENDER] ${progress}% - ${processed}/${total}`);
-      }
 
       return (
         <ProgressTrackingUI
-          title="Excel Processing Progress"
+          title="Excel File Transfer Progress"
           progress={progress}
           total={total}
           processed={processed}
@@ -46,6 +43,31 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
           notFound={notFound}
           displayType="aggregate"
           unit="rows"
+        />
+      );
+    }
+  }
+
+  // --- RENDER SPLIT PROGRESS ---
+  if (splitLog && splitLog.splitSummary) {
+    const total = Number(splitLog.splitSummary.totalExpectedPagesFromCsv || 0);
+    const success = Number(splitLog.splitSummary.totalSplitFilesGenerated || 0);
+    const errors = Number(splitLog.splitSummary.splitErrors || 0);
+
+    if (total > 0) {
+      const currentProcessed = success + errors;
+      const progress = Math.round((currentProcessed / total) * 100);
+
+      return (
+        <ProgressTrackingUI
+          title="PDF Split Progress"
+          progress={progress}
+          total={total}
+          processed={currentProcessed}
+          successful={success}
+          errors={errors}
+          displayType="aggregate"
+          unit="pages"
         />
       );
     }

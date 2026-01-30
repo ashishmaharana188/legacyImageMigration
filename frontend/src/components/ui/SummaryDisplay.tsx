@@ -14,13 +14,6 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   uploadStatuses,
   onClearLogs,
 }) => {
-  // [DEBUG] Check if this component is even receiving data
-  const uploadLogs = taskLogs["uploadAndScript"];
-  if (uploadLogs) {
-    const live = uploadLogs.find((l) => l.id === "upload-status");
-    if (live) console.log("[DEBUG-SUMMARY] Rendering with Live Data:", live);
-  }
-
   return (
     <div className="mt-4 text-black h-full flex flex-col font-sans">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
@@ -38,14 +31,16 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
                 Clear
               </button>
             </div>
+
             <div className="bg-white p-3 rounded shadow-sm border border-gray-300">
-              {/* Force Render Progress Bar */}
+              {/* Generic: Pass the specific logs for this task */}
               <ProgressTrackingTask
                 uploadStatuses={uploadStatuses}
                 taskLogs={taskLogs}
                 taskName={task}
               />
 
+              {/* Generic: List the details */}
               {task !== "splitFiles" &&
                 logsArray.map((logItem, index) => (
                   <div

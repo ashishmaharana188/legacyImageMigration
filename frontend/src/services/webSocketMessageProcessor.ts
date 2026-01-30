@@ -4,7 +4,6 @@ import {
   S3UploadProgress,
 } from "../types/index";
 
-// Define the expected props interface strictly
 interface WebSocketProcessorProps {
   updateTaskLog: TaskLogContextType["updateTaskLog"];
   setUploadStatuses: TaskLogContextType["setUploadStatuses"];
@@ -36,7 +35,7 @@ export const createWebSocketMessageProcessor = ({
 }: WebSocketProcessorProps) => {
   return {
     processMessage: (message: WebSocketMessage) => {
-      // 1. EXCEL UPLOAD LOGIC
+      // --- 1. EXCEL PROCESSING (Mapped to 'uploadAndScript') ---
       if (
         message.type === "excelProcessingUpdate" ||
         message.type === "excelProcessingComplete"
@@ -46,7 +45,7 @@ export const createWebSocketMessageProcessor = ({
         const current = message.processedRows || 0;
         const progress = total > 0 ? Math.round((current / total) * 100) : 0;
 
-        // Update Sidebar/Status list
+        // 1. Update Global Status List
         setUploadStatuses((prev: UploadStatus[]) => {
           const others = prev.filter((s) => s.fileName !== "excel_processing");
           return [
@@ -64,21 +63,21 @@ export const createWebSocketMessageProcessor = ({
           ];
         });
 
-        // Update the Context Log which the SummaryDisplay reads
+        // 2. Update Context (The specific task key is defined HERE, not in the UI)
         updateTaskLog("uploadAndScript", {
-          id: "upload-status", // MUST match the ID in ProgressTrackingTask.tsx
+          id: "upload-status", // Standard ID for the active progress card
           message: isComplete ? "Processing Complete" : "Transferring Files...",
           status: isComplete ? "success" : "in-progress",
           totalRows: total,
           successfulRows: message.successfulRows || 0,
-          badRows: (message.errors || 0) + (message.notFound || 0), // Aggregate bad rows
+          badRows: (message.errors || 0) + (message.notFound || 0),
           notFoundFiles: message.notFound || 0,
-          progress,
+          progress: progress,
           processedFiles: current,
         });
       }
 
-      // 2. S3 UPLOAD LOGIC
+      // --- 2. S3 UPLOAD LOGIC ---
       if (
         message.type === "s3UploadProgress" &&
         setS3UploadProgress &&
@@ -91,7 +90,7 @@ export const createWebSocketMessageProcessor = ({
         };
       }
 
-      // 3. CONNECTION STATUS LOGIC
+      // --- 3. CONNECTION LOGIC ---
       if (message.type === "connectionStatus" && setIsConnected) {
         setIsConnected(message.status === "connected");
       }
