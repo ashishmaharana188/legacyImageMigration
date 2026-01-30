@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import UploadProcessorUI from "../api/uploadProcessor/uploadProcessorUI";
-import { useTaskLog } from "../hooks/useTaskLog";
+// Import from the new unified context file
+import { useTaskLog } from "../contexts/TaskLogContext";
 import { useUploadProcessorHook } from "../api/uploadProcessor/uploadProcessorHook";
 
 function UploadProcessorComponent() {
@@ -32,7 +33,6 @@ function UploadProcessorComponent() {
   );
 }
 
-//tanstack setup
 export const Route = createFileRoute("/uploadProcessorRouter")({
   component: UploadProcessorComponent,
 });

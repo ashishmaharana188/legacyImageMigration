@@ -33,9 +33,11 @@ export async function processExcelRows(
   const actualTotalRows = worksheet.rowCount - 1;
 
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
+
+  // Initialize timer for interval updates
   let lastUpdate = Date.now();
 
-  console.log(`[DEBUG-LOOP] Starting processing for ${actualTotalRows} rows.`); // <--- TRACE
+  console.log(`[DEBUG-LOOP] Starting processing for ${actualTotalRows} rows.`);
 
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -136,12 +138,9 @@ export async function processExcelRows(
         });
       }
 
-      // Throttled Broadcast (10 seconds)
+      // Interval Check: Send update every 1000ms (1 second)
       const now = Date.now();
-      if (onProgress && now - lastUpdate >= 10000) {
-        console.log(
-          `[DEBUG-LOOP] Interval Hit. Sending stats -> Success: ${successfulRows}, NotFound: ${notFound}`
-        ); // <--- TRACE
+      if (onProgress && now - lastUpdate >= 1000) {
         onProgress({
           totalRows: actualTotalRows,
           processedRows: totalRows,
@@ -157,9 +156,7 @@ export async function processExcelRows(
     }
   }
 
-  console.log(
-    `[DEBUG-LOOP] Processing Complete. Final Success: ${successfulRows}`
-  ); // <--- TRACE
+  // Final Completion Update
   if (onProgress)
     onProgress({
       totalRows: actualTotalRows,

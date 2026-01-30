@@ -1,6 +1,4 @@
-import { UploadStatus } from '../../types';
-
-
+import { UploadStatus } from "../../types";
 
 export interface S3File {
   key: string;
@@ -55,7 +53,10 @@ export interface S3BrowserUIProps {
 export interface S3UploadUIProps {
   loading: boolean;
   handleUploadToS3: (localDir: string, prefix: string) => Promise<void>;
-  handleUploadSplitFilesToS3: (localDir: string, prefix: string) => Promise<void>;
+  handleUploadSplitFilesToS3: (
+    localDir: string,
+    prefix: string
+  ) => Promise<void>;
 }
 
 export interface S3UploadResponse {
@@ -66,8 +67,6 @@ export interface S3UploadResponse {
   error?: string;
   nextContinuationToken?: string;
 }
-
-
 
 export interface S3UploadSummaryUIProps {
   title: string;

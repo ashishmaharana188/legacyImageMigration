@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState, useMemo, ReactNode } from "react";
 import { S3UploadProgress } from "../types";
 import { WebSocketContext } from "./WebSocketContextDefinition";
-import { useTaskLog } from "../hooks/useTaskLog";
+// [FIX] Correct Import Path (No longer using hooks/useTaskLog)
+import { useTaskLog } from "./TaskLogContext";
 import { webSocketService } from "../services/webSocketService";
 import { createWebSocketMessageProcessor } from "../services/webSocketMessageProcessor";
 
@@ -9,7 +10,6 @@ interface WebSocketProviderProps {
   children: ReactNode;
 }
 
-// Ensure this is a named export
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
   children,
 }) => {
@@ -27,7 +27,6 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
     currentDirectory: "",
   });
 
-  // Stabilize the processor
   const { processMessage } = useMemo(
     () =>
       createWebSocketMessageProcessor({

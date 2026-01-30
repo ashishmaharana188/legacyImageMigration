@@ -1,23 +1,37 @@
 import React from "react";
-import { UploadStatus, LogEntry } from "../../types/index";
-import ProgressTrackingTask from "../../components/action/ProgressTrackingTask";
-import DetailsDisplayTask from "../../components/action/DetailsDisplayTask";
+// Import from the new unified context file
+import { useTaskLog } from "../../contexts/TaskLogContext";
+import ProgressTrackingUI from "../ui/ProgressTrackingUI";
+import DetailsDisplayTask from "../action/DetailsDisplayTask";
 
-export interface SummaryDisplayProps {
-  taskLogs: { [key: string]: LogEntry[] };
-  uploadStatuses: UploadStatus[];
-  onClearLogs: (taskKey: string) => void;
-}
+export const SummaryDisplay: React.FC = () => {
+  // Access the Interval State (activeProgress)
+  const { taskLogs, activeProgress, onClearLogs } = useTaskLog();
 
-export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
-  taskLogs,
-  uploadStatuses,
-  onClearLogs,
-}) => {
   return (
     <div className="mt-4 text-black h-full flex flex-col font-sans">
       <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
       <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30 shadow-inner">
+        {/* Render Interval Updates */}
+        {activeProgress.total > 0 && (
+          <div className="mb-4 bg-white p-3 rounded shadow-sm border border-gray-300">
+            <h4 className="font-bold uppercase text-xs text-gray-600 mb-2">
+              Live Upload
+            </h4>
+            <ProgressTrackingUI
+              title="Transfer Progress"
+              progress={activeProgress.percent}
+              total={activeProgress.total}
+              processed={activeProgress.success + activeProgress.failure}
+              successful={activeProgress.success}
+              errors={activeProgress.failure}
+              notFound={0}
+              displayType="aggregate"
+              unit="rows"
+            />
+          </div>
+        )}
+
         {Object.entries(taskLogs).map(([task, logsArray]) => (
           <div key={task} className="mb-4">
             <div className="flex items-center justify-between mb-2 px-1">
@@ -33,23 +47,18 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
             </div>
 
             <div className="bg-white p-3 rounded shadow-sm border border-gray-300">
-              {/* Generic: Pass the specific logs for this task */}
-              <ProgressTrackingTask
-                uploadStatuses={uploadStatuses}
-                taskLogs={taskLogs}
-                taskName={task}
-              />
-
-              {/* Generic: List the details */}
-              {task !== "splitFiles" &&
-                logsArray.map((logItem, index) => (
-                  <div
-                    key={logItem.id || `log-${index}`}
-                    className="mb-2 last:mb-0 border-t pt-2 first:border-0 first:pt-0"
-                  >
-                    <DetailsDisplayTask log={logItem} logKey={task} />
-                  </div>
-                ))}
+              {logsArray.map(
+                (logItem, index) =>
+                  // Filter out redundant status cards from the history list
+                  logItem.id !== "upload-status" && (
+                    <div
+                      key={logItem.id || `log-${index}`}
+                      className="mb-2 last:mb-0 border-t pt-2 first:border-0 first:pt-0"
+                    >
+                      <DetailsDisplayTask log={logItem} logKey={task} />
+                    </div>
+                  )
+              )}
             </div>
           </div>
         ))}

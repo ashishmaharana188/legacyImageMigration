@@ -1,16 +1,15 @@
 import React, { useState } from "react";
 import Sidebar from "./components/ui/Sidebar";
-import { SummaryDisplay } from "./components/ui/SummaryDisplay";
+import SummaryDisplay from "./components/ui/SummaryDisplay";
 import { PanelGroup, Panel, PanelResizeHandle } from "react-resizable-panels";
 import { Outlet } from "@tanstack/react-router";
 
-import { useTaskLog } from "./hooks/useTaskLog";
+// Import from the new unified context file
+import { useTaskLog } from "./contexts/TaskLogContext";
 
 const App: React.FC = () => {
   const [open, setOpen] = useState(false);
-
-  // Now this hook connects to the SAME context instance that receives WebSocket data
-  const { taskLogs, uploadStatuses, onClearLogs } = useTaskLog();
+  const { onClearLogs } = useTaskLog();
 
   const handleDrawerOpen = () => {
     setOpen(true);
@@ -34,12 +33,8 @@ const App: React.FC = () => {
       <PanelGroup direction="horizontal" className="flex-grow">
         <Panel defaultSize={67} minSize={10}>
           <div className="p-4 border-r border-gray-300 h-full overflow-y-auto">
-            {/* Now receiving data from Instance A (WebSocket) */}
-            <SummaryDisplay
-              taskLogs={taskLogs}
-              uploadStatuses={uploadStatuses}
-              onClearLogs={onClearLogs}
-            />
+            {/* Component now self-connects to context */}
+            <SummaryDisplay />
           </div>
         </Panel>
         <PanelResizeHandle className="w-2 h-250 bg-gray-300 hover:bg-gray-400 cursor-ew-resize" />

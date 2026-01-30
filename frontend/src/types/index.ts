@@ -10,8 +10,8 @@ export interface SplitSummary {
 // 2. Define generic Upload Status
 export interface UploadStatus {
   fileName: string;
-  progress: number; // FIXED: Removed '?' to make it required (must be 0-100)
-  status: string; // FIXED: Removed '?' to make it required
+  progress: number;
+  status: string;
   isDirectory?: boolean;
   totalFiles?: number;
   processedFiles?: number;
@@ -78,9 +78,16 @@ export interface S3UploadProgress {
   currentDirectory: string;
 }
 
+// [FIX] Added activeProgress to the Context Type Definition
 export interface TaskLogContextType {
   taskLogs: { [key: string]: LogEntry[] };
   uploadStatuses: UploadStatus[];
+  activeProgress: {
+    total: number;
+    success: number;
+    failure: number;
+    percent: number;
+  };
   updateTaskLog: (taskKey: string, log: LogEntry) => void;
   onClearLogs: (taskKey: string) => void;
   setSummaryData: React.Dispatch<
