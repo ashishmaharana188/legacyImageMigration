@@ -2,7 +2,7 @@ import dotenv from "dotenv";
 import os from "os";
 import path from "path";
 import fs from "fs";
-import { WebSocketServer } from "ws"; //
+import { WebSocketServer } from "ws";
 
 // --- Environment Variable Loading ---
 const isProduction = process.env.NODE_ENV === "production";
@@ -13,7 +13,6 @@ const envPath = path.join(userConfigDir, envFile);
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
   console.log(`Loading environment variables from: ${envPath}`);
-  // ... (keeping your existing logging)
 } else {
   console.warn(`Warning: Environment file not found at: ${envPath}`);
 }
@@ -30,16 +29,21 @@ import { startSshTunnel } from "./src/utils/tunnel";
 import { connectMongo, disconnectMongo } from "./src/utils/dbConnect";
 import { warmupPgPool } from "./src/utils/dbConnect";
 import { verifyS3Connection } from "./src/api/s3Processor/s3Manager";
-// import { initWebSocket } from "./src/utils/webSocketService"; // REMOVED: We will init manually
 
 import { Server } from "net";
 
 const app = express();
 const port = process.env.NODE_ENV === "production" ? 3000 : 3000;
 
+// [FIX] Sanitize the frontend URL to remove any trailing slashes
+// This ensures "http://localhost:5173/" in .env becomes "http://localhost:5173"
+// which matches the browser's Origin header exactly.
+const rawFrontendUrl = process.env.API_FRONTEND_URL || "http://localhost:5173";
+const frontendUrl = rawFrontendUrl.replace(/\/$/, "");
+
 app.use(
   cors({
-    origin: process.env.API_FRONTEND_URL || "http://localhost:5173",
+    origin: frontendUrl,
     credentials: true,
   })
 );
@@ -48,7 +52,7 @@ app.use(express.json());
 app.get("/config", (req, res) => {
   res.json({
     apiBaseUrl: process.env.APP_BASE_URL,
-    frontendUrl: process.env.API_FRONTEND_URL,
+    frontendUrl: frontendUrl,
   });
 });
 
@@ -94,11 +98,11 @@ const startServer = async () => {
   // 2. Initialize WebSocket Server attached to the HTTP instance
   const wss = new WebSocketServer({ server: expressServer });
 
-  // 3. CRITICAL FIX: Attach WSS to Express so Controllers can find it
+  // 3. Attach WSS to Express so Controllers can find it
   app.set("wss", wss);
   console.log("WebSocket Server initialized and attached to app.");
 
-  // Optional: Connection logging
+  // Connection logging
   wss.on("connection", (ws) => {
     console.log("[WS] Client connected.");
     ws.on("error", (err) => console.error("[WS] Error:", err));
