@@ -33,12 +33,10 @@ export async function processExcelRows(
   const lastRow = worksheet.rowCount;
   const actualTotalRows = lastRow - 1;
 
-  const possibleExtensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
-  let lastUpdateTime = Date.now();
-  const BROADCAST_INTERVAL = 10000;
+  const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
+  let lastUpdate = Date.now();
 
-  // Simple terminal start message
-  console.log(`Processing Excel: Reading ${actualTotalRows} rows...`);
+  console.log(`Processing ${actualTotalRows} rows...`);
 
   for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -57,97 +55,90 @@ export async function processExcelRows(
       const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
       const trxnTypeRaw =
         row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
+      const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
       const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
 
-      let sourceFilePath = "";
-      let foundFile = false;
-      let finalPathVal = pathVal;
+      let srcPath = "";
+      let found = false;
+      let finalPath = pathVal;
 
-      // Tier 1: Local Check
-      const localTrialPath = path.join(process.cwd(), "localFiles", pathVal);
+      // Tier 1: Local
+      const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
-          .access(localTrialPath)
+          .access(localBase)
           .then(() => true)
           .catch(() => false)
       ) {
-        sourceFilePath = localTrialPath;
-        foundFile = true;
+        srcPath = localBase;
+        found = true;
       } else {
-        for (const ext of possibleExtensions) {
-          const trial = localTrialPath + ext;
+        for (const ext of extensions) {
           if (
             await fs
-              .access(trial)
+              .access(localBase + ext)
               .then(() => true)
               .catch(() => false)
           ) {
-            sourceFilePath = trial;
-            finalPathVal = pathVal + ext;
-            foundFile = true;
+            srcPath = localBase + ext;
+            finalPath = pathVal + ext;
+            found = true;
             break;
           }
         }
       }
 
-      // Tier 2: Network Check (SMB)
-      if (!foundFile && serverId && pathVal) {
-        let smbPath = path
+      // Tier 2: SMB
+      if (!found && serverId && pathVal) {
+        let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
           .replace(/^(\.\.[\/\\])+/, "");
-        if (smbPath.includes("image"))
-          smbPath = smbPath.replace(/image/g, drivePath);
-        else if (smbPath.includes("common"))
-          smbPath = smbPath.replace(/common/g, drivePath);
-
+        if (smb.includes("image")) smb = smb.replace(/image/g, drivePath);
+        else if (smb.includes("common"))
+          smb = smb.replace(/common/g, drivePath);
         if (
           await fs
-            .access(smbPath)
+            .access(smb)
             .then(() => true)
             .catch(() => false)
         ) {
-          sourceFilePath = smbPath;
-          foundFile = true;
+          srcPath = smb;
+          found = true;
         }
       }
 
-      if (foundFile) {
-        const destinationFilePath = await buildDestinationFilePath(
+      if (found) {
+        const dest = await buildDestinationFilePath(
           trnMapped,
           fund,
           ihNo,
-          finalPathVal,
+          finalPath,
           rowNumber
         );
-        await fs.writeFile(
-          destinationFilePath,
-          await fs.readFile(sourceFilePath)
-        );
-        successfulRows++; // Iterative increment
-
+        await fs.writeFile(dest, await fs.readFile(srcPath));
+        successfulRows++;
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
           id_ihno: ihNo,
-          id_path: finalPathVal,
-          id_acno: row.getCell(headerIndices["id_acno"]).text?.trim() || "",
+          id_path: finalPath,
+          id_acno: acNo,
           page_count: "Saved",
         });
       } else {
-        notFound++; // Iterative increment
+        notFound++;
         processedRows.push({
           id_fund: fund,
-          id_path: pathVal,
-          id_ihno: ihNo,
           id_trtype: trnMapped,
-          id_acno: "",
+          id_ihno: ihNo,
+          id_path: pathVal,
+          id_acno: acNo,
           page_count: "Not Found",
         });
       }
 
-      // BROADCAST: Every 10 seconds for UI bar movement
-      const currentTime = Date.now();
-      if (onProgress && currentTime - lastUpdateTime >= BROADCAST_INTERVAL) {
+      // Throttled Update (10s)
+      if (onProgress && Date.now() - lastUpdate >= 10000) {
         onProgress({
           totalRows: actualTotalRows,
           processedRows: totalRows,
@@ -155,16 +146,13 @@ export async function processExcelRows(
           errors,
           notFound,
         });
-        lastUpdateTime = currentTime;
+        lastUpdate = Date.now();
       }
     } catch (err) {
       errors++;
       logger.error(`Row ${rowNumber} Error:`, err);
     }
   }
-
-  // Final terminal completion message
-  console.log(`Processing Complete.`);
 
   if (onProgress)
     onProgress({
@@ -174,6 +162,6 @@ export async function processExcelRows(
       errors,
       notFound,
     });
-
+  console.log(`Complete.`);
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }
