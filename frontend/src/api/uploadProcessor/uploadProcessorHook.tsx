@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import {
   handleFileChange as utilHandleFileChange,
   handleUpload as utilHandleUpload,
+  handleFallback as utilHandleFallback, // Import the utility function
 } from "./uploadProcessorUtil";
 import { webSocketService } from "../../services/webSocketService";
 import { UploadStatus } from "../../types/index";
@@ -23,8 +24,6 @@ export const useUploadProcessorHook = ({
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
   useEffect(() => {
-    // Note: The main logic is handled by WebSocketProvider via createWebSocketMessageProcessor.
-    // We listen here if specific UI-level side effects are needed.
     const handleMessage = (msg: any) => {
       if (msg.type === "excelProcessingComplete") {
         setUploadMessage("Processing Complete.");
@@ -54,6 +53,15 @@ export const useUploadProcessorHook = ({
         setIsUploading,
         setUploadStatuses
       ),
+    // FIX: Added missing handleFallback to the hook return
+    handleFallback: () =>
+      utilHandleFallback(
+        selectedFile,
+        updateTaskLog,
+        clearTaskLog,
+        setUploadMessage,
+        setLoading
+      ),
   };
 };
 
@@ -62,7 +70,6 @@ export const useUploadProgressSummary = ({
 }: {
   uploadStatuses: UploadStatus[];
 }) => {
-  // Finds the stable key used by the WebSocket message processor
   const excelProcessingStatus =
     uploadStatuses.find((s) => s.fileName === "excel_processing") || null;
   const s3UploadStatus =

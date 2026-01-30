@@ -3,7 +3,10 @@ import { TaskLogContextType, UploadStatus } from "../types/index";
 export const createWebSocketMessageProcessor = ({
   updateTaskLog,
   setUploadStatuses,
-}: any) => {
+}: {
+  updateTaskLog: TaskLogContextType["updateTaskLog"];
+  setUploadStatuses: TaskLogContextType["setUploadStatuses"];
+}) => {
   const processMessage = (message: any) => {
     if (
       message.type === "excelProcessingUpdate" ||
@@ -14,7 +17,7 @@ export const createWebSocketMessageProcessor = ({
       const current = message.processedRows || 0;
       const progress = total > 0 ? Math.round((current / total) * 100) : 0;
 
-      // Update Sidebar Bar
+      // 1. Update Sidebar Progress Bar
       setUploadStatuses((prev: UploadStatus[]) => {
         const others = prev.filter((s) => s.fileName !== "excel_processing");
         return [
@@ -32,14 +35,14 @@ export const createWebSocketMessageProcessor = ({
         ];
       });
 
-      // Update Live Execution Summary
+      // 2. Update Execution Summary Card Live
       updateTaskLog("uploadAndScript", {
-        id: "upload-status", // MUST MATCH uploadProcessorUtil.tsx
+        id: "upload-status", // MUST match the logId in uploadProcessorUtil.tsx
         message: isComplete ? "Processing Complete" : "Transferring Files...",
         status: isComplete ? "success" : "in-progress",
         totalRows: total,
         successfulRows: message.successfulRows || 0,
-        badRows: (message.errors || 0) + (message.notFound || 0),
+        badRows: (message.errors || 0) + (message.notFound || 0), // Combines missing + errors
       });
     }
   };

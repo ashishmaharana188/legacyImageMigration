@@ -36,7 +36,7 @@ export async function processExcelRows(
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
   let lastUpdate = Date.now();
 
-  console.log(`Processing ${actualTotalRows} rows...`);
+  console.log(`Processing Excel: Reading ${actualTotalRows} rows...`);
 
   for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -55,14 +55,13 @@ export async function processExcelRows(
       const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
       const trxnTypeRaw =
         row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-      const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
       const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
 
       let srcPath = "";
       let found = false;
       let finalPath = pathVal;
 
-      // Tier 1: Local
+      // Tier 1: Local Check
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -88,7 +87,7 @@ export async function processExcelRows(
         }
       }
 
-      // Tier 2: SMB
+      // Tier 2: Network / SMB Check
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
@@ -116,29 +115,30 @@ export async function processExcelRows(
           rowNumber
         );
         await fs.writeFile(dest, await fs.readFile(srcPath));
-        successfulRows++;
+        successfulRows++; //
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
           id_ihno: ihNo,
           id_path: finalPath,
-          id_acno: acNo,
+          id_acno: "",
           page_count: "Saved",
         });
       } else {
-        notFound++;
+        notFound++; //
         processedRows.push({
           id_fund: fund,
           id_trtype: trnMapped,
           id_ihno: ihNo,
           id_path: pathVal,
-          id_acno: acNo,
+          id_acno: "",
           page_count: "Not Found",
         });
       }
 
-      // Throttled Update (10s)
-      if (onProgress && Date.now() - lastUpdate >= 10000) {
+      // Throttled WebSocket Broadcast (10s interval)
+      const now = Date.now();
+      if (onProgress && now - lastUpdate >= 10000) {
         onProgress({
           totalRows: actualTotalRows,
           processedRows: totalRows,
@@ -146,7 +146,7 @@ export async function processExcelRows(
           errors,
           notFound,
         });
-        lastUpdate = Date.now();
+        lastUpdate = now;
       }
     } catch (err) {
       errors++;
@@ -154,6 +154,7 @@ export async function processExcelRows(
     }
   }
 
+  console.log(`Processing Complete.`);
   if (onProgress)
     onProgress({
       totalRows: actualTotalRows,
@@ -162,6 +163,6 @@ export async function processExcelRows(
       errors,
       notFound,
     });
-  console.log(`Complete.`);
+
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }
