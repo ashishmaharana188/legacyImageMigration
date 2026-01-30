@@ -14,8 +14,12 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
   uploadStatuses,
   onClearLogs,
 }) => {
-  // DIRECT RENDER: No local state, no useEffect.
-  // If Context updates, this component re-renders instantly.
+  // [DEBUG] Check if this component is even receiving data
+  const uploadLogs = taskLogs["uploadAndScript"];
+  if (uploadLogs) {
+    const live = uploadLogs.find((l) => l.id === "upload-status");
+    if (live) console.log("[DEBUG-SUMMARY] Rendering with Live Data:", live);
+  }
 
   return (
     <div className="mt-4 text-black h-full flex flex-col font-sans">
@@ -35,17 +39,17 @@ export const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
               </button>
             </div>
             <div className="bg-white p-3 rounded shadow-sm border border-gray-300">
-              {(task === "uploadAndScript" || task === "splitFiles") && (
-                <ProgressTrackingTask
-                  uploadStatuses={uploadStatuses}
-                  taskLogs={taskLogs}
-                  taskName={task}
-                />
-              )}
+              {/* Force Render Progress Bar */}
+              <ProgressTrackingTask
+                uploadStatuses={uploadStatuses}
+                taskLogs={taskLogs}
+                taskName={task}
+              />
+
               {task !== "splitFiles" &&
                 logsArray.map((logItem, index) => (
                   <div
-                    key={logItem.id || `log-${index}`} // Simple key
+                    key={logItem.id || `log-${index}`}
                     className="mb-2 last:mb-0 border-t pt-2 first:border-0 first:pt-0"
                   >
                     <DetailsDisplayTask log={logItem} logKey={task} />
