@@ -10,12 +10,12 @@ class UploadProcessorController {
         const wss = req.app.get("wss");
         if (wss) {
           const message = {
-            type: "excelProcessingUpdate", // Key used by frontend message processor
-            processedRows: stats.processedRows,
+            type: "excelProcessingUpdate",
             totalRows: stats.totalRows,
+            processedRows: stats.processedRows,
             successfulRows: stats.successfulRows,
-            errorRows: stats.errors,
-            notFoundRows: stats.notFound,
+            errors: stats.errors,
+            notFound: stats.notFound,
             status: "Transferring Files...",
           };
           wss.clients.forEach((client: any) => {
@@ -38,7 +38,7 @@ class UploadProcessorController {
   }
 
   async runFallback(req: Request, res: Response) {
-    /* fallback code */
+    // Logic for fallback check
   }
 }
 

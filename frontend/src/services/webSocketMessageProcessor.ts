@@ -17,7 +17,7 @@ export const createWebSocketMessageProcessor = ({
       const current = message.processedRows || 0;
       const progress = total > 0 ? Math.round((current / total) * 100) : 0;
 
-      // Update Sidebar Bar
+      // 1. Sidebar Progress Bar
       setUploadStatuses((prev: UploadStatus[]) => {
         const others = prev.filter((s) => s.fileName !== "excel_processing");
         return [
@@ -35,9 +35,9 @@ export const createWebSocketMessageProcessor = ({
         ];
       });
 
-      // Update Live Execution Summary Log
+      // 2. Execution Summary Card (Live Updates)
       updateTaskLog("uploadAndScript", {
-        id: "upload-status", // MUST match uploadProcessorUtil.tsx
+        id: "upload-status",
         message: isComplete ? "Processing Complete" : "Transferring Files...",
         status: isComplete ? "success" : "in-progress",
         totalRows: total,
