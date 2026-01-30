@@ -25,6 +25,7 @@ export async function processExcelRows(
   getFileExtension: (filePath: string) => string,
   onProgress?: ProgressCallback
 ): Promise<ProcessExcelRowsResult> {
+  // 1. THE STORE (Memory is cheap)
   let totalRows = 0;
   let successfulRows = 0;
   let errors = 0;
@@ -34,10 +35,13 @@ export async function processExcelRows(
 
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
 
-  // Initialize timer for interval updates
+  // 2. THE TIMER
   let lastUpdate = Date.now();
+  const BATCH_INTERVAL_MS = 1000; // 1 Second (Best balance of speed vs efficiency)
 
-  console.log(`[DEBUG-LOOP] Starting processing for ${actualTotalRows} rows.`);
+  console.log(
+    `[Batcher] Starting. Strategy: Update every ${BATCH_INTERVAL_MS}ms.`
+  );
 
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -47,6 +51,7 @@ export async function processExcelRows(
     totalRows++;
 
     try {
+      // ... (Data Extraction Logic kept identical) ...
       const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
       const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
       const serverId =
@@ -63,7 +68,7 @@ export async function processExcelRows(
       let found = false;
       let finalPath = pathVal;
 
-      // Tier 1: Local
+      // ... (File System Logic Tier 1 & 2 kept identical) ...
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -89,7 +94,6 @@ export async function processExcelRows(
         }
       }
 
-      // Tier 2: SMB/Network
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
@@ -117,6 +121,8 @@ export async function processExcelRows(
           rowNumber
         );
         await fs.writeFile(dest, await fs.readFile(srcPath));
+
+        // [STORE] Increment counters (Cheap)
         successfulRows++;
         processedRows.push({
           id_fund: fund,
@@ -127,6 +133,7 @@ export async function processExcelRows(
           page_count: "Saved",
         });
       } else {
+        // [STORE] Increment counters (Cheap)
         notFound++;
         processedRows.push({
           id_fund: fund,
@@ -138,9 +145,10 @@ export async function processExcelRows(
         });
       }
 
-      // Interval Check: Send update every 1000ms (1 second)
+      // 3. THE RELEASE (The Gatekeeper)
       const now = Date.now();
-      if (onProgress && now - lastUpdate >= 1000) {
+      if (onProgress && now - lastUpdate >= BATCH_INTERVAL_MS) {
+        // Only sends 1 message per second, regardless of how fast rows are processed
         onProgress({
           totalRows: actualTotalRows,
           processedRows: totalRows,
@@ -156,7 +164,7 @@ export async function processExcelRows(
     }
   }
 
-  // Final Completion Update
+  // Final Release (Always ensure 100% is sent at the end)
   if (onProgress)
     onProgress({
       totalRows: actualTotalRows,
