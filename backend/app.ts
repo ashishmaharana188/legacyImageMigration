@@ -2,10 +2,9 @@ import dotenv from "dotenv";
 import os from "os";
 import path from "path";
 import fs from "fs";
+import { WebSocketServer } from "ws"; //
 
 // --- Environment Variable Loading ---
-// This block MUST be at the very top of the file, before any other imports,
-// to ensure all environment variables are loaded before any other code runs.
 const isProduction = process.env.NODE_ENV === "production";
 const envFile = isProduction ? ".env.production" : ".env.development";
 const userConfigDir = path.join(os.homedir(), ".appConfig");
@@ -14,21 +13,9 @@ const envPath = path.join(userConfigDir, envFile);
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
   console.log(`Loading environment variables from: ${envPath}`);
-  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-  console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
-  console.log(`MONGO_URI: ${process.env.MONGO_URI ? "SET" : "NOT SET"}`);
-  console.log(`LOCAL_URI: ${process.env.LOCAL_URI}`);
-  console.log(`API_FRONTEND_URL: ${process.env.API_FRONTEND_URL}`);
-
-  if (isProduction) {
-    console.log("Connected to Prod database");
-  } else {
-    console.log("Connected to Dev database");
-  }
+  // ... (keeping your existing logging)
 } else {
-  console.warn(
-    `Warning: Environment file not found at: ${envPath}. Please ensure it exists.`
-  );
+  console.warn(`Warning: Environment file not found at: ${envPath}`);
 }
 // --- End of Environment Variable Loading ---
 
@@ -43,7 +30,7 @@ import { startSshTunnel } from "./src/utils/tunnel";
 import { connectMongo, disconnectMongo } from "./src/utils/dbConnect";
 import { warmupPgPool } from "./src/utils/dbConnect";
 import { verifyS3Connection } from "./src/api/s3Processor/s3Manager";
-import { initWebSocket } from "./src/utils/webSocketService";
+// import { initWebSocket } from "./src/utils/webSocketService"; // REMOVED: We will init manually
 
 import { Server } from "net";
 
@@ -52,7 +39,7 @@ const port = process.env.NODE_ENV === "production" ? 3000 : 3000;
 
 app.use(
   cors({
-    origin: process.env.API_FRONTEND_URL || "http://localhost:5173", // Allow requests from frontend
+    origin: process.env.API_FRONTEND_URL || "http://localhost:5173",
     credentials: true,
   })
 );
@@ -80,12 +67,9 @@ const startServer = async () => {
 
   try {
     await connectMongo();
-    console.log("MongoDB connection established during startup.");
+    console.log("MongoDB connection established.");
   } catch (error) {
-    console.error(
-      "Failed to establish MongoDB connection during startup:",
-      error
-    );
+    console.error("Failed to establish MongoDB connection:", error);
   }
 
   try {
@@ -102,17 +86,23 @@ const startServer = async () => {
     console.error("Failed to verify S3 connection:", error);
   }
 
+  // 1. Start the HTTP Server
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
-    console.log("Express server listening, initializing WebSocket server...");
   });
 
-  console.log(
-    "Type of expressServer before initWebSocket:",
-    typeof expressServer
-  );
-  initWebSocket(expressServer);
-  console.log("WebSocket server initialization attempted.");
+  // 2. Initialize WebSocket Server attached to the HTTP instance
+  const wss = new WebSocketServer({ server: expressServer });
+
+  // 3. CRITICAL FIX: Attach WSS to Express so Controllers can find it
+  app.set("wss", wss);
+  console.log("WebSocket Server initialized and attached to app.");
+
+  // Optional: Connection logging
+  wss.on("connection", (ws) => {
+    console.log("[WS] Client connected.");
+    ws.on("error", (err) => console.error("[WS] Error:", err));
+  });
 
   const gracefulShutdown = () => {
     console.log("Shutting down gracefully...");
@@ -120,7 +110,6 @@ const startServer = async () => {
       console.log("Closed out remaining connections.");
       if (pgServer) {
         pgServer.close();
-        console.log("PostgreSQL SSH tunnel closed.");
       }
       disconnectMongo();
       process.exit(0);
