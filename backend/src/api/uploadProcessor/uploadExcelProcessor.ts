@@ -36,7 +36,7 @@ export async function processExcelRows(
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
   let lastUpdate = Date.now();
 
-  console.log(`Processing Excel: Reading ${actualTotalRows} rows...`);
+  console.log(`Processing Excel: ${actualTotalRows} rows found.`);
 
   for (let rowNumber = 2; rowNumber <= lastRow; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
@@ -62,6 +62,7 @@ export async function processExcelRows(
       let found = false;
       let finalPath = pathVal;
 
+      // Tier 1: Local
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -87,6 +88,7 @@ export async function processExcelRows(
         }
       }
 
+      // Tier 2: SMB/Network
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
@@ -135,6 +137,7 @@ export async function processExcelRows(
         });
       }
 
+      // Throttled Broadcast (10 seconds)
       const now = Date.now();
       if (onProgress && now - lastUpdate >= 10000) {
         onProgress({
@@ -152,7 +155,6 @@ export async function processExcelRows(
     }
   }
 
-  console.log(`Processing Complete.`);
   if (onProgress)
     onProgress({
       totalRows: actualTotalRows,
