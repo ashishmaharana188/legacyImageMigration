@@ -1,16 +1,19 @@
-import { TaskLogContextType } from '../../types/index';
+import { TaskLogContextType } from "../../types/index";
 
 export interface MongoTaskUIProps {
   loading: boolean;
   clientCode: string;
   setClientCode: (code: string) => void;
-  handleTransferToMongo: (updateAll: boolean, clientCode: string) => Promise<void>;
+  handleTransferToMongo: (
+    updateAll: boolean,
+    clientCode: string
+  ) => Promise<void>;
   updateAllMongo: boolean;
   setUpdateAllMongo: (updateAllMongo: boolean) => void;
 }
 
 export interface UseMongoTaskHookProps {
-  updateTaskLog: TaskLogContextType['updateTaskLog'];
+  updateTaskLog: TaskLogContextType["updateTaskLog"];
   clearTaskLog: (task: string) => void;
 }
 
@@ -81,5 +84,8 @@ export interface MongoUpdatedDocument {
 }
 
 export interface MongoSummaryDisplayProps {
-  log: MongoTransferSummaryLog | MongoDuplicateCheckSummaryLog | MongoTransactionsUpdateSummaryLog;
+  log:
+    | MongoTransferSummaryLog
+    | MongoDuplicateCheckSummaryLog
+    | MongoTransactionsUpdateSummaryLog;
 }

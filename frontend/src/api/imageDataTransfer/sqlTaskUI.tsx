@@ -3,7 +3,6 @@ import { SQLTaskUIProps } from "./sqlTaskType";
 
 const SQLTaskUI: React.FC<SQLTaskUIProps> = ({
   loading,
-  handleGenerateSql,
   handleExecuteSql,
   handleUpdateFolioAndTransaction,
   handleReconnect,
@@ -29,9 +28,7 @@ const SQLTaskUI: React.FC<SQLTaskUIProps> = ({
               checked={!updateAll}
               onChange={() => setUpdateAll(false)}
             />
-            <span className="ml-2 text-black">
-              Update from Processed CSV
-            </span>
+            <span className="ml-2 text-black">Update from Processed CSV</span>
           </label>
           <label className="inline-flex items-center">
             <input
@@ -54,13 +51,14 @@ const SQLTaskUI: React.FC<SQLTaskUIProps> = ({
         {loading ? "Updating..." : "Update Folio & Transaction"}
       </button>
       <div className="mt-4 flex gap-4 justify-end">
-        <button onClick={handleGenerateSql} className="btn" disabled={loading}>
-          {loading ? "Generating..." : "Generate SQL"}
-        </button>
         <button onClick={handleExecuteSql} className="btn" disabled={loading}>
           {loading ? "Executing..." : "Execute SQL"}
         </button>
-        <button onClick={handleReconnect} className="btn btn-danger" disabled={loading}>
+        <button
+          onClick={handleReconnect}
+          className="btn btn-danger"
+          disabled={loading}
+        >
           {loading ? "Reconnecting..." : "Reconnect to DB"}
         </button>
       </div>

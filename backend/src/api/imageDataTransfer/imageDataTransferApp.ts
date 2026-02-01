@@ -1,34 +1,25 @@
-// backend/src/api/imageDataTransfer/imageDataTransferApp.ts
-
 import express from "express";
 import { imageDataTransferController } from "./imageDataTransferController";
 
-const imageDataTransferRouter = express.Router();
+const router = express.Router();
 
-// Change this line to match the URL in your axios call
-
-imageDataTransferRouter.post(
-  "/process-sql-mongo/sql/executeSql",
-  imageDataTransferController.executeSql.bind(imageDataTransferController)
+// Routes are relative because this router is mounted at '/api/imageDataTransfer' in app.ts
+router.post("/execute-sql", (req, res) =>
+  imageDataTransferController.executeSql(req, res)
 );
-imageDataTransferRouter.post(
-  "/process-sql-mongo/sql/update-folio-transaction",
-  imageDataTransferController.updateFolioAndTransaction.bind(
-    imageDataTransferController
-  )
+router.post("/update-folio", (req, res) =>
+  imageDataTransferController.updateFolioAndTransaction(req, res)
 );
-
-imageDataTransferRouter.post(
-  "/process-sql-mongo/mongo/transfer-to-mongo",
-  imageDataTransferController.transferDataFromPostgres.bind(
-    imageDataTransferController
-  )
+router.get("/transfer-postgres", (req, res) =>
+  imageDataTransferController.transferDataFromPostgres(req, res)
 );
-imageDataTransferRouter.post(
-  "/process-sql-mongo/mongo/update-transactions",
-  imageDataTransferController.updateMongoTransactions.bind(
-    imageDataTransferController
-  )
+router.get("/update-mongo", (req, res) =>
+  imageDataTransferController.updateMongoTransactions(req, res)
 );
 
-export default imageDataTransferRouter;
+// [ADDED] Reconnect DB Route
+router.post("/reconnect-db", (req, res) =>
+  imageDataTransferController.reconnectDb(req, res)
+);
+
+export default router;

@@ -1,8 +1,9 @@
-// backend/src/api/imageDataTransfer/imageDataTransferWrapper.ts
-
 import { SqlUtil } from "./sqlUtil";
 import { MongoUtil } from "./mongoUtil";
 import { SqlLog } from "./imageDataTransferTypes";
+import { createFeatureLogger } from "../../utils/logger";
+
+const logger = createFeatureLogger("imageDataTransfer");
 
 export class ImageDataTransferWrapper {
   private sqlUtil: SqlUtil;
@@ -11,6 +12,13 @@ export class ImageDataTransferWrapper {
   constructor() {
     this.sqlUtil = new SqlUtil();
     this.mongoUtil = new MongoUtil();
+  }
+
+  // [ADDED] Support for "Reconnect DB" button
+  public async reconnectDb(): Promise<{ message: string }> {
+    logger.info("Wrapper: Calling SqlUtil.reconnectPool...");
+    await this.sqlUtil.reconnectPool();
+    return { message: "Database reconnected successfully." };
   }
 
   public async executeSql(): Promise<{
@@ -23,6 +31,7 @@ export class ImageDataTransferWrapper {
       badRowsFilePath: string | null;
     };
   }> {
+    logger.info("Wrapper: Calling SqlUtil.executeSql...");
     return this.sqlUtil.executeSql();
   }
 
@@ -47,6 +56,7 @@ export class ImageDataTransferWrapper {
       badRowsFilePath: string | null;
     };
   }> {
+    logger.info("Wrapper: Calling SqlUtil.updateFolioAndTransaction...");
     return this.sqlUtil.updateFolioAndTransaction(
       updateAll,
       transactions,
@@ -58,6 +68,7 @@ export class ImageDataTransferWrapper {
     transferredCount: number;
     documents?: unknown[];
   }> {
+    logger.info("Wrapper: Calling MongoUtil.transferDataFromPostgres...");
     return this.mongoUtil.transferDataFromPostgres(clientCode);
   }
 
@@ -67,8 +78,7 @@ export class ImageDataTransferWrapper {
     updatedDocuments: unknown[];
     syncedDocuments: unknown[];
   }> {
+    logger.info("Wrapper: Calling MongoUtil.updateMongoTransactions...");
     return this.mongoUtil.updateMongoTransactions(clientId);
   }
-
-
 }

@@ -1,32 +1,27 @@
 import axios from "axios";
-import { FileResponse } from "./sqlTaskType";
 
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = "http://localhost:3000/api/imageDataTransfer";
 
-export const generateSql = async (): Promise<FileResponse> => {
-  const res = await axios.post<FileResponse>(`${API_BASE_URL}/generate-sql`);
-  return res.data;
+export const executeSqlService = async () => {
+  const response = await axios.post(`${API_BASE_URL}/execute-sql`);
+  return response.data;
 };
 
-export const executeSql = async (): Promise<FileResponse> => {
-  const res = await axios.post<FileResponse>(
-    `${API_BASE_URL}/process-sql-mongo/sql/executeSql`,
-    { action: "executeSql" }
-  );
-  return res.data;
+export const updateFolioAndTransactionService = async (
+  updateAll: boolean,
+  transactions: any[],
+  initialLogs: any[]
+) => {
+  const response = await axios.post(`${API_BASE_URL}/update-folio`, {
+    updateAll,
+    transactions,
+    initialLogs,
+  });
+  return response.data;
 };
 
-export const updateFolioAndTransaction = async (
-  updateAll: boolean
-): Promise<FileResponse> => {
-  const res = await axios.post<FileResponse>(
-    `${API_BASE_URL}/process-sql-mongo/sql/update-folio-transaction`,
-    { action: "updateFolioAndTransaction", updateAll }
-  );
-  return res.data;
-};
-
-export const reconnectDb = async (): Promise<FileResponse> => {
-  const res = await axios.post<FileResponse>(`${API_BASE_URL}/reconnect`);
-  return res.data;
+// [ADDED]
+export const reconnectDbService = async () => {
+  const response = await axios.post(`${API_BASE_URL}/reconnect-db`);
+  return response.data;
 };

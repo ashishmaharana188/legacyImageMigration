@@ -1,32 +1,82 @@
-import { useState, useCallback } from "react";
-import axios from "axios";
-import { transferToMongo } from "./mongoTaskService";
-import { UseMongoTaskHookProps } from "./mongoTaskType";
+import { useState } from "react";
+import {
+  transferDataFromPostgresService,
+  updateMongoTransactionsService,
+} from "./mongoTaskService";
+import { useTaskLog } from "../../contexts/TaskLogContext";
 
-export const useMongoTaskHook = ({ updateTaskLog, clearTaskLog }: UseMongoTaskHookProps) => {
-  const [loading, setLoading] = useState<boolean>(false);
-  const [clientCode, setClientCode] = useState<string>('');
-  const [updateAllMongo, setUpdateAllMongo] = useState<boolean>(false);
+export const useMongoTask = () => {
+  const [loading, setLoading] = useState(false);
+  // [FIX] Added state required by UI
+  const [clientCode, setClientCode] = useState("");
+  const [updateAllMongo, setUpdateAllMongo] = useState(false);
 
-  const handleTransferToMongo = useCallback(async (updateAll: boolean, clientCode: string) => {
+  const { updateTaskLog } = useTaskLog();
+
+  const handleTransferData = async (code?: string) => {
     setLoading(true);
-    clearTaskLog("sqlAndMongo");
-    const taskMessage = updateAll ? "Updating Mongo transactions" : "Transferring data to MongoDB";
-    updateTaskLog("sqlAndMongo", { message: taskMessage });
-    
+    const target = code || "ALL";
+    updateTaskLog("imageDataTransfer", {
+      id: `MONGO_TRANSFER_${Date.now()}`,
+      status: "Running",
+      message: `Starting PG -> Mongo Transfer (Client: ${target})...`,
+      timestamp: new Date().toISOString(),
+    });
+
     try {
-      const res = await transferToMongo(updateAll, clientCode);
-      updateTaskLog("sqlAndMongo", res);
-    } catch (error: unknown) {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog("sqlAndMongo", error.response?.data || { message: "An unknown error occurred." });
-      } else {
-        updateTaskLog("sqlAndMongo", { message: "An unknown error occurred." });
-      }
+      const data = await transferDataFromPostgresService(code);
+      updateTaskLog("imageDataTransfer", {
+        id: `MONGO_TRANSFER_DONE_${Date.now()}`,
+        status: "Success",
+        message: `Transfer Complete. Documents Transferred: ${data.transferredCount}`,
+        timestamp: new Date().toISOString(),
+        successfulRows: data.transferredCount,
+      });
+    } catch (err: any) {
+      updateTaskLog("imageDataTransfer", {
+        id: `MONGO_TRANSFER_ERR_${Date.now()}`,
+        status: "Error",
+        message: err.message || "Transfer Failed",
+        timestamp: new Date().toISOString(),
+        errors: 1,
+      });
     } finally {
       setLoading(false);
     }
-  }, [updateTaskLog, clearTaskLog]);
+  };
+
+  const handleUpdateMongoTransactions = async (clientId?: number) => {
+    setLoading(true);
+    updateTaskLog("imageDataTransfer", {
+      id: `MONGO_SYNC_${Date.now()}`,
+      status: "Running",
+      message: `Starting Mongo Transaction Sync (Client ID: ${
+        clientId || "All"
+      })...`,
+      timestamp: new Date().toISOString(),
+    });
+
+    try {
+      const data = await updateMongoTransactionsService(clientId);
+      updateTaskLog("imageDataTransfer", {
+        id: `MONGO_SYNC_DONE_${Date.now()}`,
+        status: "Success",
+        message: `Sync Complete. Updated: ${data.updatedCount}, Synced: ${data.syncedCount}`,
+        timestamp: new Date().toISOString(),
+        successfulRows: data.updatedCount + data.syncedCount,
+      });
+    } catch (err: any) {
+      updateTaskLog("imageDataTransfer", {
+        id: `MONGO_SYNC_ERR_${Date.now()}`,
+        status: "Error",
+        message: err.message || "Sync Failed",
+        timestamp: new Date().toISOString(),
+        errors: 1,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return {
     loading,
@@ -34,6 +84,7 @@ export const useMongoTaskHook = ({ updateTaskLog, clearTaskLog }: UseMongoTaskHo
     setClientCode,
     updateAllMongo,
     setUpdateAllMongo,
-    handleTransferToMongo,
+    handleTransferData,
+    handleUpdateMongoTransactions,
   };
 };

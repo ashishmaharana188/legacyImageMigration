@@ -1,23 +1,17 @@
-// backend/src/api/imageDataTransfer/sqlUtil.ts
-
 import { parse } from "csv-parse";
 import fs from "fs/promises";
 import fsSync from "fs";
 import path from "path";
 import ExcelJS from "exceljs";
 import { Pool, PoolClient } from "pg";
-import logger from "../../utils/logger";
+import { createFeatureLogger } from "../../utils/logger";
 import {
   getPgPool,
   reconnectPgPool,
   warmupPgPool,
 } from "../../utils/dbConnect";
 import Cursor from "pg-cursor";
-import {
-  SqlLog,
-  AifDocumentDetail,
-  IPgQueryResult,
-} from "./imageDataTransferTypes";
+import { SqlLog, AifDocumentDetail } from "./imageDataTransferTypes";
 import {
   pgQuery,
   pgBegin,
@@ -33,12 +27,12 @@ import {
   SQL_UPDATE_TRANSACTION_REFERENCE_ID,
   SQL_SELECT_CLIENT_ID_BY_CODE,
   SQL_SELECT_AIF_DOCUMENT_DETAILS,
-  SQL_SELECT_UPDATE_DETAILS,
   SQL_STREAM_UPDATE_DETAILS,
 } from "./imageDataTransferCore";
 
+const logger = createFeatureLogger("imageDataTransfer");
+
 export class SqlUtil {
-  private readonly logger = logger;
   private readonly trxnMap: Record<string, string> = {
     IC: "IC",
     NCT: "NCT",
@@ -58,7 +52,8 @@ export class SqlUtil {
     await warmupPgPool();
   }
 
-  private async reconnectPool(): Promise<void> {
+  // [FIX] Changed to public so Wrapper can access it for the "Reconnect" button
+  public async reconnectPool(): Promise<void> {
     await reconnectPgPool();
   }
 
@@ -66,19 +61,6 @@ export class SqlUtil {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
-  private formatQuery(query: string, params: unknown[]): string {
-    let formattedQuery = query;
-    params.forEach((param, index) => {
-      const replacement =
-        typeof param === "string" ? `"${param}"` : String(param);
-      formattedQuery = formattedQuery.replace(`$${index + 1}`, replacement);
-    });
-    return formattedQuery;
-  }
-
-  /**
-   * Helper to get processed folio numbers from the latest CSV
-   */
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../../../processed");
     try {
@@ -100,13 +82,11 @@ export class SqlUtil {
       });
       return [...new Set(idAcnos)];
     } catch (error) {
+      logger.error("Error reading processed folio numbers", { error });
       return [];
     }
   }
 
-  /**
-   * Generates SQL transactions based on the CSV source of truth
-   */
   async generateSql(): Promise<{
     sql: string;
     transactions: any[];
@@ -114,19 +94,24 @@ export class SqlUtil {
   }> {
     const logs: SqlLog[] = [];
     try {
+      logger.info("Generating SQL transactions from CSV...");
       const csvPath = path.join(__dirname, "../../../../processed");
       const files = await fs.readdir(csvPath);
       const latestCsv = files
         .filter((f) => f.startsWith("processed_"))
         .sort()
         .pop();
-      if (!latestCsv)
+
+      if (!latestCsv) {
+        logger.warn("No processed CSV found for SQL generation.");
         return {
           sql: "",
           transactions: [],
           logs: [{ row: 0, status: "error", message: "No CSV found" }],
         };
+      }
 
+      logger.info(`Reading CSV: ${latestCsv}`);
       const transactions: any[] = [];
       await new Promise<void>((resolve, reject) => {
         fsSync
@@ -147,23 +132,28 @@ export class SqlUtil {
           .on("end", resolve)
           .on("error", reject);
       });
+
+      logger.info(`Generated ${transactions.length} transactions from CSV.`);
       return { sql: "GENERATED", transactions, logs };
     } catch (e) {
+      logger.error("Failed to generate SQL", { error: e });
       return { sql: "", transactions: [], logs: [] };
     }
   }
 
-  /**
-   * Executes the SQL insertions into PostgreSQL
-   */
   async executeSql(): Promise<any> {
     const logs: SqlLog[] = [];
     let client: PoolClient | null = null;
     try {
+      logger.info("Starting executeSql process...", { console: true });
+
       const { transactions, logs: gLogs } = await this.generateSql();
       logs.push(...gLogs);
-      if (!transactions.length)
+
+      if (!transactions.length) {
+        logger.warn("No transactions to execute.");
         return { result: "failed", logs, summary: { insertedRows: 0 } };
+      }
 
       client = await (await this.getPool()).connect();
       await pgBegin(client);
@@ -171,6 +161,8 @@ export class SqlUtil {
       const uniqueFunds = [
         ...new Set(transactions.map((t) => String(t.id_fund))),
       ];
+
+      logger.info("Fetching client master codes...");
       const clientIdMap = new Map();
       const clientRes = (await pgQuery(
         client,
@@ -180,6 +172,8 @@ export class SqlUtil {
       clientRes.rows.forEach((r: any) => clientIdMap.set(r.client_code, r.id));
 
       let insertedRows = 0;
+      const totalBatches = Math.ceil(transactions.length / 500);
+
       for (let i = 0; i < transactions.length; i += 500) {
         const chunk = transactions.slice(i, i + 500);
         const vParams: any[] = [];
@@ -226,6 +220,7 @@ export class SqlUtil {
           vStrings.push(`(${rowValues.map(() => `$${pIdx++}`).join(", ")})`);
           vParams.push(...rowValues);
         }
+
         const res = (await pgQuery(
           client,
           SQL_INSERT_AIF_DOCUMENT_DETAILS.replace(
@@ -235,8 +230,19 @@ export class SqlUtil {
           vParams
         )) as any;
         insertedRows += res.rowCount || res.rows?.length || 0;
+
+        const currentBatch = Math.ceil(i / 500) + 1;
+        if (currentBatch % 5 === 0) {
+          logger.info(
+            `Running... Batch ${currentBatch}/${totalBatches} inserted`,
+            { console: true }
+          );
+        }
       }
+
       await pgCommit(client);
+      logger.info(`SQL Execution Success. Total Inserted: ${insertedRows}`);
+
       return {
         result: "success",
         logs,
@@ -244,15 +250,13 @@ export class SqlUtil {
       };
     } catch (err) {
       if (client) await pgRollback(client);
+      logger.error("Execute SQL Failed", { error: err });
       return { result: "failed", logs };
     } finally {
       if (client) client.release();
     }
   }
 
-  /**
-   * Updates folio and transaction IDs based on the CSV source
-   */
   async updateFolioAndTransaction(
     updateAll: boolean,
     providedTx?: any[],
@@ -261,13 +265,21 @@ export class SqlUtil {
     let logs = [...initialLogs];
     let transactions = providedTx;
 
+    logger.info(
+      `Starting Update Folio & Transaction. UpdateAll: ${updateAll}`,
+      { console: true }
+    );
+
     if (!transactions || transactions.length === 0) {
+      logger.info("No transactions provided, generating from CSV...");
       const generated = await this.generateSql();
       transactions = generated.transactions;
     }
 
-    if (!transactions || transactions.length === 0)
+    if (!transactions || transactions.length === 0) {
+      logger.warn("No transactions found to update.");
       return { result: "failed", summary: { updatedFolioRows: 0 } };
+    }
 
     const processedFolioNumbers = [
       ...new Set(transactions.map((tx: any) => tx.id_acno)),
@@ -276,8 +288,11 @@ export class SqlUtil {
     try {
       client = await (await this.getPool()).connect();
       await pgBegin(client);
+
+      logger.info("Creating temporary transaction data table...");
       await pgQuery(client, SQL_CREATE_TEMP_TRANSACTION_DATA);
 
+      logger.info(`Inserting ${transactions.length} rows into temp table...`);
       for (let i = 0; i < transactions.length; i += 1000) {
         const chunk = transactions.slice(i, i + 1000);
         const vStrs = chunk.map(
@@ -297,6 +312,7 @@ export class SqlUtil {
         );
       }
 
+      logger.info("Updating Temp Images...");
       await pgQuery(client, SQL_DELETE_TEMP_IMAGES_1);
       await pgQuery(
         client,
@@ -307,6 +323,7 @@ export class SqlUtil {
         updateAll ? [] : [processedFolioNumbers]
       );
 
+      logger.info("Executing Folio Update Query...");
       const resF = (await pgQuery(
         client,
         SQL_UPDATE_FOLIO_ID.replace(
@@ -315,6 +332,8 @@ export class SqlUtil {
         ),
         updateAll ? [] : [processedFolioNumbers]
       )) as any;
+
+      logger.info("Executing Transaction Reference Update Query...");
       const resT = (await pgQuery(
         client,
         SQL_UPDATE_TRANSACTION_REFERENCE_ID.replace(
@@ -325,23 +344,29 @@ export class SqlUtil {
       )) as any;
 
       await pgCommit(client);
+
+      const summary = {
+        updatedFolioRows: resF.rowCount || resF.rows?.length || 0,
+        updatedTransactionRows: resT.rowCount || resT.rows?.length || 0,
+      };
+
+      logger.info(
+        `Update Success. Folios: ${summary.updatedFolioRows}, Transactions: ${summary.updatedTransactionRows}`
+      );
+
       return {
         result: "success",
         logs,
-        summary: {
-          updatedFolioRows: resF.rowCount || resF.rows?.length || 0,
-          updatedTransactionRows: resT.rowCount || resT.rows?.length || 0,
-        },
+        summary,
       };
     } catch (err) {
       if (client) await pgRollback(client);
+      logger.error("Update Folio/Transaction Failed", { error: err });
       return { result: "failed" };
     } finally {
       if (client) client.release();
     }
   }
-
-  // --- MISSING METHODS FOR MONGO UTIL BRIDGE ---
 
   public async getClientIdByCode(
     clientCode: string
@@ -354,6 +379,9 @@ export class SqlUtil {
       ]);
       return res.rows[0] as { id: number };
     } catch (error) {
+      logger.error(`Error fetching client ID for code ${clientCode}`, {
+        error,
+      });
       throw error;
     } finally {
       if (client) client.release();
@@ -384,6 +412,7 @@ export class SqlUtil {
       const res = await pgQuery(client, query, queryParams);
       return res.rows as AifDocumentDetail[];
     } catch (error) {
+      logger.error("Error fetching AIF Document Details", { error });
       throw error;
     } finally {
       if (client) client.release();
@@ -397,6 +426,7 @@ export class SqlUtil {
   ): Promise<void> {
     let client: PoolClient | null = null;
     try {
+      logger.info("Starting SQL stream for updates...");
       client = await (await this.getPool()).connect();
       const queryParams: unknown[] = [];
       const query = SQL_STREAM_UPDATE_DETAILS.replace(
@@ -407,13 +437,26 @@ export class SqlUtil {
 
       const cursor = client.query(new Cursor(query, queryParams));
       let rows: unknown[];
+      let batchCount = 0;
+
       do {
         rows = await new Promise((res, rej) =>
           cursor.read(batchSize, (err, r) => (err ? rej(err) : res(r)))
         );
-        if (rows.length > 0) await processBatch(rows as AifDocumentDetail[]);
+        if (rows.length > 0) {
+          batchCount++;
+          await processBatch(rows as AifDocumentDetail[]);
+          if (batchCount % 10 === 0) {
+            logger.info(`Streaming... Processed ${batchCount} batches`, {
+              console: true,
+            });
+          }
+        }
       } while (rows.length > 0);
+
+      logger.info("SQL Stream completed.");
     } catch (error) {
+      logger.error("Error in streamUpdateDetails", { error });
       throw error;
     } finally {
       if (client) client.release();

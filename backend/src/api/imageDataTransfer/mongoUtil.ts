@@ -1,12 +1,12 @@
 import mongoose, { Document, PipelineStage } from "mongoose";
-import logger from "../../utils/logger"; // Adjusted path
-import { SqlUtil } from "./sqlUtil"; // Import SqlUtil for PostgreSQL operations
+import { createFeatureLogger } from "../../utils/logger";
+import { SqlUtil } from "./sqlUtil";
 import {
   connectMongo,
   disconnectMongo,
   getMongoModel,
   getMongoDb,
-} from "../../utils/dbConnect"; // Adjusted path
+} from "../../utils/dbConnect";
 import {
   mongoFindOne,
   mongoInsertMany,
@@ -14,7 +14,16 @@ import {
   mongoFind,
   mongoAggregate,
 } from "./imageDataTransferCore";
-import { AifDocumentDetail, IAifDocument, IAifDocumentInput,IUpdatedDocumentSummary, ISyncedDocumentSummary,IBulkWriteResult } from "./imageDataTransferTypes";
+import {
+  AifDocumentDetail,
+  IAifDocument,
+  IAifDocumentInput,
+  IUpdatedDocumentSummary,
+  ISyncedDocumentSummary,
+  IBulkWriteResult,
+} from "./imageDataTransferTypes";
+
+const logger = createFeatureLogger("imageDataTransfer");
 
 export class MongoUtil {
   private model: mongoose.Model<IAifDocument>;
@@ -38,49 +47,38 @@ export class MongoUtil {
   public async testConnectionAndQuery(): Promise<Document[]> {
     try {
       if (mongoose.connection.readyState !== 1) {
-        logger.warn({
-          category: "app-flow",
-          message: "MongoDB not connected. Attempting to connect...",
-        });
+        logger.info("MongoDB not connected. Attempting to connect...");
         await this.connect();
       }
       const db = this.getDb();
       if (!db) {
-        logger.error({
-          category: "app-flow",
-          message: "Database connection is not available.",
-        });
+        logger.error("Database connection is not available.");
         return [];
       }
 
       const result = await mongoFindOne(this.model);
-      logger.info({
-        category: "app-flow",
-        message: `MongoDB connection test successful. Found ${result ? 1 : 0} document(s).`,
-      });
+      logger.info(
+        `MongoDB connection test successful. Found ${
+          result ? 1 : 0
+        } document(s).`
+      );
       return result ? [result] : [];
     } catch (error) {
-      logger.error({
-        category: "app-flow",
-        message: `MongoDB connection test failed: ${error}`,
-      });
+      logger.error("MongoDB connection test failed", { error });
       throw error;
     }
   }
 
   public async transferDataFromPostgres(clientCode?: string): Promise<{
     transferredCount: number;
-    documents?: IAifDocument[]; // Added to return the documents
+    documents?: IAifDocument[];
   }> {
     try {
-      const sqlUtil = new SqlUtil(); // Use SqlUtil
+      const sqlUtil = new SqlUtil();
       await this.connect();
       const db = this.getDb();
       if (!db) {
-        logger.error({
-          category: "task-steps",
-          message: "Database connection is not available.",
-        });
+        logger.error("Database connection is not available.");
         return { transferredCount: 0 };
       }
 
@@ -89,15 +87,13 @@ export class MongoUtil {
         const clientRes = await sqlUtil.getClientIdByCode(clientCode);
         if (clientRes) {
           pgClientId = clientRes.id;
-          logger.info({
-            category: "task-steps",
-            message: `Found PostgreSQL client_id: ${pgClientId} for client_code: ${clientCode}`,
-          });
+          logger.info(
+            `Found PostgreSQL client_id: ${pgClientId} for client_code: ${clientCode}`
+          );
         } else {
-          logger.warn({
-            category: "task-steps",
-            message: `Client code '${clientCode}' not found in PostgreSQL. Aborting transfer.`,
-          });
+          logger.warn(
+            `Client code '${clientCode}' not found in PostgreSQL. Aborting transfer.`
+          );
           return { transferredCount: 0 };
         }
       }
@@ -107,23 +103,26 @@ export class MongoUtil {
         NCT: "NCTP",
       };
 
-      const pgData: AifDocumentDetail[] = await sqlUtil.getAifDocumentDetails(pgClientId);
-      logger.info({
-        category: "task-steps",
-        message: `Fetched ${pgData.length} documents from PostgreSQL for transfer. (pgClientId: ${pgClientId || "N/A"})`,
-        pgClientId: pgClientId || "N/A",
-        pgDataCount: pgData.length,
-      });
+      logger.info(
+        `Fetching documents from PG for transfer. ClientID: ${
+          pgClientId || "N/A"
+        }`
+      );
+      const pgData: AifDocumentDetail[] = await sqlUtil.getAifDocumentDetails(
+        pgClientId
+      );
+
+      logger.info(`Fetched ${pgData.length} documents. Transforming data...`);
       const documentsToInsert: IAifDocumentInput[] = [];
 
       for (const data of pgData) {
-        const docType = data.document_type;
-        const docProcess = data.document_process;
+        const docType = data.document_type || "";
+        const docProcess = data.document_process || "";
 
         const doc: IAifDocumentInput = {
           activityStatus: data.activity_status || "O",
           applicationId: data.application_id || null,
-          clientId: data.client_code, // Use the correct client_code
+          clientId: data.client_code,
           createdBy: data.created_by || "system",
           createdFrom: new Date(data.creation_date)
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
@@ -142,7 +141,7 @@ export class MongoUtil {
             .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
             .toLocaleUpperCase(),
           mimeType: data.mime_type,
-          processCode: transactionsMap[docProcess],
+          processCode: transactionsMap[docProcess] || docProcess,
           sourceUser: data.source_user || "system",
           totalPageCount: data.total_page_count || null,
           transactionCode: data.document_process,
@@ -156,30 +155,35 @@ export class MongoUtil {
       }
 
       if (documentsToInsert.length > 0) {
+        logger.info(
+          `Inserting ${documentsToInsert.length} documents into MongoDB...`,
+          { console: true }
+        );
         const insertedDocuments = await this.insertDocument(documentsToInsert);
-        return { transferredCount: pgData.length, documents: insertedDocuments };
+        logger.info("Insertion successful.");
+        return {
+          transferredCount: pgData.length,
+          documents: insertedDocuments,
+        };
       }
 
       await this.disconnect();
+      logger.info("No documents to transfer.");
       return { transferredCount: pgData.length, documents: [] };
     } catch (error) {
-      logger.error({
-        category: "task-steps",
-        message: `Data transfer error: ${error}`,
-      });
+      logger.error("Data transfer error", { error });
       throw error;
     }
   }
 
-  public async insertDocument(documents: IAifDocumentInput[]): Promise<IAifDocument[]> {
+  public async insertDocument(
+    documents: IAifDocumentInput[]
+  ): Promise<IAifDocument[]> {
     try {
       const insertedDocs = await mongoInsertMany(this.model, documents);
       return insertedDocs;
     } catch (error) {
-      logger.error({
-        category: "task-steps",
-        message: `Error inserting documents: ${error}`,
-      });
+      logger.error("Error inserting documents into Mongo", { error });
       throw error;
     }
   }
@@ -195,21 +199,17 @@ export class MongoUtil {
     const allUpdatedDocuments: IUpdatedDocumentSummary[] = [];
     const allSyncedDocuments: ISyncedDocumentSummary[] = [];
 
-    logger.info({
-      category: "task-steps",
-      message: `Initiating updateMongoTransactions for clientId: ${clientId || "all"}`,
-      clientId: clientId || "N/A",
-    });
+    logger.info(
+      `Initiating Mongo Transaction Update. ClientId: ${clientId || "ALL"}`,
+      { console: true }
+    );
 
     try {
-      const sqlUtil = new SqlUtil(); // Use SqlUtil
+      const sqlUtil = new SqlUtil();
       await this.connect();
       const db = this.getDb();
       if (!db) {
-        logger.error({
-          category: "task-steps",
-          message: "Database connection is not available.",
-        });
+        logger.error("Database connection is not available.");
         return {
           updatedCount: 0,
           syncedCount: 0,
@@ -219,46 +219,27 @@ export class MongoUtil {
       }
 
       const processBatch = async (pgData: AifDocumentDetail[]) => {
-        logger.info({
-          category: "task-steps",
-          message: `Processing batch of ${pgData.length} PostgreSQL documents.`,
-          pgDataSample: pgData.slice(0, 2), // Log first 2 items for brevity
-          pgDataCount: pgData.length,
-        });
+        logger.info(
+          `Processing batch of ${pgData.length} PostgreSQL documents.`
+        );
         const bulkOperations: mongoose.BulkWriteOperation<IAifDocument>[] = [];
         const documentsToUpdate: IUpdatedDocumentSummary[] = [];
         const documentsToSync: ISyncedDocumentSummary[] = [];
 
         const uniqueFilters = pgData.map((data) => ({
-          clientId: data.client_code, // Use client_code (string) from PostgreSQL
+          clientId: data.client_code,
           transactionNo: data.user_attr1,
         }));
 
-        if (uniqueFilters.length === 0) {
-          logger.warn({
-            category: "task-steps",
-            message:
-              "No unique filters generated from PostgreSQL data. Skipping batch.",
-          });
-          return;
-        }
+        if (uniqueFilters.length === 0) return;
 
-        const mongoQuery: Record<string, unknown> = { $or: uniqueFilters, sourceUser: "system" };
-        // The clientId filter is already part of the uniqueFilters if clientId was provided to streamUpdateDetails
-        // No need to add it again as a top-level AND condition.
+        const mongoQuery: Record<string, unknown> = {
+          $or: uniqueFilters,
+          sourceUser: "system",
+        };
 
-        logger.info({
-          category: "task-steps",
-          message: "Fetching MongoDB documents with query.",
-          mongoQuery: JSON.stringify(mongoQuery),
-          uniqueFilters: JSON.stringify(uniqueFilters), // Log uniqueFilters as well
-        });
+        logger.info("Fetching corresponding MongoDB documents...");
         const mongoDocs = await mongoFind(this.model, mongoQuery);
-        logger.info({
-          category: "task-steps",
-          message: `Fetched ${mongoDocs.length} documents from MongoDB.`,
-          mongoDocsCount: mongoDocs.length,
-        });
         const mongoDocMap = new Map<string, IAifDocument>();
         mongoDocs.forEach((doc) => {
           mongoDocMap.set(`${doc.clientId}-${doc.transactionNo}`, doc);
@@ -297,7 +278,13 @@ export class MongoUtil {
         }
 
         if (bulkOperations.length > 0) {
-          const bulkWriteResult: IBulkWriteResult = await mongoBulkWrite(this.model, bulkOperations);
+          logger.info(
+            `Executing bulk write for ${bulkOperations.length} operations...`
+          );
+          const bulkWriteResult: IBulkWriteResult = await mongoBulkWrite(
+            this.model,
+            bulkOperations
+          );
           totalUpdatedCount += bulkWriteResult.modifiedCount;
           allUpdatedDocuments.push(...documentsToUpdate);
         }
@@ -306,12 +293,13 @@ export class MongoUtil {
         allSyncedDocuments.push(...documentsToSync);
       };
 
+      // Stream updates with throttling
       await sqlUtil.streamUpdateDetails(1000, processBatch, clientId);
 
-      logger.info({
-        category: "task-steps",
-        message: `Mongo transaction update process completed. Updated: ${totalUpdatedCount}, Synced: ${totalSyncedCount}`,
-      });
+      logger.info(
+        `Mongo update completed. Updated: ${totalUpdatedCount}, Synced: ${totalSyncedCount}`,
+        { console: true }
+      );
 
       await this.disconnect();
       return {
@@ -321,10 +309,7 @@ export class MongoUtil {
         syncedDocuments: allSyncedDocuments,
       };
     } catch (error) {
-      logger.error({
-        category: "task-steps",
-        message: `Mongo transaction update error: ${error}`,
-      });
+      logger.error("Mongo transaction update error", { error });
       throw error;
     }
   }
@@ -350,7 +335,9 @@ export class MongoUtil {
     }
   }
 
-  public async getDocumentsCreatedAfterDate(date: Date): Promise<IAifDocument[]> {
+  public async getDocumentsCreatedAfterDate(
+    date: Date
+  ): Promise<IAifDocument[]> {
     try {
       await this.connect();
       const pipeline: PipelineStage[] = [

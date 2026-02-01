@@ -1,8 +1,8 @@
-// backend/src/api/imageDataTransfer/imageDataTransferController.ts
-
 import { Request, Response } from "express";
 import { ImageDataTransferWrapper } from "./imageDataTransferWrapper";
-import logger from "../../utils/logger";
+import { createFeatureLogger } from "../../utils/logger";
+
+const logger = createFeatureLogger("imageDataTransfer");
 
 class ImageDataTransferController {
   private imageDataTransferWrapper: ImageDataTransferWrapper;
@@ -11,28 +11,30 @@ class ImageDataTransferController {
     this.imageDataTransferWrapper = new ImageDataTransferWrapper();
   }
 
-  async executeSql(req: Request, res: Response) {
+  // [ADDED] Reconnect Logic
+  async reconnectDb(req: Request, res: Response) {
     try {
-      logger.info({
-        category: "api-calls",
-        function: "executeSql",
-        message: "Initiating SQL execution.",
-      });
-      const result = await this.imageDataTransferWrapper.executeSql();
-      logger.debug({
-        category: "responses",
-        function: "executeSql",
-        message: "SQL execution completed",
-        result,
-      });
+      logger.info("API: Reconnecting DB...", { console: true });
+      const result = await this.imageDataTransferWrapper.reconnectDb();
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      logger.error({
-        category: "api-calls",
-        function: "executeSql",
-        message: "Failed to execute SQL",
-        error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
+      logger.error("API: Reconnect Failed", { error });
+      res.status(500).json({ error: "Failed to reconnect DB" });
+    }
+  }
+
+  async executeSql(req: Request, res: Response) {
+    try {
+      logger.info("API: Initiating SQL execution...", { console: true });
+      const result = await this.imageDataTransferWrapper.executeSql();
+      logger.info(
+        `API: SQL Execution Completed. Inserted: ${result.summary.insertedRows}`,
+        { console: true }
+      );
+      res.status(200).json({ statusCode: 200, ...result });
+    } catch (error) {
+      logger.error("API: Failed to execute SQL", {
+        error: error instanceof Error ? error.message : String(error),
       });
       res.status(500).json({
         statusCode: 500,
@@ -45,112 +47,72 @@ class ImageDataTransferController {
   async updateFolioAndTransaction(req: Request, res: Response) {
     try {
       const { updateAll, transactions, initialLogs } = req.body;
-      logger.info({
-        category: "api-calls",
-        function: "updateFolioAndTransaction",
-        message: "Initiating folio and transaction update.",
-        updateAll,
-        transactionCount: transactions ? transactions.length : 0,
-      });
-      const result = await this.imageDataTransferWrapper.updateFolioAndTransaction(
-        updateAll,
-        transactions,
-        initialLogs
+      const count = transactions ? transactions.length : 0;
+      logger.info(
+        `API: Initiating Update. Mode: ${
+          updateAll ? "ALL" : "SELECTIVE"
+        } (${count})`,
+        { console: true }
       );
-      logger.debug({
-        category: "responses",
-        function: "updateFolioAndTransaction",
-        message: "Folio and transaction update completed",
-        result,
-      });
+
+      const result =
+        await this.imageDataTransferWrapper.updateFolioAndTransaction(
+          updateAll,
+          transactions,
+          initialLogs
+        );
+
+      logger.info(
+        `API: Update Completed. Folios: ${result.summary.updatedFolioRows}`,
+        { console: true }
+      );
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      logger.error({
-        category: "api-calls",
-        function: "updateFolioAndTransaction",
-        message: "Failed to update folio and transaction",
-        error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      res.status(500).json({
-        statusCode: 500,
-        error: "Failed to update folio and transaction",
-        details: error instanceof Error ? error.message : "Unknown error",
-      });
+      logger.error("API: Failed to update folio", { error });
+      res.status(500).json({ error: "Failed to update folio" });
     }
   }
 
   async transferDataFromPostgres(req: Request, res: Response) {
     try {
       const { clientCode } = req.query;
-      logger.info({
-        category: "api-calls",
-        function: "transferDataFromPostgres",
-        message: "Initiating data transfer from PostgreSQL to MongoDB.",
-        clientCode,
+      logger.info(`API: PG->Mongo Transfer. Client: ${clientCode || "ALL"}`, {
+        console: true,
       });
-      const result = await this.imageDataTransferWrapper.transferDataFromPostgres(
-        clientCode as string
-      );
-      logger.debug({
-        category: "responses",
-        function: "transferDataFromPostgres",
-        message: "Data transfer to MongoDB completed",
-        result,
+      const result =
+        await this.imageDataTransferWrapper.transferDataFromPostgres(
+          clientCode as string
+        );
+      logger.info(`API: Transfer Completed. Docs: ${result.transferredCount}`, {
+        console: true,
       });
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      logger.error({
-        category: "api-calls",
-        function: "transferDataFromPostgres",
-        message: "Failed to transfer data from PostgreSQL to MongoDB",
-        error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      res.status(500).json({
-        statusCode: 500,
-        error: "Failed to transfer data from PostgreSQL to MongoDB",
-        details: error instanceof Error ? error.message : "Unknown error",
-      });
+      logger.error("API: Transfer Failed", { error });
+      res.status(500).json({ error: "Transfer failed" });
     }
   }
 
   async updateMongoTransactions(req: Request, res: Response) {
     try {
       const { clientId } = req.query;
-      logger.info({
-        category: "api-calls",
-        function: "updateMongoTransactions",
-        message: "Initiating MongoDB transaction update.",
-        clientId,
+      logger.info(`API: Mongo Sync. ClientID: ${clientId || "ALL"}`, {
+        console: true,
       });
-      const result = await this.imageDataTransferWrapper.updateMongoTransactions(
-        clientId ? parseInt(clientId as string, 10) : undefined
+      const result =
+        await this.imageDataTransferWrapper.updateMongoTransactions(
+          clientId ? parseInt(clientId as string, 10) : undefined
+        );
+      logger.info(
+        `API: Sync Completed. Upd: ${result.updatedCount}, Syn: ${result.syncedCount}`,
+        { console: true }
       );
-      logger.debug({
-        category: "responses",
-        function: "updateMongoTransactions",
-        message: "MongoDB transaction update completed",
-        result,
-      });
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      logger.error({
-        category: "api-calls",
-        function: "updateMongoTransactions",
-        message: "Failed to update MongoDB transactions",
-        error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-      res.status(500).json({
-        statusCode: 500,
-        error: "Failed to update MongoDB transactions",
-        details: error instanceof Error ? error.message : "Unknown error",
-      });
+      logger.error("API: Sync Failed", { error });
+      res.status(500).json({ error: "Sync failed" });
     }
   }
-
-
 }
 
 export const imageDataTransferController = new ImageDataTransferController();

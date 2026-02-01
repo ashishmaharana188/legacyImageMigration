@@ -6,6 +6,24 @@ import DetailsDisplayTask from "../action/DetailsDisplayTask";
 export const SummaryDisplay: React.FC = () => {
   const { taskLogs, onClearLogs } = useTaskLog();
 
+  // Helper to map technical keys to friendly titles
+  const getTitle = (key: string) => {
+    switch (key) {
+      case "uploadAndScript":
+        return "Excel Migration";
+      case "splitFiles":
+        return "Split Processor";
+      case "imageDataTransfer":
+        return "Image Data Transfer"; // [ADDED]
+      case "sanityCheck":
+        return "Sanity Check";
+      case "s3Upload":
+        return "S3 Upload";
+      default:
+        return key;
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-50 font-sans text-slate-900 border-l border-slate-200">
       <div className="p-4 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between">
@@ -29,11 +47,7 @@ export const SummaryDisplay: React.FC = () => {
             {/* Header */}
             <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
               <h4 className="font-bold uppercase text-[10px] tracking-widest text-slate-500">
-                {taskKey === "uploadAndScript"
-                  ? "Excel Migration"
-                  : taskKey === "splitFiles"
-                  ? "Split Processor"
-                  : taskKey}
+                {getTitle(taskKey)}
               </h4>
               <button
                 onClick={() => onClearLogs(taskKey)}
@@ -44,8 +58,7 @@ export const SummaryDisplay: React.FC = () => {
             </div>
 
             <div className="p-4 space-y-4">
-              {/* [FIX] Progress Bar Component - Scoped by taskKey */}
-              {/* This component will look inside taskLogs[taskKey] to find its specific progress data */}
+              {/* Progress Bar (Only shows if this task supports live progress) */}
               <ProgressTrackingTask taskLogs={taskLogs} taskName={taskKey} />
 
               {/* Log List */}
