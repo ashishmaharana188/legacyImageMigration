@@ -6,10 +6,25 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useDebounce } from "../../hooks/useDebounce";
-import { S3Item, S3File, S3ApiResponse, useS3BrowserProps, useS3UploadProps } from "./s3ManagerType";
-import { fetchS3Objects, searchS3Folders, deleteS3Object, uploadOriginalToS3, uploadSplitFilesToS3 } from "./s3ManagerService";
+import {
+  S3Item,
+  S3File,
+  S3ApiResponse,
+  useS3BrowserProps,
+  useS3UploadProps,
+} from "./s3ManagerType";
+import {
+  fetchS3Objects,
+  searchS3Folders,
+  deleteS3Object,
+  uploadOriginalToS3,
+  uploadSplitFilesToS3,
+} from "./s3ManagerService";
 
-export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserProps) => {
+export const useS3BrowserHook = ({
+  updateTaskLog,
+  clearTaskLog,
+}: useS3BrowserProps) => {
   const queryClient = useQueryClient();
   const [currentPrefix, setCurrentPrefix] = useState<string>("Data/");
   const [isFilterMode, setIsFilterMode] = useState<boolean>(false);
@@ -51,21 +66,26 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
   const deleteMutation = useMutation({
     mutationFn: (key: string) => deleteS3Object(key),
     onSuccess: (_, key) => {
-      updateTaskLog("s3Browser", { message: `${key} deleted successfully.` });
+      // [FIX] Added id and timestamp
+      updateTaskLog("s3Browser", {
+        id: `DEL_OK_${Date.now()}`,
+        message: `${key} deleted successfully.`,
+        timestamp: new Date().toISOString(),
+      });
       queryClient.invalidateQueries({ queryKey: ["s3Objects", currentPrefix] });
     },
     onError: (error: unknown, key) => {
-      if (axios.isAxiosError(error)) {
-        updateTaskLog("s3Browser", {
-          message: `Failed to delete ${key}: ${
-            error.response?.data?.error || "An unknown error occurred."
-          }`,
-        });
-      } else {
-        updateTaskLog("s3Browser", {
-          message: `Failed to delete ${key}: An unknown error occurred.`,
-        });
-      }
+      // [FIX] Added id and timestamp
+      const errorMessage = axios.isAxiosError(error)
+        ? error.response?.data?.error || "An unknown error occurred."
+        : "An unknown error occurred.";
+
+      updateTaskLog("s3Browser", {
+        id: `DEL_ERR_${Date.now()}`,
+        status: "Error",
+        message: `Failed to delete ${key}: ${errorMessage}`,
+        timestamp: new Date().toISOString(),
+      });
     },
   });
 
@@ -74,7 +94,12 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
       if (!window.confirm(`Are you sure you want to delete "${key}"?`)) {
         return;
       }
-      updateTaskLog("s3Browser", { message: `Deleting ${key}` });
+      // [FIX] Added id and timestamp
+      updateTaskLog("s3Browser", {
+        id: `DEL_START_${Date.now()}`,
+        message: `Deleting ${key}...`,
+        timestamp: new Date().toISOString(),
+      });
       deleteMutation.mutate(key);
     },
     [deleteMutation, updateTaskLog]
@@ -83,8 +108,12 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
   const items = useMemo(() => {
     const newItems: S3Item[] = [];
     s3Data?.pages.forEach((page: S3ApiResponse) => {
-      (page.directories ?? []).forEach((dir: string) => newItems.push({ key: dir, type: "dir" }));
-      (page.files ?? []).forEach((file: S3File) => newItems.push({ ...file, type: "file" }));
+      (page.directories ?? []).forEach((dir: string) =>
+        newItems.push({ key: dir, type: "dir" })
+      );
+      (page.files ?? []).forEach((file: S3File) =>
+        newItems.push({ ...file, type: "file" })
+      );
     });
     return newItems;
   }, [s3Data]);
@@ -92,17 +121,22 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
   const searchResults = useMemo(() => {
     const items: S3Item[] = [];
     searchData?.pages.forEach((page: S3ApiResponse) => {
-      page.directories.forEach((dir: string) => items.push({ key: dir, type: "dir" }));
+      page.directories.forEach((dir: string) =>
+        items.push({ key: dir, type: "dir" })
+      );
     });
     return items;
   }, [searchData]);
 
-  const handleDirectoryClick = useCallback((directoryKey: string) => {
-    clearTaskLog("s3Browser");
-    setCurrentPrefix(directoryKey);
-    setIsFilterMode(false);
-    setSearchTerm("");
-  }, [clearTaskLog]);
+  const handleDirectoryClick = useCallback(
+    (directoryKey: string) => {
+      clearTaskLog("s3Browser");
+      setCurrentPrefix(directoryKey);
+      setIsFilterMode(false);
+      setSearchTerm("");
+    },
+    [clearTaskLog]
+  );
 
   const handleBreadcrumbClick = useCallback(
     (index: number) => {
@@ -120,14 +154,13 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
     if (currentPrefix !== defaultPrefix) {
       const pathParts = currentPrefix.split("/").filter(Boolean);
       if (pathParts.length > 1) {
-        const newPrefix = pathParts.slice(0, pathParts.length - 1).join("/") + "/";
+        const newPrefix =
+          pathParts.slice(0, pathParts.length - 1).join("/") + "/";
         setCurrentPrefix(newPrefix);
       } else {
-        // If only one part (e.g., 'Data/'), go to default
         setCurrentPrefix(defaultPrefix);
       }
     } else {
-      // Already at default, just refetch
       refetchS3Objects();
     }
   }, [refetchS3Objects, clearTaskLog, currentPrefix, setCurrentPrefix]);
@@ -153,45 +186,135 @@ export const useS3BrowserHook = ({ updateTaskLog, clearTaskLog }: useS3BrowserPr
   };
 };
 
-export const useS3UploadHook = ({ updateTaskLog, setUploadStatuses }: useS3UploadProps) => {
-  const [loading, setLoading] = useState(false);
+export const useS3UploadHook = ({
+  updateTaskLog,
+  setUploadStatuses,
+}: useS3UploadProps) => {
+  // [FIX] Maintained split loading states
+  const [originalLoading, setOriginalLoading] = useState(false);
+  const [splitLoading, setSplitLoading] = useState(false);
 
-  const handleUploadToS3 = useCallback(async (localDir: string, prefix: string) => {
-    setLoading(true);
-    updateTaskLog("s3Upload", { message: "Initiating S3 original file upload..." });
-    setUploadStatuses((prev) => [...prev, { id: Date.now(), name: "Original File Upload", status: "pending", fileName: "Original File" }]);
-    try {
-      const response = await uploadOriginalToS3(localDir, prefix);
-      updateTaskLog("s3Upload", { message: `Original file upload successful: ${response.message}` });
-      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Original File Upload" ? { ...upload, status: "completed" } : upload));
-    } catch (error) {
-      const errorMessage = axios.isAxiosError(error) ? error.response?.data?.error || error.message : String(error);
-      updateTaskLog("s3Upload", { message: `Original file upload failed: ${errorMessage}` });
-      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Original File Upload" ? { ...upload, status: "failed", error: errorMessage } : upload));
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, setUploadStatuses]);
+  const handleUploadToS3 = useCallback(
+    async (localDir: string, prefix: string) => {
+      setOriginalLoading(true);
+      // [FIX] Added id and timestamp
+      updateTaskLog("s3Upload", {
+        id: `UP_ORIG_START_${Date.now()}`,
+        message: "Initiating S3 original file upload...",
+        timestamp: new Date().toISOString(),
+      });
 
-  const handleUploadSplitFilesToS3 = useCallback(async (localDir: string, prefix: string) => {
-    setLoading(true);
-    updateTaskLog("s3Upload", { message: "Initiating S3 split files upload..." });
-    setUploadStatuses((prev) => [...prev, { id: Date.now(), name: "Split Files Upload", status: "pending", fileName: "Split Files" }]);
-    try {
-      const response = await uploadSplitFilesToS3(localDir, prefix);
-      updateTaskLog("s3Upload", { message: `Split files upload successful: ${response.message}` });
-      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Split Files Upload" ? { ...upload, status: "completed" } : upload));
-    } catch (error) {
-      const errorMessage = axios.isAxiosError(error) ? error.response?.data?.error || error.message : String(error);
-      updateTaskLog("s3Upload", { message: `Split files upload failed: ${errorMessage}` });
-      setUploadStatuses((prev) => prev.map((upload) => upload.fileName === "Split Files Upload" ? { ...upload, status: "failed", error: errorMessage } : upload));
-    } finally {
-      setLoading(false);
-    }
-  }, [updateTaskLog, setUploadStatuses]);
+      // [FIX] Added required 'progress: 0' field
+      setUploadStatuses((prev) => [
+        ...prev,
+        {
+          fileName: "Original File", // Matches UploadStatus interface
+          status: "pending",
+          progress: 0,
+        },
+      ]);
+
+      try {
+        const response = await uploadOriginalToS3(localDir, prefix);
+        updateTaskLog("s3Upload", {
+          id: `UP_ORIG_OK_${Date.now()}`,
+          message: `Original file upload successful: ${response.message}`,
+          status: "Success",
+          timestamp: new Date().toISOString(),
+        });
+        setUploadStatuses((prev) =>
+          prev.map((upload) =>
+            upload.fileName === "Original File"
+              ? { ...upload, status: "completed", progress: 100 }
+              : upload
+          )
+        );
+      } catch (error) {
+        const errorMessage = axios.isAxiosError(error)
+          ? error.response?.data?.error || error.message
+          : String(error);
+        updateTaskLog("s3Upload", {
+          id: `UP_ORIG_ERR_${Date.now()}`,
+          status: "Error",
+          message: `Original file upload failed: ${errorMessage}`,
+          timestamp: new Date().toISOString(),
+        });
+        setUploadStatuses((prev) =>
+          prev.map((upload) =>
+            upload.fileName === "Original File"
+              ? { ...upload, status: "failed", progress: 0 }
+              : upload
+          )
+        );
+      } finally {
+        setOriginalLoading(false);
+      }
+    },
+    [updateTaskLog, setUploadStatuses]
+  );
+
+  const handleUploadSplitFilesToS3 = useCallback(
+    async (localDir: string, prefix: string) => {
+      setSplitLoading(true);
+      // [FIX] Added id and timestamp
+      updateTaskLog("s3Upload", {
+        id: `UP_SPLIT_START_${Date.now()}`,
+        message: "Initiating S3 split files upload...",
+        timestamp: new Date().toISOString(),
+      });
+
+      // [FIX] Added required 'progress: 0' field
+      setUploadStatuses((prev) => [
+        ...prev,
+        {
+          fileName: "Split Files", // Matches UploadStatus interface
+          status: "pending",
+          progress: 0,
+        },
+      ]);
+
+      try {
+        const response = await uploadSplitFilesToS3(localDir, prefix);
+        updateTaskLog("s3Upload", {
+          id: `UP_SPLIT_OK_${Date.now()}`,
+          message: `Split files upload successful: ${response.message}`,
+          status: "Success",
+          timestamp: new Date().toISOString(),
+        });
+        setUploadStatuses((prev) =>
+          prev.map((upload) =>
+            upload.fileName === "Split Files"
+              ? { ...upload, status: "completed", progress: 100 }
+              : upload
+          )
+        );
+      } catch (error) {
+        const errorMessage = axios.isAxiosError(error)
+          ? error.response?.data?.error || error.message
+          : String(error);
+        updateTaskLog("s3Upload", {
+          id: `UP_SPLIT_ERR_${Date.now()}`,
+          status: "Error",
+          message: `Split files upload failed: ${errorMessage}`,
+          timestamp: new Date().toISOString(),
+        });
+        setUploadStatuses((prev) =>
+          prev.map((upload) =>
+            upload.fileName === "Split Files"
+              ? { ...upload, status: "failed", progress: 0 }
+              : upload
+          )
+        );
+      } finally {
+        setSplitLoading(false);
+      }
+    },
+    [updateTaskLog, setUploadStatuses]
+  );
 
   return {
-    loading,
+    originalLoading,
+    splitLoading,
     handleUploadToS3,
     handleUploadSplitFilesToS3,
   };

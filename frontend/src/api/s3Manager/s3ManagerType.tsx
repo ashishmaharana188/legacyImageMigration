@@ -1,9 +1,9 @@
-import { UploadStatus } from "../../types";
+import { UploadStatus, LogEntry } from "../../types";
 
 export interface S3File {
   key: string;
   lastModified?: string;
-  size?: number; // Added size for potential display
+  size?: number;
 }
 
 export interface S3Item {
@@ -20,12 +20,12 @@ export interface S3ApiResponse {
 }
 
 export interface useS3BrowserProps {
-  updateTaskLog: (task: string, log: unknown) => void;
+  updateTaskLog: (task: string, log: LogEntry) => void;
   clearTaskLog: (task: string) => void;
 }
 
 export interface useS3UploadProps {
-  updateTaskLog: (task: string, log: unknown) => void;
+  updateTaskLog: (task: string, log: LogEntry) => void;
   clearTaskLog: (task: string) => void;
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }
@@ -51,7 +51,8 @@ export interface S3BrowserUIProps {
 }
 
 export interface S3UploadUIProps {
-  loading: boolean;
+  originalLoading: boolean; // [FIX] Separate loading state
+  splitLoading: boolean; // [FIX] Separate loading state
   handleUploadToS3: (localDir: string, prefix: string) => Promise<void>;
   handleUploadSplitFilesToS3: (
     localDir: string,

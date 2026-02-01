@@ -1,7 +1,12 @@
 import express from "express";
-import { listFiles, deleteFiles, searchFiles, searchFolders } from "./s3Manager";
-import { uploadDirectoryRecursive, uploadSplitFilesToS3, uploadOriginalToS3 } from "./s3Uploader";
-import { S3_BUCKET_NAME } from "../../utils/s3Config";
+import {
+  listFiles,
+  deleteFiles,
+  searchFiles,
+  searchFolders,
+} from "./s3Manager";
+import { uploadOriginalToS3 } from "./s3Uploader";
+import { s3ProcessorController } from "./s3ProcessorController"; // [FIX] Import Controller
 
 const s3ProcessorRouter = express.Router();
 
@@ -12,7 +17,12 @@ s3ProcessorRouter.post("/s3/list", async (req, res) => {
     res.json(result);
   } catch (error: unknown) {
     console.error("Error listing S3 files:", error);
-    res.status(500).json({ message: "Failed to list S3 files", error: error instanceof Error ? error.message : String(error) });
+    res
+      .status(500)
+      .json({
+        message: "Failed to list S3 files",
+        error: error instanceof Error ? error.message : String(error),
+      });
   }
 });
 
@@ -23,7 +33,12 @@ s3ProcessorRouter.post("/s3/delete", async (req, res) => {
     res.json({ message: "Files deleted successfully", deletedKeys });
   } catch (error: unknown) {
     console.error("Error deleting S3 files:", error);
-    res.status(500).json({ message: "Failed to delete S3 files", error: error instanceof Error ? error.message : String(error) });
+    res
+      .status(500)
+      .json({
+        message: "Failed to delete S3 files",
+        error: error instanceof Error ? error.message : String(error),
+      });
   }
 });
 
@@ -34,7 +49,12 @@ s3ProcessorRouter.post("/s3/search-files", async (req, res) => {
     res.json(result);
   } catch (error: unknown) {
     console.error("Error searching S3 files:", error);
-    res.status(500).json({ message: "Failed to search S3 files", error: error instanceof Error ? error.message : String(error) });
+    res
+      .status(500)
+      .json({
+        message: "Failed to search S3 files",
+        error: error instanceof Error ? error.message : String(error),
+      });
   }
 });
 
@@ -45,19 +65,23 @@ s3ProcessorRouter.post("/s3/search-folders", async (req, res) => {
     res.json(result);
   } catch (error: unknown) {
     console.error("Error searching S3 folders:", error);
-    res.status(500).json({ message: "Failed to search S3 folders", error: error instanceof Error ? error.message : String(error) });
+    res
+      .status(500)
+      .json({
+        message: "Failed to search S3 folders",
+        error: error instanceof Error ? error.message : String(error),
+      });
   }
 });
 
+// [FIX] Delegate to Controller for auto-path resolution
 s3ProcessorRouter.post("/s3/upload-directory", async (req, res) => {
-  const { localDir, prefix } = req.body;
-  try {
-    const results = await uploadDirectoryRecursive(localDir, S3_BUCKET_NAME, prefix);
-    res.json({ message: "Directory upload initiated", results });
-  } catch (error: unknown) {
-    console.error("Error uploading directory to S3:", error);
-    res.status(500).json({ message: "Failed to upload directory to S3", error: error instanceof Error ? error.message : String(error) });
-  }
+  await s3ProcessorController.uploadToS3(req, res);
+});
+
+// [FIX] Delegate to Controller for auto-path resolution
+s3ProcessorRouter.post("/s3/upload-split-files", async (req, res) => {
+  await s3ProcessorController.uploadSplitFilesToS3(req, res);
 });
 
 s3ProcessorRouter.post("/s3/upload-original", async (req, res) => {
@@ -67,18 +91,12 @@ s3ProcessorRouter.post("/s3/upload-original", async (req, res) => {
     res.json({ message: "Original file upload initiated", result });
   } catch (error: unknown) {
     console.error("Error uploading original file to S3:", error);
-    res.status(500).json({ message: "Failed to upload original file to S3", error: error instanceof Error ? error.message : String(error) });
-  }
-});
-
-s3ProcessorRouter.post("/s3/upload-split-files", async (req, res) => {
-  const { localDir, prefix } = req.body;
-  try {
-    const results = await uploadSplitFilesToS3(localDir, prefix);
-    res.json({ message: "Split files upload initiated", results });
-  } catch (error: unknown) {
-    console.error("Error uploading split files to S3:", error);
-    res.status(500).json({ message: "Failed to upload split files to S3", error: error instanceof Error ? error.message : String(error) });
+    res
+      .status(500)
+      .json({
+        message: "Failed to upload original file to S3",
+        error: error instanceof Error ? error.message : String(error),
+      });
   }
 });
 
