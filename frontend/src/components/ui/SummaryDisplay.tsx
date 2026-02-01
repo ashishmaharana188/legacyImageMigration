@@ -25,7 +25,7 @@ export const SummaryDisplay: React.FC = () => {
 
   return (
     <div className="flex flex-col h-full bg-slate-50 font-sans text-slate-900 border-l border-slate-200">
-      <div className="p-4 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between">
+      <div className="p-4 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between rounded-2xl">
         <h3 className="text-lg font-bold tracking-tight uppercase">
           Task Logs
         </h3>

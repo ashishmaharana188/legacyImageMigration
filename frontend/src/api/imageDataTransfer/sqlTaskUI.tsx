@@ -50,13 +50,17 @@ const SQLTaskUI: React.FC<SQLTaskUIProps> = ({
       >
         {loading ? "Updating..." : "Update Folio & Transaction"}
       </button>
-      <div className="mt-4 flex gap-4 justify-end">
-        <button onClick={handleExecuteSql} className="btn" disabled={loading}>
+      <div className="mt-4 flex gap-4 ">
+        <button
+          onClick={handleExecuteSql}
+          className="btn w-full"
+          disabled={loading}
+        >
           {loading ? "Executing..." : "Execute SQL"}
         </button>
         <button
           onClick={handleReconnect}
-          className="btn btn-danger"
+          className="btn btn-danger w-full"
           disabled={loading}
         >
           {loading ? "Reconnecting..." : "Reconnect to DB"}
