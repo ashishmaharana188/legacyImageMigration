@@ -37,6 +37,7 @@ import {
 const logger = createFeatureLogger("imageDataTransfer");
 
 export class SqlUtil {
+  // [ALIGNMENT] Mapped to document_process (Old Code Logic)
   private readonly trxnMap: Record<string, string> = {
     IC: "IC",
     NCT: "NCT",
@@ -191,6 +192,26 @@ export class SqlUtil {
       client = await (await this.getPool()).connect();
       await pgBegin(client);
 
+      // [ALIGNMENT] Mapped to document_type (Old Code Logic)
+      const trxnNameMap: Record<string, string> = {
+        NEW: "Initial Contribution Form",
+        IC: "Initial Contribution Form", // Added alias for safety
+        NCT: "Non Commercial Transactions Form",
+        RED: "Redemption Form",
+        FUL: "Redemption Form",
+        IPO: "IPO Form",
+        SIN: "SIP Form",
+        SWOP: "SWP Form",
+        SWOF: "SWP Form",
+      };
+
+      // [ALIGNMENT] Mapped to mime_type (Old Code Logic)
+      const mimeType: Record<string, string> = {
+        tif: "image/tiff",
+        pdf: "application/pdf",
+        tiff: "image/tiff",
+      };
+
       const uniqueFunds = [
         ...new Set(transactions.map((t) => String(t.id_fund))),
       ];
@@ -212,22 +233,35 @@ export class SqlUtil {
         for (const data of chunk) {
           const actualId = clientIdMap.get(String(data.id_fund));
           if (actualId === undefined) continue;
+
           const ext = this.getFileExtension(data.id_path);
+          const cleanExt = ext.replace(".", "");
+
+          // [ALIGNMENT] Calculate fields based on old code
+          const process = this.trxnMap[data.id_trtype] || "Unknown";
+          const activity = "Image Upload";
+          const docType = trxnNameMap[data.id_trtype] || "Unknown";
+          const format = cleanExt.toUpperCase();
+          const mime =
+            mimeType[cleanExt.toLowerCase()] || "application/octet-stream";
+
+          // [ALIGNMENT] Dynamic Document Path
+          const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
+          const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
+
           const rowValues = [
-            this.trxnMap[data.id_trtype] || "Unknown",
-            "Image Upload",
-            "Form",
-            ext.replace(".", "").toUpperCase(),
-            "path",
-            null,
-            data.id_ihno.toString(),
-            "A",
-            "mime",
-            null,
-            data.id_ihno.toString(),
-            data.id_acno,
-            null,
-            null,
+            process, // document_process
+            activity, // document_activity
+            docType, // document_type
+            format, // document_format
+            docPath, // document_path
+            null, // folio_id
+            data.id_ihno.toString(), // transaction_reference_id
+            "A", // document_status
+            mime, // mime_type
+            null, // user_attr0
+            data.id_ihno.toString(), // user_attr1
+            data.id_acno, // user_attr2
             null,
             null,
             null,
@@ -235,13 +269,15 @@ export class SqlUtil {
             null,
             null,
             null,
+            null, // approval_status
             null,
             null,
             null,
-            false,
-            new Date(),
+            null,
+            false, // del_flag
+            new Date(), // last_update_tms
             "system",
-            new Date(),
+            new Date(), // creation_date
             "system",
             data.page_count,
             actualId,
