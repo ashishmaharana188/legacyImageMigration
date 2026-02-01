@@ -49,31 +49,42 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
   }
 
   // 3. Image Data Transfer Logic (SQL/Mongo)
-  const sqlLog = currentLogs.find(
-    (log) => log.id === "LIVE_SQL_PROGRESS" || log.id === "LIVE_MONGO_PROGRESS"
-  );
-  if (sqlLog && taskName === "imageDataTransfer") {
-    const isSql = sqlLog.id === "LIVE_SQL_PROGRESS";
-    const metrics = sqlLog.metrics || {};
-
-    return (
-      <ProgressTrackingUI
-        title={isSql ? "SQL Execution Progress" : "Mongo Sync Progress"}
-        progress={sqlLog.progress || 0}
-        total={sqlLog.totalRows || 0}
-        processed={sqlLog.processedRows || 0}
-        successful={sqlLog.successfulRows || 0}
-        errors={sqlLog.errors || 0}
-        displayType="simple"
-        unit="records"
-        // [FIX] Pass inserted metric for Execute SQL
-        detailedMetrics={{
-          folioUpdated: metrics.folioUpdated,
-          txnUpdated: metrics.txnUpdated,
-          inserted: metrics.inserted,
-        }}
-      />
+  if (taskName === "imageDataTransfer") {
+    // [FIX] Use filter instead of find to capture ALL active tasks (SQL and/or Mongo)
+    const activeLogs = currentLogs.filter(
+      (log) =>
+        log.id === "LIVE_SQL_PROGRESS" || log.id === "LIVE_MONGO_PROGRESS"
     );
+
+    if (activeLogs.length > 0) {
+      return (
+        <div className="flex flex-col gap-4">
+          {activeLogs.map((log) => {
+            const isSql = log.id === "LIVE_SQL_PROGRESS";
+            const metrics = log.metrics || {};
+
+            return (
+              <ProgressTrackingUI
+                key={log.id} // [FIX] Unique key ensures React renders both
+                title={isSql ? "SQL Execution Progress" : "Mongo Sync Progress"}
+                progress={log.progress || 0}
+                total={log.totalRows || 0}
+                processed={log.processedRows || 0}
+                successful={log.successfulRows || 0}
+                errors={log.errors || 0}
+                displayType="simple"
+                unit="records"
+                detailedMetrics={{
+                  folioUpdated: metrics.folioUpdated,
+                  txnUpdated: metrics.txnUpdated,
+                  inserted: metrics.inserted,
+                }}
+              />
+            );
+          })}
+        </div>
+      );
+    }
   }
 
   return null;

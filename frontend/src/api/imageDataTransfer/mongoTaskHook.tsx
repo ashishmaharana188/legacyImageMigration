@@ -7,7 +7,6 @@ import { useTaskLog } from "../../contexts/TaskLogContext";
 
 export const useMongoTask = () => {
   const [loading, setLoading] = useState(false);
-  // [FIX] Added state required by UI
   const [clientCode, setClientCode] = useState("");
   const [updateAllMongo, setUpdateAllMongo] = useState(false);
 
@@ -78,6 +77,21 @@ export const useMongoTask = () => {
     }
   };
 
+  // [FIX] The missing bridge function required by the UI
+  const handleTransferToMongo = async (updateAll: boolean, code: string) => {
+    if (updateAll) {
+      // If "Update All" is checked, run the Sync/Update logic
+      // Note: Backend expects a numeric Client ID for updates, but UI provides a string Code.
+      // We try to parse it; if NaN, we pass undefined (which usually means 'Process All' in backend).
+      const numericId = parseInt(code, 10);
+      const finalId = isNaN(numericId) ? undefined : numericId;
+      await handleUpdateMongoTransactions(finalId);
+    } else {
+      // If unchecked, run the Transfer (Postgres -> Mongo) logic
+      await handleTransferData(code);
+    }
+  };
+
   return {
     loading,
     clientCode,
@@ -86,5 +100,6 @@ export const useMongoTask = () => {
     setUpdateAllMongo,
     handleTransferData,
     handleUpdateMongoTransactions,
+    handleTransferToMongo, // [FIX] Export the new function
   };
 };

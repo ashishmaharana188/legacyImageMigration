@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import SQLTaskUI from "../api/imageDataTransfer/sqlTaskUI";
 import MongoTaskUI from "../api/imageDataTransfer/mongoTaskUI";
+import SQLAndMongoUI from "@/components/ui/SQLAndMongoUI";
 // [FIX] Import the renamed hooks
 import { useSqlTask } from "../api/imageDataTransfer/sqlTaskHook";
 import { useMongoTask } from "../api/imageDataTransfer/mongoTaskHook";
