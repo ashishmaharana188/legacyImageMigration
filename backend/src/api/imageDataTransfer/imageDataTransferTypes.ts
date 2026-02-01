@@ -1,6 +1,4 @@
-// backend/src/api/imageDataTransfer/imageDataTransferTypes.ts
-
-import { Document } from "mongoose";
+import { Document, Types } from "mongoose";
 
 export interface SqlLog {
   row: number;
@@ -26,10 +24,12 @@ export interface AifDocumentDetail {
   source_user: string;
   total_page_count: number | null;
   transaction_reference_id: string;
-  user_attr1: string; // Added for update details
+  user_attr1: string;
 }
 
+// Pure Data Interface
 export interface IAifDocumentInput {
+  _id?: Types.ObjectId | string; // Allow flexible _id
   activityStatus: string;
   barcode?: string;
   applicationId: string | null;
@@ -56,7 +56,11 @@ export interface IAifDocumentInput {
   workDate: string;
 }
 
-export interface IAifDocument extends Document, IAifDocumentInput {}
+// Mongoose Document Interface
+// We extend Document (which has _id) and our Input properties (excluding _id to avoid conflict)
+export interface IAifDocument
+  extends Document,
+    Omit<IAifDocumentInput, "_id"> {}
 
 export interface IUpdatedDocumentSummary {
   clientId: string;
@@ -73,10 +77,23 @@ export interface ISyncedDocumentSummary {
 
 export interface IBulkWriteResult {
   modifiedCount: number;
-  // Add other properties if needed, e.g., insertedCount, upsertedCount, etc.
+  insertedCount: number;
+  matchedCount: number;
+  deletedCount: number;
+  upsertedCount: number;
 }
 
-export interface IPgQueryResult {
-  rows: unknown[];
-  rowCount: number;
+export interface ImageDataProgress {
+  type: "sqlProgressUpdate" | "mongoProgressUpdate";
+  subTask: "executeSql" | "updateFolio" | "transferMongo" | "syncMongo";
+  total: number;
+  processed: number;
+  status: "Running" | "Completed" | "Error";
+  message?: string;
+  metrics?: {
+    inserted?: number;
+    updated?: number;
+    synced?: number;
+    failed?: number;
+  };
 }

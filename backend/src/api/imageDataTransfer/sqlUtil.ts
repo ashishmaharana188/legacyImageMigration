@@ -11,7 +11,11 @@ import {
   warmupPgPool,
 } from "../../utils/dbConnect";
 import Cursor from "pg-cursor";
-import { SqlLog, AifDocumentDetail } from "./imageDataTransferTypes";
+import {
+  SqlLog,
+  AifDocumentDetail,
+  ImageDataProgress,
+} from "./imageDataTransferTypes";
 import {
   pgQuery,
   pgBegin,
@@ -47,12 +51,9 @@ export class SqlUtil {
   public async getPool(): Promise<Pool> {
     return await getPgPool();
   }
-
   public async warmup() {
     await warmupPgPool();
   }
-
-  // [FIX] Changed to public so Wrapper can access it for the "Reconnect" button
   public async reconnectPool(): Promise<void> {
     await reconnectPgPool();
   }
@@ -61,6 +62,23 @@ export class SqlUtil {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
+  // Helper: Count rows to calculate accurate progress percentage
+  private async countCsvRows(filePath: string): Promise<number> {
+    let lines = 0;
+    try {
+      const stream = fsSync.createReadStream(filePath);
+      return new Promise((resolve) => {
+        stream.on("data", (chunk) => {
+          for (let i = 0; i < chunk.length; ++i) if (chunk[i] === 10) lines++;
+        });
+        stream.on("end", () => resolve(lines - 1));
+      });
+    } catch {
+      return 0;
+    }
+  }
+
+  // [FIX] Restored Helper
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../../../processed");
     try {
@@ -87,14 +105,9 @@ export class SqlUtil {
     }
   }
 
-  async generateSql(): Promise<{
-    sql: string;
-    transactions: any[];
-    logs: SqlLog[];
-  }> {
-    const logs: SqlLog[] = [];
+  async generateSql(): Promise<{ transactions: any[]; logs: SqlLog[] }> {
     try {
-      logger.info("Generating SQL transactions from CSV...");
+      logger.info("Generating SQL transactions from CSV...", { console: true }); // [LOG]
       const csvPath = path.join(__dirname, "../../../../processed");
       const files = await fs.readdir(csvPath);
       const latestCsv = files
@@ -103,15 +116,11 @@ export class SqlUtil {
         .pop();
 
       if (!latestCsv) {
-        logger.warn("No processed CSV found for SQL generation.");
-        return {
-          sql: "",
-          transactions: [],
-          logs: [{ row: 0, status: "error", message: "No CSV found" }],
-        };
+        logger.warn("No processed CSV found.");
+        return { transactions: [], logs: [] };
       }
 
-      logger.info(`Reading CSV: ${latestCsv}`);
+      logger.info(`Reading CSV: ${latestCsv}`, { console: true }); // [LOG]
       const transactions: any[] = [];
       await new Promise<void>((resolve, reject) => {
         fsSync
@@ -132,28 +141,53 @@ export class SqlUtil {
           .on("end", resolve)
           .on("error", reject);
       });
-
-      logger.info(`Generated ${transactions.length} transactions from CSV.`);
-      return { sql: "GENERATED", transactions, logs };
+      return { transactions, logs: [] };
     } catch (e) {
       logger.error("Failed to generate SQL", { error: e });
-      return { sql: "", transactions: [], logs: [] };
+      return { transactions: [], logs: [] };
     }
   }
 
-  async executeSql(): Promise<any> {
-    const logs: SqlLog[] = [];
+  async executeSql(onProgress: (p: ImageDataProgress) => void): Promise<void> {
     let client: PoolClient | null = null;
     try {
-      logger.info("Starting executeSql process...", { console: true });
+      // [FIX] Immediate Feedback
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "executeSql",
+        total: 0,
+        processed: 0,
+        status: "Running",
+        message: "Preparing Data...",
+      });
 
-      const { transactions, logs: gLogs } = await this.generateSql();
-      logs.push(...gLogs);
+      const { transactions } = await this.generateSql();
+      const total = transactions.length;
 
-      if (!transactions.length) {
-        logger.warn("No transactions to execute.");
-        return { result: "failed", logs, summary: { insertedRows: 0 } };
+      if (total === 0) {
+        onProgress({
+          type: "sqlProgressUpdate",
+          subTask: "executeSql",
+          total: 0,
+          processed: 0,
+          status: "Error",
+          message: "No data found",
+        });
+        return;
       }
+
+      // [FIX] Update Status
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "executeSql",
+        total,
+        processed: 0,
+        status: "Running",
+        message: "Connecting to Database...",
+      });
+      logger.info(`Connecting to DB to insert ${total} rows...`, {
+        console: true,
+      }); // [LOG]
 
       client = await (await this.getPool()).connect();
       await pgBegin(client);
@@ -161,20 +195,16 @@ export class SqlUtil {
       const uniqueFunds = [
         ...new Set(transactions.map((t) => String(t.id_fund))),
       ];
-
-      logger.info("Fetching client master codes...");
-      const clientIdMap = new Map();
       const clientRes = (await pgQuery(
         client,
         SQL_SELECT_CLIENT_MASTER_BY_CODES,
         [uniqueFunds]
       )) as any;
+      const clientIdMap = new Map();
       clientRes.rows.forEach((r: any) => clientIdMap.set(r.client_code, r.id));
 
       let insertedRows = 0;
-      const totalBatches = Math.ceil(transactions.length / 500);
-
-      for (let i = 0; i < transactions.length; i += 500) {
+      for (let i = 0; i < total; i += 500) {
         const chunk = transactions.slice(i, i + 500);
         const vParams: any[] = [];
         const vStrings: string[] = [];
@@ -221,37 +251,59 @@ export class SqlUtil {
           vParams.push(...rowValues);
         }
 
-        const res = (await pgQuery(
-          client,
-          SQL_INSERT_AIF_DOCUMENT_DETAILS.replace(
-            "%VALUES%",
-            vStrings.join(", ")
-          ),
-          vParams
-        )) as any;
-        insertedRows += res.rowCount || res.rows?.length || 0;
+        if (vStrings.length > 0) {
+          const res = (await pgQuery(
+            client,
+            SQL_INSERT_AIF_DOCUMENT_DETAILS.replace(
+              "%VALUES%",
+              vStrings.join(", ")
+            ),
+            vParams
+          )) as any;
+          insertedRows += res.rowCount || 0;
+        }
 
-        const currentBatch = Math.ceil(i / 500) + 1;
-        if (currentBatch % 5 === 0) {
-          logger.info(
-            `Running... Batch ${currentBatch}/${totalBatches} inserted`,
-            { console: true }
-          );
+        // [FIX] Progress & Console Throttling
+        const currentCount = i + chunk.length;
+        onProgress({
+          type: "sqlProgressUpdate",
+          subTask: "executeSql",
+          total,
+          processed: currentCount,
+          status: "Running",
+          metrics: { inserted: insertedRows },
+        });
+
+        if (currentCount % 5000 === 0) {
+          logger.info(`Inserted ${currentCount}/${total} rows...`, {
+            console: true,
+          }); // [LOG]
         }
       }
 
+      logger.info("Committing Transaction...", { console: true }); // [LOG]
       await pgCommit(client);
-      logger.info(`SQL Execution Success. Total Inserted: ${insertedRows}`);
 
-      return {
-        result: "success",
-        logs,
-        summary: { insertedRows, errorRows: 0, badRows: [] },
-      };
-    } catch (err) {
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "executeSql",
+        total,
+        processed: total,
+        status: "Completed",
+        metrics: { inserted: insertedRows },
+      });
+      logger.info("SQL Execution Completed Successfully.", { console: true }); // [LOG]
+    } catch (err: any) {
       if (client) await pgRollback(client);
-      logger.error("Execute SQL Failed", { error: err });
-      return { result: "failed", logs };
+      logger.error("Execute SQL Failed", { error: err }); // Console filter allows errors by default
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "executeSql",
+        total: 0,
+        processed: 0,
+        status: "Error",
+        message: err.message,
+      });
     } finally {
       if (client) client.release();
     }
@@ -259,41 +311,51 @@ export class SqlUtil {
 
   async updateFolioAndTransaction(
     updateAll: boolean,
-    providedTx?: any[],
-    initialLogs: SqlLog[] = []
-  ): Promise<any> {
-    let logs = [...initialLogs];
-    let transactions = providedTx;
+    onProgress: (p: ImageDataProgress) => void
+  ): Promise<void> {
+    // [FIX] Immediate Feedback
+    onProgress({
+      type: "sqlProgressUpdate",
+      subTask: "updateFolio",
+      total: 0,
+      processed: 0,
+      status: "Running",
+      message: "Preparing Update...",
+    });
 
-    logger.info(
-      `Starting Update Folio & Transaction. UpdateAll: ${updateAll}`,
-      { console: true }
-    );
+    let transactions: any[] = [];
+    const generated = await this.generateSql();
+    transactions = generated.transactions;
+    const total = transactions.length;
 
-    if (!transactions || transactions.length === 0) {
-      logger.info("No transactions provided, generating from CSV...");
-      const generated = await this.generateSql();
-      transactions = generated.transactions;
-    }
-
-    if (!transactions || transactions.length === 0) {
-      logger.warn("No transactions found to update.");
-      return { result: "failed", summary: { updatedFolioRows: 0 } };
+    if (total === 0) {
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 0,
+        processed: 0,
+        status: "Error",
+        message: "No data found",
+      });
+      return;
     }
 
     const processedFolioNumbers = [
       ...new Set(transactions.map((tx: any) => tx.id_acno)),
     ];
     let client: PoolClient | null = null;
+
     try {
+      logger.info("Connecting to DB for Updates...", { console: true }); // [LOG]
       client = await (await this.getPool()).connect();
       await pgBegin(client);
 
-      logger.info("Creating temporary transaction data table...");
       await pgQuery(client, SQL_CREATE_TEMP_TRANSACTION_DATA);
 
-      logger.info(`Inserting ${transactions.length} rows into temp table...`);
-      for (let i = 0; i < transactions.length; i += 1000) {
+      logger.info(`Inserting ${total} rows into temp table...`, {
+        console: true,
+      }); // [LOG]
+      for (let i = 0; i < total; i += 1000) {
         const chunk = transactions.slice(i, i + 1000);
         const vStrs = chunk.map(
           (_, idx) => `($${idx * 2 + 1}, $${idx * 2 + 2})`
@@ -302,6 +364,7 @@ export class SqlUtil {
           tx.id_ihno.toString(),
           tx.id_acno,
         ]);
+
         await pgQuery(
           client,
           SQL_INSERT_TEMP_TRANSACTION_DATA.replace(
@@ -310,9 +373,17 @@ export class SqlUtil {
           ),
           vParams
         );
+
+        onProgress({
+          type: "sqlProgressUpdate",
+          subTask: "updateFolio",
+          total: total * 2,
+          processed: i + chunk.length,
+          status: "Running",
+          message: "Inserting Temp Data...",
+        });
       }
 
-      logger.info("Updating Temp Images...");
       await pgQuery(client, SQL_DELETE_TEMP_IMAGES_1);
       await pgQuery(
         client,
@@ -323,7 +394,16 @@ export class SqlUtil {
         updateAll ? [] : [processedFolioNumbers]
       );
 
-      logger.info("Executing Folio Update Query...");
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: total * 2,
+        processed: total + total / 2,
+        status: "Running",
+        message: "Running Update Query...",
+      });
+      logger.info("Executing Update Query...", { console: true }); // [LOG]
+
       const resF = (await pgQuery(
         client,
         SQL_UPDATE_FOLIO_ID.replace(
@@ -332,8 +412,6 @@ export class SqlUtil {
         ),
         updateAll ? [] : [processedFolioNumbers]
       )) as any;
-
-      logger.info("Executing Transaction Reference Update Query...");
       const resT = (await pgQuery(
         client,
         SQL_UPDATE_TRANSACTION_REFERENCE_ID.replace(
@@ -345,77 +423,68 @@ export class SqlUtil {
 
       await pgCommit(client);
 
-      const summary = {
-        updatedFolioRows: resF.rowCount || resF.rows?.length || 0,
-        updatedTransactionRows: resT.rowCount || resT.rows?.length || 0,
-      };
-
-      logger.info(
-        `Update Success. Folios: ${summary.updatedFolioRows}, Transactions: ${summary.updatedTransactionRows}`
-      );
-
-      return {
-        result: "success",
-        logs,
-        summary,
-      };
-    } catch (err) {
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: total * 2,
+        processed: total * 2,
+        status: "Completed",
+        metrics: { updated: (resF.rowCount || 0) + (resT.rowCount || 0) },
+      });
+      logger.info("Update Completed.", { console: true }); // [LOG]
+    } catch (err: any) {
       if (client) await pgRollback(client);
-      logger.error("Update Folio/Transaction Failed", { error: err });
-      return { result: "failed" };
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 0,
+        processed: 0,
+        status: "Error",
+        message: err.message,
+      });
     } finally {
       if (client) client.release();
     }
   }
 
+  // --- Helpers for Mongo ---
   public async getClientIdByCode(
     clientCode: string
   ): Promise<{ id: number } | undefined> {
-    let client: PoolClient | null = null;
+    let client = await (await this.getPool()).connect();
     try {
-      client = await (await this.getPool()).connect();
       const res = await pgQuery(client, SQL_SELECT_CLIENT_ID_BY_CODE, [
         clientCode,
       ]);
       return res.rows[0] as { id: number };
-    } catch (error) {
-      logger.error(`Error fetching client ID for code ${clientCode}`, {
-        error,
-      });
-      throw error;
     } finally {
-      if (client) client.release();
+      client.release();
     }
   }
 
   public async getAifDocumentDetails(
     clientId?: number
   ): Promise<AifDocumentDetail[]> {
-    let client: PoolClient | null = null;
+    const folioNumbers = await this.getProcessedFolioNumbers();
+    if (folioNumbers.length === 0) return [];
+    let client = await (await this.getPool()).connect();
     try {
-      const folioNumbers = await this.getProcessedFolioNumbers();
-      if (folioNumbers.length === 0) return [];
-
-      client = await (await this.getPool()).connect();
       const queryParams: unknown[] = [folioNumbers];
-      let clientIdClause = "";
-
-      if (clientId) {
-        clientIdClause = ` AND add.client_id = $${queryParams.length + 1}`;
-        queryParams.push(clientId);
-      }
-
-      const query = SQL_SELECT_AIF_DOCUMENT_DETAILS.replace(
-        "%CLIENT_ID_CLAUSE%",
-        clientIdClause
+      let clientIdClause = clientId
+        ? ` AND add.client_id = $${queryParams.length + 1}`
+        : "";
+      if (clientId) queryParams.push(clientId);
+      const res = await pgQuery(
+        client,
+        SQL_SELECT_AIF_DOCUMENT_DETAILS.replace(
+          "%CLIENT_ID_CLAUSE%",
+          clientIdClause
+        ),
+        queryParams
       );
-      const res = await pgQuery(client, query, queryParams);
       return res.rows as AifDocumentDetail[];
-    } catch (error) {
-      logger.error("Error fetching AIF Document Details", { error });
-      throw error;
     } finally {
-      if (client) client.release();
+      client.release();
     }
   }
 
@@ -424,10 +493,8 @@ export class SqlUtil {
     processBatch: (batch: AifDocumentDetail[]) => Promise<void>,
     clientId?: number
   ): Promise<void> {
-    let client: PoolClient | null = null;
+    let client = await (await this.getPool()).connect();
     try {
-      logger.info("Starting SQL stream for updates...");
-      client = await (await this.getPool()).connect();
       const queryParams: unknown[] = [];
       const query = SQL_STREAM_UPDATE_DETAILS.replace(
         "%CLIENT_ID_CLAUSE%",
@@ -437,29 +504,14 @@ export class SqlUtil {
 
       const cursor = client.query(new Cursor(query, queryParams));
       let rows: unknown[];
-      let batchCount = 0;
-
       do {
         rows = await new Promise((res, rej) =>
           cursor.read(batchSize, (err, r) => (err ? rej(err) : res(r)))
         );
-        if (rows.length > 0) {
-          batchCount++;
-          await processBatch(rows as AifDocumentDetail[]);
-          if (batchCount % 10 === 0) {
-            logger.info(`Streaming... Processed ${batchCount} batches`, {
-              console: true,
-            });
-          }
-        }
+        if (rows.length > 0) await processBatch(rows as AifDocumentDetail[]);
       } while (rows.length > 0);
-
-      logger.info("SQL Stream completed.");
-    } catch (error) {
-      logger.error("Error in streamUpdateDetails", { error });
-      throw error;
     } finally {
-      if (client) client.release();
+      client.release();
     }
   }
 }

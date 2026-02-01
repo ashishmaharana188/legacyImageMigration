@@ -6,7 +6,6 @@ import DetailsDisplayTask from "../action/DetailsDisplayTask";
 export const SummaryDisplay: React.FC = () => {
   const { taskLogs, onClearLogs } = useTaskLog();
 
-  // Helper to map technical keys to friendly titles
   const getTitle = (key: string) => {
     switch (key) {
       case "uploadAndScript":
@@ -14,11 +13,11 @@ export const SummaryDisplay: React.FC = () => {
       case "splitFiles":
         return "Split Processor";
       case "imageDataTransfer":
-        return "Image Data Transfer"; // [ADDED]
-      case "sanityCheck":
-        return "Sanity Check";
+        return "Image Data Transfer";
       case "s3Upload":
         return "S3 Upload";
+      case "sanityCheck":
+        return "Sanity Check";
       default:
         return key;
     }
@@ -44,7 +43,6 @@ export const SummaryDisplay: React.FC = () => {
             key={taskKey}
             className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
           >
-            {/* Header */}
             <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
               <h4 className="font-bold uppercase text-[10px] tracking-widest text-slate-500">
                 {getTitle(taskKey)}
@@ -58,23 +56,28 @@ export const SummaryDisplay: React.FC = () => {
             </div>
 
             <div className="p-4 space-y-4">
-              {/* Progress Bar (Only shows if this task supports live progress) */}
               <ProgressTrackingTask taskLogs={taskLogs} taskName={taskKey} />
 
-              {/* Log List */}
               <div className="space-y-2 mt-4 max-h-64 overflow-y-auto">
-                {logsArray.map(
-                  (logItem, index) =>
-                    // Hide internal progress objects from the text log list
-                    logItem.id !== "LIVE_EXCEL_PROGRESS" &&
-                    logItem.id !== "LIVE_SPLIT_PROGRESS" && (
+                {logsArray.map((logItem, index) => {
+                  // [FIX] Hide ALL live progress IDs from the static list
+                  const isLiveLog = [
+                    "LIVE_EXCEL_PROGRESS",
+                    "LIVE_SPLIT_PROGRESS",
+                    "LIVE_SQL_PROGRESS",
+                    "LIVE_MONGO_PROGRESS",
+                  ].includes(logItem.id);
+
+                  return (
+                    !isLiveLog && (
                       <DetailsDisplayTask
                         key={logItem.id || index}
                         log={logItem}
                         logKey={taskKey}
                       />
                     )
-                )}
+                  );
+                })}
               </div>
             </div>
           </section>

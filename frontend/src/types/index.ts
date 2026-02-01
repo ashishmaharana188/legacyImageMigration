@@ -9,6 +9,7 @@ export interface LogEntry {
   status?: string;
   message?: string;
   timestamp?: string;
+
   // Progress specific fields
   totalRows?: number;
   processedRows?: number;
@@ -17,12 +18,23 @@ export interface LogEntry {
   notFound?: number;
   progress?: number;
   duplicates?: number;
+
   // Split specific fields
   splitSummary?: {
     totalSplitFilesGenerated: number;
     splitErrors: number;
     totalExpectedPagesFromCsv: number;
   };
+
+  // [FIX] Added missing fields for SQL/Mongo WebSocket support
+  subTask?: string;
+  metrics?: {
+    inserted?: number;
+    updated?: number;
+    synced?: number;
+    failed?: number;
+  };
+  badRowsFilePath?: string;
 }
 
 export interface S3UploadProgress {
@@ -34,8 +46,6 @@ export interface S3UploadProgress {
 export interface TaskLogContextType {
   taskLogs: { [key: string]: LogEntry[] };
   uploadStatuses: UploadStatus[];
-  // [REMOVED] activeProgress: ... (This was the cause of the bug)
-
   updateTaskLog: (taskKey: string, log: LogEntry) => void;
   onClearLogs: (taskKey: string) => void;
   setSummaryData: React.Dispatch<

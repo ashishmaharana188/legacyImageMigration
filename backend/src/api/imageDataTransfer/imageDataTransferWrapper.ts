@@ -1,7 +1,8 @@
 import { SqlUtil } from "./sqlUtil";
 import { MongoUtil } from "./mongoUtil";
-import { SqlLog } from "./imageDataTransferTypes";
+import { ImageDataProgress } from "./imageDataTransferTypes";
 import { createFeatureLogger } from "../../utils/logger";
+import { broadcast } from "../../utils/webSocketService";
 
 const logger = createFeatureLogger("imageDataTransfer");
 
@@ -14,71 +15,54 @@ export class ImageDataTransferWrapper {
     this.mongoUtil = new MongoUtil();
   }
 
-  // [ADDED] Support for "Reconnect DB" button
-  public async reconnectDb(): Promise<{ message: string }> {
-    logger.info("Wrapper: Calling SqlUtil.reconnectPool...");
-    await this.sqlUtil.reconnectPool();
-    return { message: "Database reconnected successfully." };
+  public async reconnectDb() {
+    return this.sqlUtil.reconnectPool();
   }
 
-  public async executeSql(): Promise<{
-    result: string;
-    logs: SqlLog[];
-    summary: {
-      insertedRows: number;
-      errorRows: number;
-      badRows: unknown[];
-      badRowsFilePath: string | null;
-    };
-  }> {
-    logger.info("Wrapper: Calling SqlUtil.executeSql...");
-    return this.sqlUtil.executeSql();
+  public async executeSql(): Promise<void> {
+    this.sqlUtil
+      .executeSql((progress) => {
+        broadcast(JSON.stringify(progress));
+      })
+      .catch((err) => {
+        // [FIX] Explicit console log for background errors
+        logger.error("Background SQL Error", { error: err, console: true });
+      });
   }
 
-  public async updateFolioAndTransaction(
-    updateAll: boolean,
-    transactions: {
-      id_fund: number;
-      id_trtype: string;
-      id_ihno: number;
-      id_path: string;
-      id_acno: string;
-      page_count: number | string;
-    }[],
-    initialLogs: SqlLog[]
-  ): Promise<{
-    result: string;
-    logs: SqlLog[];
-    summary: {
-      updatedFolioRows: number;
-      updatedTransactionRows: number;
-      badRows: { user_attr1: string; user_attr2: string; reason: string }[];
-      badRowsFilePath: string | null;
-    };
-  }> {
-    logger.info("Wrapper: Calling SqlUtil.updateFolioAndTransaction...");
-    return this.sqlUtil.updateFolioAndTransaction(
-      updateAll,
-      transactions,
-      initialLogs
-    );
+  public async updateFolioAndTransaction(updateAll: boolean): Promise<void> {
+    this.sqlUtil
+      .updateFolioAndTransaction(updateAll, (progress) => {
+        broadcast(JSON.stringify(progress));
+      })
+      .catch((err) => {
+        logger.error("Background Update Error", { error: err, console: true });
+      });
   }
 
-  public async transferDataFromPostgres(clientCode?: string): Promise<{
-    transferredCount: number;
-    documents?: unknown[];
-  }> {
-    logger.info("Wrapper: Calling MongoUtil.transferDataFromPostgres...");
-    return this.mongoUtil.transferDataFromPostgres(clientCode);
+  public async transferDataFromPostgres(clientCode?: string): Promise<void> {
+    this.mongoUtil
+      .transferDataFromPostgres(clientCode, (progress) => {
+        broadcast(JSON.stringify(progress));
+      })
+      .catch((err) => {
+        logger.error("Background Mongo Transfer Error", {
+          error: err,
+          console: true,
+        });
+      });
   }
 
-  public async updateMongoTransactions(clientId?: number): Promise<{
-    updatedCount: number;
-    syncedCount: number;
-    updatedDocuments: unknown[];
-    syncedDocuments: unknown[];
-  }> {
-    logger.info("Wrapper: Calling MongoUtil.updateMongoTransactions...");
-    return this.mongoUtil.updateMongoTransactions(clientId);
+  public async updateMongoTransactions(clientId?: number): Promise<void> {
+    this.mongoUtil
+      .updateMongoTransactions(clientId, (progress) => {
+        broadcast(JSON.stringify(progress));
+      })
+      .catch((err) => {
+        logger.error("Background Mongo Sync Error", {
+          error: err,
+          console: true,
+        });
+      });
   }
 }

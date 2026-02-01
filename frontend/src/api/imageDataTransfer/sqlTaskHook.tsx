@@ -9,37 +9,29 @@ import { useTaskLog } from "../../contexts/TaskLogContext";
 export const useSqlTask = () => {
   const [loading, setLoading] = useState(false);
   const [updateAll, setUpdateAll] = useState(false);
-
   const { updateTaskLog } = useTaskLog();
 
   const handleExecuteSql = useCallback(async () => {
     setLoading(true);
+    // Initial Log
     updateTaskLog("imageDataTransfer", {
-      id: `SQL_EXEC_${Date.now()}`,
+      id: "LIVE_SQL_PROGRESS",
       status: "Running",
-      message: "Initiating SQL Execution...",
-      timestamp: new Date().toISOString(),
+      message: "Requesting Start...",
+      progress: 0,
     });
     try {
-      const data = await executeSqlService();
-      updateTaskLog("imageDataTransfer", {
-        id: `SQL_EXEC_DONE_${Date.now()}`,
-        status: "Success",
-        message: `Insert Count: ${data.summary?.insertedRows ?? 0}`,
-        timestamp: new Date().toISOString(),
-        successfulRows: data.summary?.insertedRows,
-        errors: data.summary?.errorRows,
-      });
+      await executeSqlService();
+      // Don't log success here; WebSocket will do it
     } catch (err: any) {
       updateTaskLog("imageDataTransfer", {
-        id: `SQL_EXEC_ERR_${Date.now()}`,
+        id: "LIVE_SQL_PROGRESS",
         status: "Error",
-        message: err.message || "SQL Execution Failed",
-        timestamp: new Date().toISOString(),
-        errors: 1,
+        message: "Start Failed",
       });
     } finally {
-      setLoading(false);
+      setLoading(false); // Button becomes clickable again immediately? Or keep disabled?
+      // Usually keep disabled until WS says complete, but for now let's re-enable to allow retries.
     }
   }, [updateTaskLog]);
 
@@ -47,35 +39,18 @@ export const useSqlTask = () => {
     async (isUpdateAll: boolean) => {
       setLoading(true);
       updateTaskLog("imageDataTransfer", {
-        id: `UPDATE_FOLIO_${Date.now()}`,
+        id: "LIVE_SQL_PROGRESS",
         status: "Running",
-        message: `Updating Folios (${isUpdateAll ? "ALL" : "Selective"})...`,
-        timestamp: new Date().toISOString(),
+        message: "Requesting Update...",
+        progress: 0,
       });
       try {
-        const data = await updateFolioAndTransactionService(
-          isUpdateAll,
-          [],
-          []
-        );
-        updateTaskLog("imageDataTransfer", {
-          id: `UPDATE_FOLIO_DONE_${Date.now()}`,
-          status: "Success",
-          message: `Update Folios: ${
-            data.summary?.updatedFolioRows ?? 0
-          }, Update Txns: ${data.summary?.updatedTransactionRows ?? 0}`,
-          timestamp: new Date().toISOString(),
-          successfulRows:
-            (data.summary?.updatedFolioRows ?? 0) +
-            (data.summary?.updatedTransactionRows ?? 0),
-        });
+        await updateFolioAndTransactionService(isUpdateAll, [], []);
       } catch (err: any) {
         updateTaskLog("imageDataTransfer", {
-          id: `UPDATE_FOLIO_ERR_${Date.now()}`,
+          id: "LIVE_SQL_PROGRESS",
           status: "Error",
-          message: err.message || "Update Failed",
-          timestamp: new Date().toISOString(),
-          errors: 1,
+          message: "Start Failed",
         });
       } finally {
         setLoading(false);
@@ -85,32 +60,15 @@ export const useSqlTask = () => {
   );
 
   const handleReconnect = useCallback(async () => {
+    // Reconnect is fast, can stay HTTP
     setLoading(true);
-    updateTaskLog("imageDataTransfer", {
-      id: "DB_RECONN",
-      status: "Running",
-      message: "Reconnecting DB...",
-      timestamp: new Date().toISOString(),
-    });
     try {
       await reconnectDbService();
-      updateTaskLog("imageDataTransfer", {
-        id: "DB_RECONN_DONE",
-        status: "Success",
-        message: "Database Reconnected.",
-        timestamp: new Date().toISOString(),
-      });
-    } catch (err) {
-      updateTaskLog("imageDataTransfer", {
-        id: "DB_RECONN_ERR",
-        status: "Error",
-        message: "Reconnect Failed",
-        timestamp: new Date().toISOString(),
-      });
+    } catch (e) {
     } finally {
       setLoading(false);
     }
-  }, [updateTaskLog]);
+  }, []);
 
   return {
     loading,
