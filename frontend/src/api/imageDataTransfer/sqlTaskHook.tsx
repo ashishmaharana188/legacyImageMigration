@@ -25,9 +25,7 @@ export const useSqlTask = () => {
       updateTaskLog("imageDataTransfer", {
         id: `SQL_EXEC_DONE_${Date.now()}`,
         status: "Success",
-        message: `Execution Complete. Inserted: ${
-          data.summary?.insertedRows ?? 0
-        }`,
+        message: `Insert Count: ${data.summary?.insertedRows ?? 0}`,
         timestamp: new Date().toISOString(),
         successfulRows: data.summary?.insertedRows,
         errors: data.summary?.errorRows,
@@ -63,9 +61,9 @@ export const useSqlTask = () => {
         updateTaskLog("imageDataTransfer", {
           id: `UPDATE_FOLIO_DONE_${Date.now()}`,
           status: "Success",
-          message: `Update Complete. Folios: ${
+          message: `Update Folios: ${
             data.summary?.updatedFolioRows ?? 0
-          }, Txns: ${data.summary?.updatedTransactionRows ?? 0}`,
+          }, Update Txns: ${data.summary?.updatedTransactionRows ?? 0}`,
           timestamp: new Date().toISOString(),
           successfulRows:
             (data.summary?.updatedFolioRows ?? 0) +
