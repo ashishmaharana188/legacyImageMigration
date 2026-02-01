@@ -19,29 +19,29 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     return (
       <ProgressTrackingUI
         title="File Transfer Details"
-        progress={uploadLog.progress}
-        total={uploadLog.totalRows}
-        processed={uploadLog.processedRows}
-        successful={uploadLog.successfulRows}
-        errors={uploadLog.errors}
-        notFound={uploadLog.notFound}
+        progress={uploadLog.progress || 0}
+        total={uploadLog.totalRows || 0}
+        processed={uploadLog.processedRows || 0}
+        successful={uploadLog.successfulRows || 0}
+        errors={uploadLog.errors || 0}
+        notFound={uploadLog.notFound || 0}
         displayType="aggregate"
         unit="rows"
       />
     );
   }
 
-  // 2. [FIX] Split Progress Logic (Aligned with WebSocket ID)
+  // 2. Split Progress Logic
   const splitLog = currentLogs.find((log) => log.id === "LIVE_SPLIT_PROGRESS");
   if (splitLog && taskName === "splitFiles") {
     return (
       <ProgressTrackingUI
         title="PDF Split Progress"
-        progress={splitLog.progress}
-        total={splitLog.totalRows} // Maps to 'totalExpectedPagesFromCsv'
-        processed={splitLog.processedRows} // Maps to 'totalSplitFilesGenerated'
-        successful={splitLog.successfulRows}
-        errors={splitLog.errors}
+        progress={splitLog.progress || 0}
+        total={splitLog.totalRows || 0}
+        processed={splitLog.processedRows || 0}
+        successful={splitLog.successfulRows || 0}
+        errors={splitLog.errors || 0}
         displayType="aggregate"
         unit="files"
       />
