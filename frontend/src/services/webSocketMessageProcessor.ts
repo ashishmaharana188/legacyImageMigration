@@ -20,10 +20,10 @@ export const createWebSocketMessageProcessor = ({
     if (!data || !data.type) return;
 
     switch (data.type) {
-      // 1. [FIX] Handle Excel Progress Updates
+      // 1. Excel Migration
       case "excelProcessingUpdate":
-        updateTaskLog("upload-status", {
-          id: "upload-status",
+        updateTaskLog("uploadAndScript", {
+          id: "LIVE_EXCEL_PROGRESS",
           status: "Processing",
           totalRows: data.totalRows,
           processedRows: data.processedRows,
@@ -38,7 +38,26 @@ export const createWebSocketMessageProcessor = ({
         });
         break;
 
-      // 2. Handle File Upload Status
+      // 2. [NEW] Split Processor Updates
+      case "splitProgressUpdate":
+      case "splitProgressComplete":
+        const totalExpected = data.totalExpectedPagesFromCsv || 0;
+        const generated = data.totalSplitFilesGenerated || 0;
+        const progress =
+          totalExpected > 0 ? Math.round((generated / totalExpected) * 100) : 0;
+
+        updateTaskLog("splitFiles", {
+          id: "LIVE_SPLIT_PROGRESS", // Consolidated ID for Split
+          status: data.status || "Processing",
+          totalRows: totalExpected, // Mapping "Pages" to "Total" for the UI
+          processedRows: generated,
+          successfulRows: generated,
+          errors: data.splitErrors || 0,
+          progress: progress,
+          message: data.message || `Generated ${generated} files...`,
+        });
+        break;
+
       case "uploadProgress":
         setUploadStatuses((prev) => {
           const newStatus: UploadStatus = {
@@ -56,7 +75,6 @@ export const createWebSocketMessageProcessor = ({
         });
         break;
 
-      // 3. Handle Sanity Check Updates
       case "sanityCheckUpdate":
         updateTaskLog("sanityCheck", {
           id: "sanityCheck",
@@ -67,20 +85,15 @@ export const createWebSocketMessageProcessor = ({
         });
         break;
 
-      // 4. Handle S3 Upload Progress
       case "s3UploadProgress":
         if (data.payload) {
           const { processedDirectories, totalDirectories, currentDirectory } =
             data.payload;
-
-          // Update the accumulator ref
           progressAccumulator.current = {
             processedDirectories,
             totalDirectories,
             currentDirectory,
           };
-
-          // Update React State
           setS3UploadProgress({
             processedDirectories,
             totalDirectories,
@@ -89,13 +102,11 @@ export const createWebSocketMessageProcessor = ({
         }
         break;
 
-      // 5. Connection Status
       case "welcome":
         setIsConnected(true);
         break;
 
       default:
-        // console.warn("Unknown message type:", data.type);
         break;
     }
   };

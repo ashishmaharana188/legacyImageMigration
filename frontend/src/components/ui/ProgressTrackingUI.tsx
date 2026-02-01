@@ -40,13 +40,11 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
         <h4 className="font-semibold text-black mb-2">{title}</h4>
 
         {/* Progress Bar Container */}
-        <div className="w-full bg-gray-300 rounded-full h-6">
+        <div className="w-full bg-gray-300 rounded-full h-3">
           <div
-            className="bg-black h-6 rounded-full text-lg font-medium text-white text-center leading-6 transition-all duration-500 ease-out"
+            className="bg-black h-3 rounded-full text-sm font-medium text-white text-center leading-6 transition-all duration-500 ease-out"
             style={{ width: `${percentage}%` }}
-          >
-            {percentage}%
-          </div>
+          ></div>
         </div>
 
         {/* Stats Text */}

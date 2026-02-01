@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* [NEW] GLOBAL FONT OVERRIDE */
+:root,
+body {
+  font-family: "Helvetica", "Arial", sans-serif !important;
+  /* !important ensures it overrides any default Tailwind sans utilities */
+}
+
 /* Custom Scrollbar for Webkit Browsers (Chrome, Safari) */
 ::-webkit-scrollbar {
   width: 8px;

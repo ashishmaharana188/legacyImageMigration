@@ -1,8 +1,5 @@
-// splitProcessor.ts
 import fs from "fs/promises";
 import path from "path";
-import sharp from "sharp";
-import { PDFDocument } from "pdf-lib";
 import winston from "winston";
 import { exec } from "child_process";
 import util from "util";
@@ -20,8 +17,6 @@ function extractSplitPaths(
   const match = stdout.match(/Split (\d+) pages successfully/);
   if (match && match[1]) {
     const splitCount = parseInt(match[1], 10);
-    logger.info(`Extracted split count: ${splitCount}`);
-
     const splitFilePaths: string[] = [];
     const fileExt = path.extname(fileName);
     const baseName = path.basename(fileName, fileExt);
@@ -32,9 +27,6 @@ function extractSplitPaths(
     }
     return splitFilePaths;
   } else {
-    logger.warn("Could not extract split count from Python stdout.", {
-      stdout,
-    });
     return [];
   }
 }
@@ -45,23 +37,15 @@ export async function runPythonFallback(
   fileName: string,
   logger: winston.Logger
 ): Promise<string[]> {
-  // UNIFIED PATH: Anchors to the folder containing this executing file
   const pythonScript = path.join(__dirname, "fallBackSplit.py");
   const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
 
   try {
-    logger.info(`Running Python fallback using: ${pythonScript}`);
     const { stdout, stderr } = await execPromise(
       `${pythonExecutable} "${pythonScript}" "${filePath}" "${outputFolderPath}"`
     );
-
-    if (stderr)
-      logger.warn(`Python fallback stderr for ${fileName}`, { stderr });
     return extractSplitPaths(stdout, fileName, outputFolderPath, logger);
   } catch (error) {
-    logger.error(`Python fallback failed for ${fileName}`, {
-      error: error instanceof Error ? error.message : String(error),
-    });
     throw error;
   }
 }
@@ -72,22 +56,15 @@ export async function runPythonMuPDF(
   fileName: string,
   logger: winston.Logger
 ): Promise<string[]> {
-  // UNIFIED PATH: Anchors to the folder containing this executing file
   const pythonScript = path.join(__dirname, "mupdf_splitter.py");
   const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
 
   try {
-    logger.info(`Running Python MuPDF split using: ${pythonScript}`);
     const { stdout, stderr } = await execPromise(
       `${pythonExecutable} "${pythonScript}" "${filePath}" "${outputFolderPath}"`
     );
-
-    if (stderr) logger.warn(`Python split stderr for ${fileName}`, { stderr });
     return extractSplitPaths(stdout, fileName, outputFolderPath, logger);
   } catch (error) {
-    logger.error(`Python split failed for ${fileName}`, {
-      error: error instanceof Error ? error.message : String(error),
-    });
     throw error;
   }
 }
@@ -111,7 +88,25 @@ export async function performSplit(
   let currentSplitErrors = splitErrors;
 
   let splitSuccessful = false;
-  let pagesSplit = 0;
+
+  const processPaths = (paths: string[]) => {
+    paths.forEach((splitPath) => {
+      createdSplitFiles.push({ originalPath: filePath, splitPath, page: 0 });
+      currentTotalSplitFilesGenerated++;
+
+      // [FIX] Strictly follows SplitProgressUpdate interface
+      progressCallback({
+        type: "splitProgressUpdate",
+        taskKey: "splitFiles", // Required for Frontend Routing
+        totalSplitFilesGenerated: currentTotalSplitFilesGenerated,
+        splitErrors: currentSplitErrors,
+        currentlySplittingFiles: fileName,
+        message: `Generated: ${path.basename(splitPath)}`, // Now allowed by type
+        status: "Processing",
+      });
+    });
+    return paths.length > 0;
+  };
 
   try {
     if (useMuPDF) {
@@ -121,20 +116,10 @@ export async function performSplit(
         fileName,
         logger
       );
-      pagesSplit = splitFilePaths.length;
-
-      splitFilePaths.forEach((splitPath) => {
-        createdSplitFiles.push({ originalPath: filePath, splitPath, page: 0 });
-        currentTotalSplitFilesGenerated++;
-      });
-      splitSuccessful = pagesSplit > 0;
-    } else {
-      // PDF-Lib or Sharp logic here (omitted for brevity, same as previous logic)
+      splitSuccessful = processPaths(splitFilePaths);
     }
   } catch (err) {
-    logger.error(
-      `Primary split failed for ${fileName}, attempting fallback...`
-    );
+    logger.warn(`Primary split failed for ${fileName}, attempting fallback...`);
   }
 
   if (!splitSuccessful) {
@@ -145,16 +130,21 @@ export async function performSplit(
         fileName,
         logger
       );
-      pagesSplit = fallbackPaths.length;
-
-      fallbackPaths.forEach((splitPath) => {
-        createdSplitFiles.push({ originalPath: filePath, splitPath, page: 0 });
-        currentTotalSplitFilesGenerated++;
-      });
-      splitSuccessful = pagesSplit > 0;
+      splitSuccessful = processPaths(fallbackPaths);
     } catch (fallbackErr) {
       currentSplitErrors++;
       logger.error(`Total failure for ${fileName}`);
+
+      // [FIX] Strictly follows SplitProgressUpdate interface
+      progressCallback({
+        type: "splitProgressUpdate",
+        taskKey: "splitFiles",
+        totalSplitFilesGenerated: currentTotalSplitFilesGenerated,
+        splitErrors: currentSplitErrors,
+        currentlySplittingFiles: fileName,
+        message: `Failed to split: ${fileName}`,
+        status: "Error",
+      });
     }
   }
 

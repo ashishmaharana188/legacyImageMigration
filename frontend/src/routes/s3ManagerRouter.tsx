@@ -5,7 +5,7 @@ import {
   useS3BrowserHook,
   useS3UploadHook,
 } from "../api/s3Manager/s3ManagerHook";
-import { useTaskLog } from "../hooks/useTaskLog";
+import { useTaskLog } from "../contexts/TaskLogContext";
 
 export const Route = createFileRoute("/s3ManagerRouter")({
   component: S3BrowserComponent,

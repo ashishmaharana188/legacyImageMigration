@@ -4,7 +4,6 @@ import React, {
   useState,
   useCallback,
   ReactNode,
-  useEffect,
 } from "react";
 import { UploadStatus, LogEntry, TaskLogContextType } from "../types";
 
@@ -26,7 +25,7 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
   const updateTaskLog = useCallback((taskKey: string, log: LogEntry) => {
     if (!log) return;
 
-    // 1. History Logs (Keep as is)
+    // 1. Update History
     setTaskLogs((prevLogs) => {
       const newLogs = { ...prevLogs };
       const currentTaskLogs = newLogs[taskKey] || [];
@@ -44,17 +43,19 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
       return newLogs;
     });
 
-    // 2. [FIX] The Fast Lane with "Zero Guard"
-    if (log.id === "upload-status") {
-      const newTotal = Number(log.totalRows);
+    // 2. [UPDATED] Live Progress Logic (Handles BOTH Upload and Split)
+    const isUploadLive =
+      taskKey === "uploadAndScript" && log.id === "LIVE_EXCEL_PROGRESS";
+    const isSplitLive =
+      taskKey === "splitFiles" && log.id === "LIVE_SPLIT_PROGRESS";
 
-      // GUARD: Only update progress if we actually have rows.
-      // This blocks the "Ghost" legacy code that sends totalRows: 0
+    if (isUploadLive || isSplitLive) {
+      const newTotal = Number(log.totalRows); // For split, this maps to totalExpectedPages
       if (newTotal > 0) {
         setActiveProgress({
           total: newTotal,
           success: Number(log.successfulRows || 0),
-          failure: Number(log.errors || 0) + Number(log.notFound || 0),
+          failure: Number(log.errors || 0),
           percent:
             Math.round((Number(log.processedRows) / newTotal) * 100) || 0,
         });
@@ -68,7 +69,10 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
       delete newLogs[taskKey];
       return newLogs;
     });
-    setActiveProgress({ total: 0, success: 0, failure: 0, percent: 0 });
+    // Reset global progress if the cleared section was the active one
+    if (taskKey === "uploadAndScript" || taskKey === "splitFiles") {
+      setActiveProgress({ total: 0, success: 0, failure: 0, percent: 0 });
+    }
   }, []);
 
   return (

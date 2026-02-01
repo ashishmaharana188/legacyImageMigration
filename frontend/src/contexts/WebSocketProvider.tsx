@@ -1,24 +1,46 @@
-import React, { useEffect, useRef, useState, useMemo, ReactNode } from "react";
+import React, {
+  createContext,
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  ReactNode,
+  useContext,
+} from "react";
 import { S3UploadProgress } from "../types";
-import { WebSocketContext } from "./WebSocketContextDefinition";
-// [CRITICAL] Ensure this points to the unified file
+// [FIX] Import from the Unified TaskLogContext
 import { useTaskLog } from "./TaskLogContext";
+// [FIX] Use the Singleton Service (matching your upload)
 import { webSocketService } from "../services/webSocketService";
 import { createWebSocketMessageProcessor } from "../services/webSocketMessageProcessor";
+
+// 1. Define the Context Type Locally
+interface WebSocketContextType {
+  s3UploadProgress: S3UploadProgress;
+  isConnected: boolean;
+}
+
+// 2. Create the Context Locally (No external dependency)
+export const WebSocketContext = createContext<WebSocketContextType | null>(
+  null
+);
 
 interface WebSocketProviderProps {
   children: ReactNode;
 }
 
+// 3. Export the Provider Component
 export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
   children,
 }) => {
   const { updateTaskLog, setUploadStatuses } = useTaskLog();
+
   const [s3UploadProgress, setS3UploadProgress] = useState<S3UploadProgress>({
     processedDirectories: 0,
     totalDirectories: 0,
     currentDirectory: "",
   });
+
   const [isConnected, setIsConnected] = useState(false);
 
   const progressAccumulator = useRef<S3UploadProgress>({
@@ -43,6 +65,7 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
     const handleOpen = () => setIsConnected(true);
     const handleClose = () => setIsConnected(false);
 
+    // Attach listeners to the Singleton Service
     webSocketService.addListener(processMessage);
     webSocketService.onOpen(handleOpen);
     webSocketService.onClose(handleClose);
@@ -60,4 +83,15 @@ export const WebSocketProvider: React.FC<WebSocketProviderProps> = ({
       {children}
     </WebSocketContext.Provider>
   );
+};
+
+// 4. Export a Hook for easy consumption (Optional but good practice)
+export const useWebSocketContext = () => {
+  const context = useContext(WebSocketContext);
+  if (!context) {
+    throw new Error(
+      "useWebSocketContext must be used within a WebSocketProvider"
+    );
+  }
+  return context;
 };

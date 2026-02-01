@@ -14,17 +14,21 @@ export interface SplitFileDetail {
 
 export interface SplitProgressUpdate {
   type: "splitProgressUpdate";
-  taskKey: "splitFiles"; // CRITICAL: Routes message to the correct sidebar section
+  taskKey: "splitFiles";
   totalSplitFilesGenerated: number;
   splitErrors: number;
-  totalExpectedPagesFromCsv: number;
-  currentlySplittingFiles: string; // FIXED: Added to resolve Error 2353
+  // [FIX] Made optional as the worker might not have global context
+  totalExpectedPagesFromCsv?: number;
+  // [FIX] Made optional to be flexible
+  currentlySplittingFiles?: string;
+  // [FIX] Added 'message' to resolve Error 2353
+  message?: string;
   status: string;
 }
 
 export interface SplitProgressComplete {
   type: "splitProgressComplete";
-  taskKey: "splitFiles"; // CRITICAL: Routes completion message
+  taskKey: "splitFiles";
   totalSplitFilesGenerated: number;
   splitErrors: number;
   totalExpectedPagesFromCsv: number;
@@ -41,12 +45,11 @@ export interface SplitFileResponse {
   statusCode: number;
   message: string;
   splitSummary?: SplitSummary;
-  summary?: SplitSummary; // Keep for backward compatibility
+  summary?: SplitSummary;
   error?: string;
   details?: string;
 }
 
-// Ensure UploadStatus is also exported if it resides here
 export interface UploadStatus {
   fileName: string;
   status: string;
@@ -57,5 +60,5 @@ export interface UploadStatus {
   errorFiles?: number;
   notFoundFiles?: number;
   errorMessage?: string;
-  splitSummary?: SplitSummary; // Optional field for splitting tasks
+  splitSummary?: SplitSummary;
 }
