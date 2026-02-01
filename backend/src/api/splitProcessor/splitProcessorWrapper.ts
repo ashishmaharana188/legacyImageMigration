@@ -1,7 +1,6 @@
 import fs from "fs/promises";
 import path from "path";
-import winston from "winston";
-// [FIX] Correctly import broadcast logic
+import { createFeatureLogger } from "../../utils/logger";
 import { broadcast } from "../../utils/webSocketService";
 import {
   SplitResult,
@@ -12,16 +11,9 @@ import {
 import { performSplit } from "./splitProcessor";
 import { SplitProcessorUtil } from "./splitProcessorUtil";
 
-const logger = winston.createLogger({
-  level: "info",
-  format: winston.format.json(),
-  transports: [
-    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-    new winston.transports.File({ filename: "logs/combined.log" }),
-  ],
-});
+// Initialize Feature-Specific Logger
+const logger = createFeatureLogger("splitProcessor");
 
-// [PRESERVED] Your original folder structure
 const baseFolder = path.join(process.cwd(), "output");
 const splitFolder = path.join(process.cwd(), "split_output");
 
@@ -30,6 +22,26 @@ export class SplitProcessorWrapper {
 
   constructor() {
     this.splitProcessorUtil = new SplitProcessorUtil();
+  }
+
+  // Helper to pre-calculate total files for the Progress Bar
+  private async countPdfFiles(dir: string): Promise<number> {
+    let count = 0;
+    try {
+      const items = await fs.readdir(dir);
+      for (const item of items) {
+        const fullPath = path.join(dir, item);
+        const stats = await fs.stat(fullPath);
+        if (stats.isDirectory()) {
+          count += await this.countPdfFiles(fullPath);
+        } else if (stats.isFile() && item.toLowerCase().endsWith(".pdf")) {
+          count++;
+        }
+      }
+    } catch (error) {
+      logger.warn(`Failed to count files in ${dir}`, { error });
+    }
+    return count;
   }
 
   async splitFiles(): Promise<SplitResult> {
@@ -46,38 +58,52 @@ export class SplitProcessorWrapper {
   ): Promise<SplitResult> {
     const createdSplitFiles: SplitFileDetail[] = [];
 
-    // 1. Get total expected pages (for the 100% calculation)
+    // 1. Try to get total from CSV
     let totalExpectedPagesFromCsv = 0;
     try {
       totalExpectedPagesFromCsv =
         await this.splitProcessorUtil.getTotalExpectedPagesFromCsv();
     } catch (e) {
-      logger.warn(
-        "Could not fetch total expected pages from CSV, defaulting to 0."
-      );
+      logger.warn("Could not fetch total expected pages from CSV.");
     }
+
+    // 2. Fallback count
+    if (!totalExpectedPagesFromCsv || totalExpectedPagesFromCsv === 0) {
+      logger.info("CSV Total missing. Counting actual files...", {
+        console: true,
+      });
+      totalExpectedPagesFromCsv = await this.countPdfFiles(baseFolder);
+    }
+
+    if (totalExpectedPagesFromCsv === 0) totalExpectedPagesFromCsv = 1;
 
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
 
-    logger.info(`Starting file splitting ${useMuPDF ? "(MuPDF)" : ""}`);
+    // [CHECKPOINT] INITIATED
+    logger.info(
+      `Initiating file splitting ${
+        useMuPDF ? "(MuPDF)" : ""
+      }. Total Expected: ${totalExpectedPagesFromCsv}`,
+      { console: true }
+    );
+
     await fs.mkdir(splitFolder, { recursive: true });
     await fs.mkdir(baseFolder, { recursive: true });
 
-    // 2. Initial Broadcast (Sets UI to 0%)
+    // 3. Initial Broadcast
     this.sendProgress(0, 0, totalExpectedPagesFromCsv, "Starting...");
 
-    // [NEW] Throttling State
     let lastBroadcastTime = 0;
 
-    // 3. Define the "Live Wire" Callback
+    // 4. Live Callback
     const handleWorkerProgress = (update: SplitProgressUpdate) => {
       const now = Date.now();
       // Throttle: Update only if 2s passed OR if it's an Error
       if (now - lastBroadcastTime > 2000 || update.status === "Error") {
         const enrichedUpdate = {
           ...update,
-          totalExpectedPagesFromCsv, // Inject global total
+          totalExpectedPagesFromCsv,
         };
         broadcast(JSON.stringify(enrichedUpdate));
         lastBroadcastTime = now;
@@ -99,7 +125,6 @@ export class SplitProcessorWrapper {
       for (const item of items) {
         const inputPath = path.join(inputDir, item);
         const outputPath = path.join(outputDir, item);
-
         let stats;
         try {
           stats = await fs.stat(inputPath);
@@ -109,48 +134,54 @@ export class SplitProcessorWrapper {
 
         if (stats.isDirectory()) {
           await fs.mkdir(outputPath, { recursive: true });
-
-          // Process files inside this directory
-          const files = await fs.readdir(inputPath);
-
-          // [FIX] Process sequentially to avoid memory spikes, or Promise.all for speed
-          for (const file of files) {
-            const filePath = path.join(inputPath, file);
-            const fileStats = await fs.stat(filePath);
-
-            if (fileStats.isFile() && file.toLowerCase().endsWith(".pdf")) {
-              const result = await performSplit(
-                filePath,
-                outputPath,
-                logger,
-                handleWorkerProgress, // <--- [CRITICAL FIX] Pass the real callback here!
-                totalSplitFilesGenerated,
-                splitErrors,
-                useMuPDF
-              );
-
-              createdSplitFiles.push(...result.createdSplitFiles);
-              totalSplitFilesGenerated = result.totalSplitFilesGenerated;
-              splitErrors = result.splitErrors;
-            }
-          }
-
-          // Recurse deeper
           await scanAndProcessDirectory(inputPath, outputPath);
+        } else if (stats.isFile() && item.toLowerCase().endsWith(".pdf")) {
+          // Process File
+          const result = await performSplit(
+            inputPath,
+            outputPath,
+            logger, // Pass feature logger to worker
+            handleWorkerProgress,
+            totalSplitFilesGenerated,
+            splitErrors,
+            useMuPDF
+          );
+
+          createdSplitFiles.push(...result.createdSplitFiles);
+          totalSplitFilesGenerated = result.totalSplitFilesGenerated;
+          splitErrors = result.splitErrors;
+
+          // [DETAIL LOG] File Only (No console tag)
+          logger.info(
+            `Processed: ${item} -> ${result.createdSplitFiles.length} pages`
+          );
+
+          // [CHECKPOINT] RUNNING (Throttled Console Output)
+          if (totalSplitFilesGenerated % 50 === 0) {
+            logger.info(
+              `Running... Processed ${totalSplitFilesGenerated} files`,
+              { console: true }
+            );
+          }
         }
       }
     };
 
     await scanAndProcessDirectory(baseFolder, splitFolder);
 
-    // 4. Final Completion Broadcast (Forces UI to 100%)
+    // [CHECKPOINT] SUCCESS
+    logger.info(
+      `Split Task Completed. Generated: ${totalSplitFilesGenerated}, Errors: ${splitErrors}`,
+      { console: true }
+    );
+
+    // 5. Final Completion Broadcast
     const completionUpdate: SplitProgressComplete = {
       type: "splitProgressComplete",
       taskKey: "splitFiles",
       totalSplitFilesGenerated,
       splitErrors,
-      totalExpectedPagesFromCsv:
-        totalExpectedPagesFromCsv || totalSplitFilesGenerated,
+      totalExpectedPagesFromCsv: totalExpectedPagesFromCsv,
       status: completionStatus,
     };
     broadcast(JSON.stringify(completionUpdate));

@@ -10,11 +10,6 @@ class UploadProcessorController {
         // --- DEBUGGING BLOCK ---
         const wss = req.app.get("wss");
         const clientCount = wss ? wss.clients.size : 0;
-        console.log(
-          `[DEBUG-CONTROLLER] Callback Triggered. Success: ${
-            stats.successfulRows
-          }. WSS Available: ${!!wss}. Clients: ${clientCount}`
-        );
 
         if (!wss) {
           console.error(

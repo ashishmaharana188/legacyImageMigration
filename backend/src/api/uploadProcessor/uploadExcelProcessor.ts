@@ -3,12 +3,14 @@ import {
   ProcessedRow,
   ProcessExcelRowsResult,
 } from "../uploadProcessor/uploadProcessorTypes";
-// [FIX] Import getPageCount
 import { buildDestinationFilePath, getPageCount } from "./uploadProcessorUtil";
 import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
-import winston from "winston";
+import { createFeatureLogger } from "../../utils/logger";
+
+// Initialize Feature-Specific Logger
+const logger = createFeatureLogger("uploadProcessor");
 
 type ProgressCallback = (stats: {
   totalRows: number;
@@ -22,7 +24,6 @@ export async function processExcelRows(
   worksheet: ExcelJS.Worksheet,
   headerIndices: { [key: string]: number },
   trxnMap: Record<string, string>,
-  logger: winston.Logger,
   getFileExtension: (filePath: string) => string,
   onProgress?: ProgressCallback
 ): Promise<ProcessExcelRowsResult> {
@@ -62,7 +63,7 @@ export async function processExcelRows(
       let found = false;
       let finalPath = pathVal;
 
-      // Search Logic (Tier 1: Local)
+      // Tier 1: Local Search
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -88,7 +89,7 @@ export async function processExcelRows(
         }
       }
 
-      // Search Logic (Tier 2: Network)
+      // Tier 2: Network Search
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
@@ -109,7 +110,6 @@ export async function processExcelRows(
         }
       }
 
-      // File Operation
       if (found) {
         const dest = await buildDestinationFilePath(
           trnMapped,
@@ -120,8 +120,6 @@ export async function processExcelRows(
         );
 
         await fs.writeFile(dest, await fs.readFile(srcPath));
-
-        // [FIX] Get the actual page count from the new file
         const pageCountVal = await getPageCount(dest);
 
         successfulRows++;
@@ -131,8 +129,13 @@ export async function processExcelRows(
           id_ihno: ihNo,
           id_path: finalPath,
           id_acno: acNo,
-          page_count: String(pageCountVal), // Saving Count or Error
+          page_count: String(pageCountVal),
         });
+
+        // [DETAIL LOG] File Only
+        logger.info(
+          `Row ${rowNumber}: Success - ${finalPath} (${pageCountVal} pages)`
+        );
       } else {
         notFound++;
         processedRows.push({
@@ -143,6 +146,17 @@ export async function processExcelRows(
           id_acno: acNo,
           page_count: "Not Found",
         });
+
+        // [DETAIL LOG] File Only
+        logger.info(`Row ${rowNumber}: Not Found - ${pathVal}`);
+      }
+
+      // [CHECKPOINT] RUNNING (Throttled Console Output)
+      if (totalRows % 100 === 0) {
+        logger.info(
+          `Running... Processed ${totalRows} / ${actualTotalRows} rows`,
+          { console: true }
+        );
       }
 
       const now = Date.now();
@@ -158,8 +172,8 @@ export async function processExcelRows(
       }
     } catch (err) {
       errors++;
-      logger.error(`Row ${rowNumber} Error:`, err);
-      // Optional: Add error rows to CSV if desired, currently only logging
+      // Errors always show in console due to consoleFilter
+      logger.error(`Row ${rowNumber} Error:`, { error: err });
     }
   }
 

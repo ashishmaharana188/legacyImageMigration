@@ -2,12 +2,20 @@ import ExcelJS from "exceljs";
 import path from "path";
 import { processExcelRows } from "./uploadExcelProcessor";
 import { createProcessedExcelFile } from "./uploadProcessorUtil";
-import logger from "../../utils/logger";
+import { createFeatureLogger } from "../../utils/logger";
+
+// Initialize Feature-Specific Logger
+const logger = createFeatureLogger("uploadProcessor");
 
 export async function processExcelFile(
   inputFilePath: string,
   onProgress?: (stats: any) => void
 ) {
+  // [CHECKPOINT] INITIATED
+  logger.info(`Initiating Excel Processing: ${path.basename(inputFilePath)}`, {
+    console: true,
+  });
+
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.readFile(inputFilePath);
   const worksheet = workbook.worksheets[0];
@@ -33,25 +41,24 @@ export async function processExcelFile(
   const getFileExtension = (filePath: string) =>
     path.extname(filePath).toLowerCase();
 
-  // DEBUG: Confirm wrapper received the callback
-  if (onProgress)
-    console.log(
-      "[DEBUG-WRAPPER] Callback function received and being passed to Processor."
-    );
-
+  // Call Processor (Logger is instantiated inside the processor to ensure consistency)
   const result = await processExcelRows(
     worksheet,
     headerIndices,
     trxnMap,
-    logger as any,
     getFileExtension,
-    onProgress // <--- CRITICAL: MUST BE PASSED
+    onProgress
   );
 
   const outputFileName = await createProcessedExcelFile(
     result.processedRows,
     inputFilePath
   );
+
+  // [CHECKPOINT] SUCCESS
+  logger.info(`Excel Processing Complete. Output: ${outputFileName}`, {
+    console: true,
+  });
 
   return { ...result, outputFileName };
 }
