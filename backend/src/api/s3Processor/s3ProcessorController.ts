@@ -21,6 +21,17 @@ import {
 
 class S3ProcessorController {
   async uploadToS3(req: Request, res: Response) {
+    // [LOG] Confirming which API is hit
+    logger.info("", {
+      console: true,
+    });
+    logger.info("API: uploadToS3 (ORIGINALS UPLOAD)", {
+      console: true,
+    });
+    logger.info("", {
+      console: true,
+    });
+
     try {
       const userProvidedDir = req.body.localDir;
       const defaultOutputRoot = path.join(process.cwd(), "output");
@@ -30,7 +41,7 @@ class S3ProcessorController {
           ? userProvidedDir
           : defaultOutputRoot;
 
-      // [FIX] SAFETY GUARD: Prevent "Upload Original" from running on "split_output"
+      // SAFETY GUARD: Prevent accidental upload of split_output via this handler
       if (targetRoot.includes("split_output")) {
         logger.warn(
           `Blocked attempt to upload 'split_output' via 'uploadToS3' (Originals) handler.`,
@@ -40,7 +51,7 @@ class S3ProcessorController {
           statusCode: 400,
           error: "Invalid Directory",
           details:
-            "You are trying to upload the 'split_output' folder using the 'Upload Original' button. Please use the 'Upload Split Files' button instead, or clear the Local Directory field to use the default 'output' folder.",
+            "You are trying to upload the 'split_output' folder using the 'Upload Original' button. Please use the 'Upload Split Files' button instead.",
         });
       }
 
@@ -90,7 +101,13 @@ class S3ProcessorController {
           });
 
           try {
-            return await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
+            // [REVERTED] No options/filters passed here anymore. Just pure upload.
+            return await uploadDirectoryRecursive(
+              clientPath,
+              bucket,
+              s3Prefix,
+              "ORIGINALS"
+            );
           } catch (error) {
             logger.error({
               category: "task-steps",
@@ -163,10 +180,19 @@ class S3ProcessorController {
   }
 
   async uploadSplitFilesToS3(req: Request, res: Response) {
+    logger.info("", {
+      console: true,
+    });
+    logger.info("API HIT: uploadSplitFilesToS3 (SPLITS UPLOAD)", {
+      console: true,
+    });
+    logger.info("", {
+      console: true,
+    });
+
     const defaultSplitRoot = path.join(process.cwd(), "split_output");
     const userProvidedDir = req.body.localDir;
 
-    // [FIX] Priority: User Input -> Default Split Output
     const splitOutputRoot =
       userProvidedDir && userProvidedDir.trim() !== ""
         ? userProvidedDir
@@ -215,7 +241,12 @@ class S3ProcessorController {
           });
 
           try {
-            return await uploadDirectoryRecursive(clientPath, bucket, s3Prefix);
+            return await uploadDirectoryRecursive(
+              clientPath,
+              bucket,
+              s3Prefix,
+              "SPLITS"
+            );
           } catch (error) {
             logger.error({
               category: "task-steps",

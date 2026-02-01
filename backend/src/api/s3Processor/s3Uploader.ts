@@ -7,6 +7,9 @@ import https from "https";
 import { broadcast } from "../../utils/webSocketService";
 import { S3_BUCKET_NAME } from "../../utils/s3Config";
 import { isAuthError, countTrackedDirectories } from "./s3ProcessorUtil";
+import { createFeatureLogger } from "../../utils/logger";
+
+const logger = createFeatureLogger("s3Processor");
 
 const agent = new https.Agent({
   maxSockets: 200,
@@ -28,6 +31,11 @@ export async function uploadOriginalToS3(
   localFilePath: string,
   s3Key: string
 ): Promise<string> {
+  // [FIX] Log Start (Terminal + File)
+  logger.info(`Starting Single File Upload: ${path.basename(localFilePath)}`, {
+    console: true,
+  });
+
   const fileStream = fs.createReadStream(localFilePath);
   const uploadParams = {
     Bucket: S3_BUCKET_NAME,
@@ -37,19 +45,25 @@ export async function uploadOriginalToS3(
 
   try {
     await s3.send(new PutObjectCommand(uploadParams));
-    console.log(`Successfully uploaded ${path.basename(localFilePath)} to S3.`);
+    // [FIX] Log Success (Terminal + File)
+    logger.info(
+      `Successfully uploaded ${path.basename(localFilePath)} to S3.`,
+      { console: true }
+    );
     return `Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`;
   } catch (err: unknown) {
     if (isAuthError(err)) {
-      console.error(
-        "S3 uploadOriginalToS3 failed: Authentication token expired or invalid."
-      );
+      const msg =
+        "S3 uploadOriginalToS3 failed: Authentication token expired or invalid.";
+      logger.error(msg, { console: true });
       throw new Error(
         "S3 operation failed due to expired or invalid credentials."
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`Error uploading original file to S3: ${msg}`);
+      logger.error(`Error uploading original file to S3: ${msg}`, {
+        console: true,
+      });
       throw new Error(msg);
     }
   }
@@ -59,6 +73,11 @@ export async function uploadSplitFilesToS3(
   localFilePaths: string[],
   s3Prefix: string
 ): Promise<string[]> {
+  logger.info(
+    `Starting Batch Upload of ${localFilePaths.length} split files...`,
+    { console: true }
+  );
+
   const uploadedKeys: string[] = [];
   for (const localFilePath of localFilePaths) {
     const fileName = path.basename(localFilePath);
@@ -74,22 +93,29 @@ export async function uploadSplitFilesToS3(
     try {
       await s3.send(new PutObjectCommand(uploadParams));
       uploadedKeys.push(s3Key);
-      console.log(`Successfully uploaded ${fileName} to S3.`);
+      // [FIX] Log Detail (File Only, No Console)
+      logger.info(`Uploaded: ${fileName}`, { console: false });
     } catch (err: unknown) {
       if (isAuthError(err)) {
-        console.error(
-          "S3 uploadSplitFilesToS3 failed: Authentication token expired."
-        );
+        logger.error("S3 uploadSplitFilesToS3 failed: Auth token expired.", {
+          console: true,
+        });
         throw new Error(
           "S3 operation failed due to expired or invalid credentials."
         );
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`Error uploading split file ${fileName}: ${msg}`);
+        logger.error(`Error uploading split file ${fileName}: ${msg}`, {
+          console: true,
+        });
         throw new Error(msg);
       }
     }
   }
+
+  logger.info(`Batch Upload Complete. ${uploadedKeys.length} files uploaded.`, {
+    console: true,
+  });
   return uploadedKeys;
 }
 
@@ -111,15 +137,11 @@ export async function uploadFile(
     await upload.done();
   } catch (err: unknown) {
     if (isAuthError(err)) {
-      console.error(
-        `S3 uploadFile failed for ${key}: Authentication token expired.`
-      );
       throw new Error(
         "S3 upload failed due to expired or invalid credentials."
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`S3 uploadFile error for ${key}: ${msg}`);
       throw new Error(msg);
     }
   }
@@ -128,12 +150,18 @@ export async function uploadFile(
 async function performIterativeUpload(
   localDir: string,
   bucket: string,
-  prefix: string
+  prefix: string,
+  context: string
 ) {
   if (!localDir || localDir.trim() === "") {
     throw new Error("Local directory path is empty or undefined.");
   }
-  console.log(`S3 upload process initiated for ${localDir}.`);
+
+  // [FIX] High-Level Start Log (Terminal + File)
+  logger.info(`[${context}] S3 Upload Running... Target: ${localDir}`, {
+    console: true,
+  });
+
   let totalDirectories = 0;
   const directoryQueue: {
     localPath: string;
@@ -177,6 +205,9 @@ async function performIterativeUpload(
         totalDirectories: 0,
       })
     );
+    logger.warn(`[${context}] No directories found to upload.`, {
+      console: true,
+    });
     return {
       successfulFilesCount: 0,
       failedFilesCount: 0,
@@ -228,14 +259,23 @@ async function performIterativeUpload(
               try {
                 await uploadFile(entryPath, bucket, entryKey);
                 successfulFilesCount++;
+                // [FIX] Detail Log (File Only)
+                logger.info(`[${context}] Uploaded: ${entry.name}`, {
+                  console: false,
+                });
               } catch (uploadError: unknown) {
                 failedFilesCount++;
+                const errMsg =
+                  uploadError instanceof Error
+                    ? uploadError.message
+                    : "Unknown upload error";
+                // [FIX] Error Log (Terminal + File)
+                logger.error(`[${context}] Failed: ${entry.name} - ${errMsg}`, {
+                  console: true,
+                });
                 results.failedFileDetails.push({
                   name: entry.name,
-                  error:
-                    uploadError instanceof Error
-                      ? uploadError.message
-                      : "Unknown upload error",
+                  error: errMsg,
                 });
               }
             })();
@@ -263,7 +303,9 @@ async function performIterativeUpload(
         throw new Error("S3 operation failed due to expired credentials.");
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        console.error(`S3 upload error for ${localPath}: ${msg}`);
+        logger.error(`[${context}] Directory Error ${localPath}: ${msg}`, {
+          console: true,
+        });
         failedFilesCount++;
       }
     }
@@ -271,6 +313,12 @@ async function performIterativeUpload(
 
   results.successfulFilesCount = successfulFilesCount;
   results.failedFilesCount = failedFilesCount;
+
+  // [FIX] High-Level Completion Log (Terminal + File)
+  logger.info(
+    `[${context}] S3 Upload Success. Uploaded: ${successfulFilesCount}, Failed: ${failedFilesCount}`,
+    { console: true }
+  );
 
   broadcast(
     JSON.stringify({
@@ -291,7 +339,8 @@ async function performIterativeUpload(
 export async function uploadDirectoryRecursive(
   localDir: string,
   bucket: string,
-  prefix: string
+  prefix: string,
+  context: string
 ) {
-  return performIterativeUpload(localDir, bucket, prefix);
+  return performIterativeUpload(localDir, bucket, prefix, context);
 }
