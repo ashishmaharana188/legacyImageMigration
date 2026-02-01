@@ -92,7 +92,9 @@ export interface ImageDataProgress {
   message?: string;
   metrics?: {
     inserted?: number;
-    updated?: number;
+    updated?: number; // Kept for backward compatibility
+    folioUpdated?: number; // [NEW]
+    txnUpdated?: number; // [NEW]
     synced?: number;
     failed?: number;
   };

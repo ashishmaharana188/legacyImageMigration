@@ -23,6 +23,7 @@ const createPgPool = async (): Promise<Pool> => {
         category: "app-flow",
         function: "createPgPool",
         message: "Attempting to start PostgreSQL SSH tunnel.",
+        console: true, // [FIX] Force to console
       });
       try {
         const tunnel = await startSshTunnel();
@@ -31,6 +32,7 @@ const createPgPool = async (): Promise<Pool> => {
           category: "app-flow",
           function: "createPgPool",
           message: "PostgreSQL SSH tunnel started successfully.",
+          console: true, // [FIX] Force to console
         });
       } catch (error: unknown) {
         const errorMessage =
@@ -40,6 +42,7 @@ const createPgPool = async (): Promise<Pool> => {
           function: "createPgPool",
           message: "Failed to start PostgreSQL SSH tunnel.",
           error: errorMessage,
+          console: true,
         });
       }
     }
@@ -75,19 +78,15 @@ const createPgPool = async (): Promise<Pool> => {
       function: "createPgPool",
       message: "pg Pool: unexpected error",
       error: err.message,
+      console: true,
     });
-    if (
-      err.message.includes("ECONNREFUSED") ||
-      err.message.includes("ETIMEDOUT")
-    ) {
-      reconnectPgPool().catch(() => {});
-    }
   });
 
   logger.info({
     category: "app-flow",
     function: "createPgPool",
     message: `Postgres pool configured for ${dbHost}:${dbPort}`,
+    console: true,
   });
   return newPool;
 };
@@ -101,26 +100,71 @@ export const reconnectPgPool = async (): Promise<void> => {
   logger.warn({
     category: "app-flow",
     function: "reconnectPgPool",
-    message: "Attempting to reconnect PostgreSQL pool.",
+    message: "HARD RESET: Attempting to kill all DB connections and reconnect.",
+    console: true, // [FIX] Already visible, kept for consistency
   });
+
   const MAX_RETRIES = 5;
 
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
       if (pgSshTunnel) {
+        logger.info({
+          category: "app-flow",
+          message: "Closing SSH Tunnel to force-kill connections...",
+          console: true, // [FIX] Force to console
+        });
         pgSshTunnel.close();
         pgSshTunnel = null;
       }
+
       if (pgPool) {
-        await pgPool.end();
+        const oldPool = pgPool;
+        pgPool = null;
+
+        logger.info({
+          category: "app-flow",
+          message: "Destroying old Postgres Pool...",
+          console: true, // [FIX] Force to console
+        });
+
+        try {
+          await Promise.race([
+            oldPool.end(),
+            new Promise((resolve) => setTimeout(resolve, 2000)),
+          ]);
+        } catch (err) {
+          logger.error({
+            category: "app-flow",
+            message: "Error while destroying old pool (ignoring)",
+            error: err,
+            console: true,
+          });
+        }
       }
 
+      logger.info({
+        category: "app-flow",
+        message: "Initializing fresh Pool and Tunnel...",
+        console: true, // [FIX] Force to console
+      });
       pgPool = await createPgPool();
       await warmupPgPool();
+
+      logger.info({
+        category: "app-flow",
+        message: "DB Reconnect Successful.",
+        console: true, // [FIX] Force to console
+      });
       return;
     } catch (e) {
       if (i === MAX_RETRIES - 1) throw e;
-      await new Promise((r) => setTimeout(r, 5000));
+      logger.warn({
+        category: "app-flow",
+        message: `Reconnect attempt ${i + 1} failed. Retrying...`,
+        console: true, // [FIX] Force to console
+      });
+      await new Promise((r) => setTimeout(r, 2000));
     }
   }
 };
@@ -137,6 +181,7 @@ export const warmupPgPool = async () => {
         category: "app-flow",
         function: "warmupPgPool",
         message: "PostgreSQL warm-up successful",
+        console: true, // [FIX] Force to console
       });
       return;
     } catch (err) {
@@ -161,7 +206,6 @@ interface MongoSshTunnelServer {
 }
 let mongoSshTunnel: MongoSshTunnelServer | null = null;
 
-// [FIX] Changed Schema generic to IAifDocument to match Model type
 const FnxTransactionInitiationDocUploadSchema =
   new mongoose.Schema<IAifDocument>(
     {
@@ -202,7 +246,6 @@ export const getMongoModel = (): mongoose.Model<IAifDocument> => {
   if (!mongoModel) {
     const useTunnel = process.env.USE_MONGO_SSH_TUNNEL === "true";
     if (useTunnel) {
-      // [FIX] Ensuring the cast is safe
       mongoModel =
         (mongoose.models
           .FnxTransactionInitiationDocUpload as mongoose.Model<IAifDocument>) ||
@@ -254,11 +297,13 @@ export const connectMongo = async (): Promise<void> => {
     logger.info({
       category: "app-flow",
       message: "MongoDB connected successfully",
+      console: true, // [FIX] Force to console
     });
   } catch (error: any) {
     logger.error({
       category: "app-flow",
       message: `MongoDB connection error: ${error.message}`,
+      console: true,
     });
     process.exit(1);
   }

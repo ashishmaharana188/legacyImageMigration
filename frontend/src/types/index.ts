@@ -31,6 +31,8 @@ export interface LogEntry {
   metrics?: {
     inserted?: number;
     updated?: number;
+    folioUpdated?: number; // [NEW]
+    txnUpdated?: number; // [NEW]
     synced?: number;
     failed?: number;
   };

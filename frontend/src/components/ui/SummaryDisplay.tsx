@@ -1,7 +1,7 @@
 import React from "react";
 import { useTaskLog } from "../../contexts/TaskLogContext";
 import ProgressTrackingTask from "../action/ProgressTrackingTask";
-import DetailsDisplayTask from "../action/DetailsDisplayTask";
+// [REMOVED] import DetailsDisplayTask...
 
 export const SummaryDisplay: React.FC = () => {
   const { taskLogs, onClearLogs } = useTaskLog();
@@ -38,7 +38,7 @@ export const SummaryDisplay: React.FC = () => {
           </div>
         )}
 
-        {Object.entries(taskLogs).map(([taskKey, logsArray]) => (
+        {Object.entries(taskLogs).map(([taskKey, _logsArray]) => (
           <section
             key={taskKey}
             className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
@@ -49,36 +49,17 @@ export const SummaryDisplay: React.FC = () => {
               </h4>
               <button
                 onClick={() => onClearLogs(taskKey)}
-                className="text-[10px] font-bold text-rose-500 hover:text-rose-700 uppercase"
+                className="text-[10px] font-bold text-black hover:text-white hover:drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] uppercase"
               >
                 Clear
               </button>
             </div>
 
             <div className="p-4 space-y-4">
+              {/* Only Progress Bars remain */}
               <ProgressTrackingTask taskLogs={taskLogs} taskName={taskKey} />
 
-              <div className="space-y-2 mt-4 max-h-64 overflow-y-auto">
-                {logsArray.map((logItem, index) => {
-                  // [FIX] Hide ALL live progress IDs from the static list
-                  const isLiveLog = [
-                    "LIVE_EXCEL_PROGRESS",
-                    "LIVE_SPLIT_PROGRESS",
-                    "LIVE_SQL_PROGRESS",
-                    "LIVE_MONGO_PROGRESS",
-                  ].includes(logItem.id);
-
-                  return (
-                    !isLiveLog && (
-                      <DetailsDisplayTask
-                        key={logItem.id || index}
-                        log={logItem}
-                        logKey={taskKey}
-                      />
-                    )
-                  );
-                })}
-              </div>
+              {/* [REMOVED] Details/History List */}
             </div>
           </section>
         ))}

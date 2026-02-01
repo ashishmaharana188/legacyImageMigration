@@ -48,6 +48,34 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     );
   }
 
+  // 3. Image Data Transfer Logic (SQL/Mongo)
+  const sqlLog = currentLogs.find(
+    (log) => log.id === "LIVE_SQL_PROGRESS" || log.id === "LIVE_MONGO_PROGRESS"
+  );
+  if (sqlLog && taskName === "imageDataTransfer") {
+    const isSql = sqlLog.id === "LIVE_SQL_PROGRESS";
+    const metrics = sqlLog.metrics || {};
+
+    return (
+      <ProgressTrackingUI
+        title={isSql ? "SQL Execution Progress" : "Mongo Sync Progress"}
+        progress={sqlLog.progress || 0}
+        total={sqlLog.totalRows || 0}
+        processed={sqlLog.processedRows || 0}
+        successful={sqlLog.successfulRows || 0}
+        errors={sqlLog.errors || 0}
+        displayType="simple"
+        unit="records"
+        // [FIX] Pass inserted metric for Execute SQL
+        detailedMetrics={{
+          folioUpdated: metrics.folioUpdated,
+          txnUpdated: metrics.txnUpdated,
+          inserted: metrics.inserted,
+        }}
+      />
+    );
+  }
+
   return null;
 };
 

@@ -62,7 +62,6 @@ export class SqlUtil {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
-  // Helper: Count rows to calculate accurate progress percentage
   private async countCsvRows(filePath: string): Promise<number> {
     let lines = 0;
     try {
@@ -78,7 +77,6 @@ export class SqlUtil {
     }
   }
 
-  // [FIX] Restored Helper
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../../../processed");
     try {
@@ -100,14 +98,17 @@ export class SqlUtil {
       });
       return [...new Set(idAcnos)];
     } catch (error) {
-      logger.error("Error reading processed folio numbers", { error });
+      logger.error("Error reading processed folio numbers", {
+        error,
+        console: true,
+      });
       return [];
     }
   }
 
   async generateSql(): Promise<{ transactions: any[]; logs: SqlLog[] }> {
     try {
-      logger.info("Generating SQL transactions from CSV...", { console: true }); // [LOG]
+      logger.info("Generating SQL transactions from CSV...", { console: true });
       const csvPath = path.join(__dirname, "../../../../processed");
       const files = await fs.readdir(csvPath);
       const latestCsv = files
@@ -120,7 +121,7 @@ export class SqlUtil {
         return { transactions: [], logs: [] };
       }
 
-      logger.info(`Reading CSV: ${latestCsv}`, { console: true }); // [LOG]
+      logger.info(`Reading CSV: ${latestCsv}`, { console: true });
       const transactions: any[] = [];
       await new Promise<void>((resolve, reject) => {
         fsSync
@@ -143,7 +144,7 @@ export class SqlUtil {
       });
       return { transactions, logs: [] };
     } catch (e) {
-      logger.error("Failed to generate SQL", { error: e });
+      logger.error("Failed to generate SQL", { error: e, console: true });
       return { transactions: [], logs: [] };
     }
   }
@@ -151,7 +152,6 @@ export class SqlUtil {
   async executeSql(onProgress: (p: ImageDataProgress) => void): Promise<void> {
     let client: PoolClient | null = null;
     try {
-      // [FIX] Immediate Feedback
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "executeSql",
@@ -176,7 +176,6 @@ export class SqlUtil {
         return;
       }
 
-      // [FIX] Update Status
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "executeSql",
@@ -187,7 +186,7 @@ export class SqlUtil {
       });
       logger.info(`Connecting to DB to insert ${total} rows...`, {
         console: true,
-      }); // [LOG]
+      });
 
       client = await (await this.getPool()).connect();
       await pgBegin(client);
@@ -263,7 +262,6 @@ export class SqlUtil {
           insertedRows += res.rowCount || 0;
         }
 
-        // [FIX] Progress & Console Throttling
         const currentCount = i + chunk.length;
         onProgress({
           type: "sqlProgressUpdate",
@@ -277,11 +275,11 @@ export class SqlUtil {
         if (currentCount % 5000 === 0) {
           logger.info(`Inserted ${currentCount}/${total} rows...`, {
             console: true,
-          }); // [LOG]
+          });
         }
       }
 
-      logger.info("Committing Transaction...", { console: true }); // [LOG]
+      logger.info("Committing Transaction...", { console: true });
       await pgCommit(client);
 
       onProgress({
@@ -292,10 +290,10 @@ export class SqlUtil {
         status: "Completed",
         metrics: { inserted: insertedRows },
       });
-      logger.info("SQL Execution Completed Successfully.", { console: true }); // [LOG]
+      logger.info("SQL Execution Completed Successfully.", { console: true });
     } catch (err: any) {
       if (client) await pgRollback(client);
-      logger.error("Execute SQL Failed", { error: err }); // Console filter allows errors by default
+      logger.error("Execute SQL Failed", { error: err, console: true });
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "executeSql",
@@ -313,19 +311,20 @@ export class SqlUtil {
     updateAll: boolean,
     onProgress: (p: ImageDataProgress) => void
   ): Promise<void> {
-    // [FIX] Immediate Feedback
+    // [FIX] Initial Log
     onProgress({
       type: "sqlProgressUpdate",
       subTask: "updateFolio",
       total: 0,
       processed: 0,
       status: "Running",
-      message: "Preparing Update...",
+      message: "Reading CSV Data...",
     });
 
     let transactions: any[] = [];
     const generated = await this.generateSql();
     transactions = generated.transactions;
+    // [FIX] Total is strictly CSV rows
     const total = transactions.length;
 
     if (total === 0) {
@@ -335,7 +334,7 @@ export class SqlUtil {
         total: 0,
         processed: 0,
         status: "Error",
-        message: "No data found",
+        message: "No data found in processed CSV",
       });
       return;
     }
@@ -346,15 +345,19 @@ export class SqlUtil {
     let client: PoolClient | null = null;
 
     try {
-      logger.info("Connecting to DB for Updates...", { console: true }); // [LOG]
+      logger.info(`Starting Update Process for ${total} CSV rows...`, {
+        console: true,
+      });
       client = await (await this.getPool()).connect();
       await pgBegin(client);
 
       await pgQuery(client, SQL_CREATE_TEMP_TRANSACTION_DATA);
 
-      logger.info(`Inserting ${total} rows into temp table...`, {
+      logger.info(`Phase 1/2: Staging ${total} rows into temp table...`, {
         console: true,
-      }); // [LOG]
+      });
+
+      // [FIX] Batch Temp Inserts
       for (let i = 0; i < total; i += 1000) {
         const chunk = transactions.slice(i, i + 1000);
         const vStrs = chunk.map(
@@ -374,13 +377,14 @@ export class SqlUtil {
           vParams
         );
 
+        // [FIX] Progress tracks Staging phase (0 to Total)
         onProgress({
           type: "sqlProgressUpdate",
           subTask: "updateFolio",
-          total: total * 2,
+          total: total,
           processed: i + chunk.length,
           status: "Running",
-          message: "Inserting Temp Data...",
+          message: `Staging Data: ${i + chunk.length} / ${total}`,
         });
       }
 
@@ -394,15 +398,16 @@ export class SqlUtil {
         updateAll ? [] : [processedFolioNumbers]
       );
 
+      // [FIX] Phase 2: Update (Progress stays at Total, Status changes)
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",
-        total: total * 2,
-        processed: total + total / 2,
+        total: total,
+        processed: total,
         status: "Running",
-        message: "Running Update Query...",
+        message: "Phase 2/2: Executing Database Updates...",
       });
-      logger.info("Executing Update Query...", { console: true }); // [LOG]
+      logger.info("Executing Update Query...", { console: true });
 
       const resF = (await pgQuery(
         client,
@@ -412,6 +417,7 @@ export class SqlUtil {
         ),
         updateAll ? [] : [processedFolioNumbers]
       )) as any;
+
       const resT = (await pgQuery(
         client,
         SQL_UPDATE_TRANSACTION_REFERENCE_ID.replace(
@@ -423,21 +429,37 @@ export class SqlUtil {
 
       await pgCommit(client);
 
+      const folioCount = resF.rowCount || 0;
+      const txnCount = resT.rowCount || 0;
+      const totalUpdated = folioCount + txnCount;
+
+      // [FIX] Return Granular Metrics
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",
-        total: total * 2,
-        processed: total * 2,
+        total: total,
+        processed: total,
         status: "Completed",
-        metrics: { updated: (resF.rowCount || 0) + (resT.rowCount || 0) },
+        metrics: {
+          updated: totalUpdated,
+          folioUpdated: folioCount,
+          txnUpdated: txnCount,
+        },
       });
-      logger.info("Update Completed.", { console: true }); // [LOG]
+      logger.info(
+        `Update Completed. Folios: ${folioCount}, Txns: ${txnCount}`,
+        { console: true }
+      );
     } catch (err: any) {
       if (client) await pgRollback(client);
+      logger.error("Update Folio/Transaction Failed", {
+        error: err,
+        console: true,
+      });
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",
-        total: 0,
+        total: total,
         processed: 0,
         status: "Error",
         message: err.message,

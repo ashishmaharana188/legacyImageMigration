@@ -109,7 +109,6 @@ export const createWebSocketMessageProcessor = ({
         }
         break;
 
-      // [FIX] SQL & Mongo Updates (Uses new fields defined in Types)
       case "sqlProgressUpdate":
       case "mongoProgressUpdate": {
         const isSql = data.type === "sqlProgressUpdate";
@@ -132,9 +131,16 @@ export const createWebSocketMessageProcessor = ({
               ? "Task Completed"
               : `Processing... ${data.processed}/${data.total}`),
           subTask: data.subTask,
+          // [FIX] Pass metrics to LIVE log so ProgressTrackingUI can see them!
+          metrics: metrics,
+          successfulRows:
+            (metrics.inserted || 0) +
+            (metrics.updated || 0) +
+            (metrics.synced || 0),
+          errors: metrics.failed || 0,
         });
 
-        // 2. If Completed, create a PERMANENT log entry for history
+        // 2. Create PERMANENT History Log (Hidden from SummaryDisplay but stored)
         if (data.status === "Completed") {
           const historyId = `${data.subTask}_DONE_${Date.now()}`;
           const summaryMsg = isSql
@@ -157,7 +163,7 @@ export const createWebSocketMessageProcessor = ({
           });
         }
 
-        // 3. If Error, create a permanent error log
+        // 3. Error Log
         if (data.status === "Error") {
           updateTaskLog("imageDataTransfer", {
             id: `${data.subTask}_ERR_${Date.now()}`,
