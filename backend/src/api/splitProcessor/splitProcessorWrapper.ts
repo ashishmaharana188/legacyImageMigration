@@ -11,7 +11,6 @@ import {
 import { performSplit } from "./splitProcessor";
 import { SplitProcessorUtil } from "./splitProcessorUtil";
 
-// Initialize Feature-Specific Logger
 const logger = createFeatureLogger("splitProcessor");
 
 const baseFolder = path.join(process.cwd(), "output");
@@ -24,7 +23,6 @@ export class SplitProcessorWrapper {
     this.splitProcessorUtil = new SplitProcessorUtil();
   }
 
-  // Helper to pre-calculate total files for the Progress Bar
   private async countPdfFiles(dir: string): Promise<number> {
     let count = 0;
     try {
@@ -58,7 +56,6 @@ export class SplitProcessorWrapper {
   ): Promise<SplitResult> {
     const createdSplitFiles: SplitFileDetail[] = [];
 
-    // 1. Try to get total from CSV
     let totalExpectedPagesFromCsv = 0;
     try {
       totalExpectedPagesFromCsv =
@@ -67,7 +64,6 @@ export class SplitProcessorWrapper {
       logger.warn("Could not fetch total expected pages from CSV.");
     }
 
-    // 2. Fallback count
     if (!totalExpectedPagesFromCsv || totalExpectedPagesFromCsv === 0) {
       logger.info("CSV Total missing. Counting actual files...", {
         console: true,
@@ -80,7 +76,6 @@ export class SplitProcessorWrapper {
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
 
-    // [CHECKPOINT] INITIATED
     logger.info(
       `Initiating file splitting ${
         useMuPDF ? "(MuPDF)" : ""
@@ -91,15 +86,12 @@ export class SplitProcessorWrapper {
     await fs.mkdir(splitFolder, { recursive: true });
     await fs.mkdir(baseFolder, { recursive: true });
 
-    // 3. Initial Broadcast
     this.sendProgress(0, 0, totalExpectedPagesFromCsv, "Starting...");
 
     let lastBroadcastTime = 0;
 
-    // 4. Live Callback
     const handleWorkerProgress = (update: SplitProgressUpdate) => {
       const now = Date.now();
-      // Throttle: Update only if 2s passed OR if it's an Error
       if (now - lastBroadcastTime > 2000 || update.status === "Error") {
         const enrichedUpdate = {
           ...update,
@@ -124,7 +116,8 @@ export class SplitProcessorWrapper {
 
       for (const item of items) {
         const inputPath = path.join(inputDir, item);
-        const outputPath = path.join(outputDir, item);
+        const nextOutputDir = path.join(outputDir, item);
+
         let stats;
         try {
           stats = await fs.stat(inputPath);
@@ -133,14 +126,32 @@ export class SplitProcessorWrapper {
         }
 
         if (stats.isDirectory()) {
-          await fs.mkdir(outputPath, { recursive: true });
-          await scanAndProcessDirectory(inputPath, outputPath);
+          // Recursive step: Create the mirror folder and dive in
+          await fs.mkdir(nextOutputDir, { recursive: true });
+          await scanAndProcessDirectory(inputPath, nextOutputDir);
         } else if (stats.isFile() && item.toLowerCase().endsWith(".pdf")) {
-          // Process File
+          // --- [SMART FIX START] ---
+          const fileNameNoExt = path.parse(item).name; // "FileA" from "FileA.pdf"
+          const parentFolderName = path.basename(outputDir); // "FileA" from ".../split_output/FileA"
+
+          let targetSplitFolder: string;
+
+          // Check: Is the file ALREADY inside a folder with the same name?
+          if (parentFolderName === fileNameNoExt) {
+            // YES: Do not create another subfolder. Dump files here.
+            // Result: .../FileA/FileA_1.pdf
+            targetSplitFolder = outputDir;
+          } else {
+            // NO: Create a new folder for this file (Cleaner than dumping in root)
+            // Result: .../SomeFolder/FileA/FileA_1.pdf
+            targetSplitFolder = path.join(outputDir, fileNameNoExt);
+          }
+          // --- [SMART FIX END] ---
+
           const result = await performSplit(
             inputPath,
-            outputPath,
-            logger, // Pass feature logger to worker
+            targetSplitFolder,
+            logger,
             handleWorkerProgress,
             totalSplitFilesGenerated,
             splitErrors,
@@ -151,12 +162,10 @@ export class SplitProcessorWrapper {
           totalSplitFilesGenerated = result.totalSplitFilesGenerated;
           splitErrors = result.splitErrors;
 
-          // [DETAIL LOG] File Only (No console tag)
           logger.info(
             `Processed: ${item} -> ${result.createdSplitFiles.length} pages`
           );
 
-          // [CHECKPOINT] RUNNING (Throttled Console Output)
           if (totalSplitFilesGenerated % 50 === 0) {
             logger.info(
               `Running... Processed ${totalSplitFilesGenerated} files`,
@@ -169,13 +178,11 @@ export class SplitProcessorWrapper {
 
     await scanAndProcessDirectory(baseFolder, splitFolder);
 
-    // [CHECKPOINT] SUCCESS
     logger.info(
       `Split Task Completed. Generated: ${totalSplitFilesGenerated}, Errors: ${splitErrors}`,
       { console: true }
     );
 
-    // 5. Final Completion Broadcast
     const completionUpdate: SplitProgressComplete = {
       type: "splitProgressComplete",
       taskKey: "splitFiles",

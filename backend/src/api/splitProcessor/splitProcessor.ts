@@ -72,6 +72,7 @@ export async function runPythonMuPDF(
 export async function performSplit(
   filePath: string,
   outputFolderPath: string,
+
   logger: winston.Logger,
   progressCallback: (update: SplitProgressUpdate) => void,
   totalSplitFilesGenerated: number,
