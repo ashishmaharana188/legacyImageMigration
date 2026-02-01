@@ -4,6 +4,7 @@ import { Server } from "http";
 let wss: WebSocketServer;
 
 export const initWebSocket = (server: Server) => {
+  // [FIX] Assign to the module-level variable
   wss = new WebSocketServer({ server });
 
   wss.on("connection", (ws: WebSocket) => {
@@ -11,9 +12,15 @@ export const initWebSocket = (server: Server) => {
     ws.on("close", () => {
       console.log("Client disconnected");
     });
+    ws.on("error", (err) => {
+      console.error("WebSocket client error:", err);
+    });
   });
 
   console.log("WebSocket server initialized");
+
+  // [FIX] Return the instance so app.ts can use it
+  return wss;
 };
 
 export const broadcast = (message: string) => {

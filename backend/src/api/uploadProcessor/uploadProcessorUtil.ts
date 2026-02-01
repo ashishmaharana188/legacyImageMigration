@@ -2,8 +2,37 @@ import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
 import { ProcessedRow } from "../uploadProcessor/uploadProcessorTypes";
+// [NEW] Imports for Page Counting
+import { PDFDocument } from "pdf-lib";
+import sharp from "sharp";
 
 const baseFolder = path.join(process.cwd(), "output");
+
+/**
+ * [NEW] Calculates page count based on file extension
+ */
+export async function getPageCount(filePath: string): Promise<string | number> {
+  const ext = path.extname(filePath).toLowerCase();
+
+  try {
+    const fileBuffer = await fs.readFile(filePath);
+
+    if (ext === ".pdf") {
+      const pdfDoc = await PDFDocument.load(fileBuffer, {
+        ignoreEncryption: true,
+      });
+      return pdfDoc.getPageCount();
+    } else if ([".tif", ".tiff", ".jpg", ".jpeg", ".png"].includes(ext)) {
+      const metadata = await sharp(fileBuffer).metadata();
+      // TIFFs can be multi-page; standard images are 1
+      return metadata.pages || 1;
+    }
+    // Default for text or unknown files
+    return 1;
+  } catch (error: any) {
+    return `Error: ${error.message}`;
+  }
+}
 
 /**
  * Generates the absolute path for file transfers

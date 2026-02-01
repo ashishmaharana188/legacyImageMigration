@@ -1,112 +1,184 @@
 import fs from "fs/promises";
 import path from "path";
+import winston from "winston";
+// [FIX] Correctly import broadcast logic
+import { broadcast } from "../../utils/webSocketService";
+import {
+  SplitResult,
+  SplitFileDetail,
+  SplitProgressComplete,
+  SplitProgressUpdate,
+} from "./splitProcessorTypes";
 import { performSplit } from "./splitProcessor";
-import logger from "../../utils/logger";
-import { SplitResult, SplitProgressUpdate } from "./splitProcessorTypes";
-import { webSocketService } from "../../utils/webSocketService";
+import { SplitProcessorUtil } from "./splitProcessorUtil";
+
+const logger = winston.createLogger({
+  level: "info",
+  format: winston.format.json(),
+  transports: [
+    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
+    new winston.transports.File({ filename: "logs/combined.log" }),
+  ],
+});
+
+// [PRESERVED] Your original folder structure
+const baseFolder = path.join(process.cwd(), "output");
+const splitFolder = path.join(process.cwd(), "split_output");
 
 export class SplitProcessorWrapper {
-  private readonly uploadDir: string;
-  private readonly outputDir: string;
+  private splitProcessorUtil: SplitProcessorUtil;
 
   constructor() {
-    // Define standard paths (Adjust if your config differs)
-    this.uploadDir = path.join(__dirname, "../../../uploads");
-    this.outputDir = path.join(__dirname, "../../../split_output");
+    this.splitProcessorUtil = new SplitProcessorUtil();
   }
 
-  // Helper to ensure directories exist
-  private async ensureDirectories() {
-    try {
-      await fs.access(this.uploadDir);
-    } catch {
-      await fs.mkdir(this.uploadDir, { recursive: true });
-    }
-    try {
-      await fs.access(this.outputDir);
-    } catch {
-      await fs.mkdir(this.outputDir, { recursive: true });
-    }
-  }
-
-  /**
-   * The Standard Split Logic
-   */
   async splitFiles(): Promise<SplitResult> {
-    return this.processSplit(false); // false = Use Standard Splitter
+    return this._executeSplit(false, "File splitting complete");
   }
 
-  /**
-   * The MuPDF Split Logic
-   */
   async splitFilesWithMuPDF(): Promise<SplitResult> {
-    return this.processSplit(true); // true = Use MuPDF
+    return this._executeSplit(true, "File splitting with MuPDF complete");
   }
 
-  /**
-   * Unified Processing Logic to avoid duplication
-   */
-  private async processSplit(useMuPDF: boolean): Promise<SplitResult> {
-    await this.ensureDirectories();
+  private async _executeSplit(
+    useMuPDF: boolean,
+    completionStatus: string
+  ): Promise<SplitResult> {
+    const createdSplitFiles: SplitFileDetail[] = [];
 
-    const files = await fs.readdir(this.uploadDir);
-    // Filter for PDFs only
-    const pdfFiles = files.filter((f) => f.toLowerCase().endsWith(".pdf"));
+    // 1. Get total expected pages (for the 100% calculation)
+    let totalExpectedPagesFromCsv = 0;
+    try {
+      totalExpectedPagesFromCsv =
+        await this.splitProcessorUtil.getTotalExpectedPagesFromCsv();
+    } catch (e) {
+      logger.warn(
+        "Could not fetch total expected pages from CSV, defaulting to 0."
+      );
+    }
 
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
-    // Estimate total pages? Difficult without reading all.
-    // We set a placeholder or sum up file counts as a proxy for now.
-    const totalFilesToProcess = pdfFiles.length;
 
-    // [CRITICAL] The Live Progress Callback
-    const handleProgress = (update: SplitProgressUpdate) => {
-      // Inject global stats that the worker might not know
-      const enrichedUpdate = {
-        ...update,
-        // If we don't know total pages, we might map 'totalExpected' to file count or update dynamically
-        totalExpectedPagesFromCsv:
-          update.totalExpectedPagesFromCsv || totalFilesToProcess * 1,
-      };
+    logger.info(`Starting file splitting ${useMuPDF ? "(MuPDF)" : ""}`);
+    await fs.mkdir(splitFolder, { recursive: true });
+    await fs.mkdir(baseFolder, { recursive: true });
 
-      // Broadcast to Frontend
-      webSocketService.broadcast(enrichedUpdate);
+    // 2. Initial Broadcast (Sets UI to 0%)
+    this.sendProgress(0, 0, totalExpectedPagesFromCsv, "Starting...");
+
+    // [NEW] Throttling State
+    let lastBroadcastTime = 0;
+
+    // 3. Define the "Live Wire" Callback
+    const handleWorkerProgress = (update: SplitProgressUpdate) => {
+      const now = Date.now();
+      // Throttle: Update only if 2s passed OR if it's an Error
+      if (now - lastBroadcastTime > 2000 || update.status === "Error") {
+        const enrichedUpdate = {
+          ...update,
+          totalExpectedPagesFromCsv, // Inject global total
+        };
+        broadcast(JSON.stringify(enrichedUpdate));
+        lastBroadcastTime = now;
+      }
     };
 
-    for (const file of pdfFiles) {
-      const filePath = path.join(this.uploadDir, file);
+    const scanAndProcessDirectory = async (
+      inputDir: string,
+      outputDir: string
+    ) => {
+      let items: string[];
+      try {
+        items = await fs.readdir(inputDir);
+      } catch (err) {
+        logger.error(`Failed to read directory ${inputDir}`, { error: err });
+        return;
+      }
 
-      // Call the worker with the NEW signature
-      const result = await performSplit(
-        filePath,
-        this.outputDir,
-        logger,
-        handleProgress, // <--- Passing the "Phone Line" to the worker
-        totalSplitFilesGenerated,
-        splitErrors,
-        useMuPDF
-      );
+      for (const item of items) {
+        const inputPath = path.join(inputDir, item);
+        const outputPath = path.join(outputDir, item);
 
-      totalSplitFilesGenerated = result.totalSplitFilesGenerated;
-      splitErrors = result.splitErrors;
-    }
+        let stats;
+        try {
+          stats = await fs.stat(inputPath);
+        } catch {
+          continue;
+        }
 
-    // Final Completion Broadcast
-    webSocketService.broadcast({
+        if (stats.isDirectory()) {
+          await fs.mkdir(outputPath, { recursive: true });
+
+          // Process files inside this directory
+          const files = await fs.readdir(inputPath);
+
+          // [FIX] Process sequentially to avoid memory spikes, or Promise.all for speed
+          for (const file of files) {
+            const filePath = path.join(inputPath, file);
+            const fileStats = await fs.stat(filePath);
+
+            if (fileStats.isFile() && file.toLowerCase().endsWith(".pdf")) {
+              const result = await performSplit(
+                filePath,
+                outputPath,
+                logger,
+                handleWorkerProgress, // <--- [CRITICAL FIX] Pass the real callback here!
+                totalSplitFilesGenerated,
+                splitErrors,
+                useMuPDF
+              );
+
+              createdSplitFiles.push(...result.createdSplitFiles);
+              totalSplitFilesGenerated = result.totalSplitFilesGenerated;
+              splitErrors = result.splitErrors;
+            }
+          }
+
+          // Recurse deeper
+          await scanAndProcessDirectory(inputPath, outputPath);
+        }
+      }
+    };
+
+    await scanAndProcessDirectory(baseFolder, splitFolder);
+
+    // 4. Final Completion Broadcast (Forces UI to 100%)
+    const completionUpdate: SplitProgressComplete = {
       type: "splitProgressComplete",
       taskKey: "splitFiles",
       totalSplitFilesGenerated,
       splitErrors,
-      totalExpectedPagesFromCsv: totalSplitFilesGenerated, // 100%
-      status: "Completed",
-    });
+      totalExpectedPagesFromCsv:
+        totalExpectedPagesFromCsv || totalSplitFilesGenerated,
+      status: completionStatus,
+    };
+    broadcast(JSON.stringify(completionUpdate));
 
     return {
       summary: {
         totalSplitFilesGenerated,
         splitErrors,
-        totalExpectedPagesFromCsv: totalSplitFilesGenerated, // Final sync
+        totalExpectedPagesFromCsv,
       },
     };
+  }
+
+  private sendProgress(
+    generated: number,
+    errors: number,
+    total: number,
+    statusMsg: string
+  ) {
+    const update: SplitProgressUpdate = {
+      type: "splitProgressUpdate",
+      taskKey: "splitFiles",
+      totalSplitFilesGenerated: generated,
+      splitErrors: errors,
+      totalExpectedPagesFromCsv: total,
+      currentlySplittingFiles: "processing...",
+      status: statusMsg,
+    };
+    broadcast(JSON.stringify(update));
   }
 }

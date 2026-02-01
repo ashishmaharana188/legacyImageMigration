@@ -3,7 +3,8 @@ import {
   ProcessedRow,
   ProcessExcelRowsResult,
 } from "../uploadProcessor/uploadProcessorTypes";
-import { buildDestinationFilePath } from "./uploadProcessorUtil";
+// [FIX] Import getPageCount
+import { buildDestinationFilePath, getPageCount } from "./uploadProcessorUtil";
 import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
@@ -34,20 +35,17 @@ export async function processExcelRows(
 
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
 
-  // --- BATCHING SETUP ---
   let lastUpdate = 0;
-  const BATCH_INTERVAL = 1000; // 1 Second Interval
+  const BATCH_INTERVAL = 1000;
 
   for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
     const row = worksheet.getRow(rowNumber);
-    // Skip empty rows or rows missing the Fund ID
     if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value)
       continue;
 
     totalRows++;
 
     try {
-      // 1. Extract Data
       const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
       const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
       const serverId =
@@ -64,7 +62,7 @@ export async function processExcelRows(
       let found = false;
       let finalPath = pathVal;
 
-      // 2. Search Logic - Tier 1: Local Files
+      // Search Logic (Tier 1: Local)
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -75,7 +73,6 @@ export async function processExcelRows(
         srcPath = localBase;
         found = true;
       } else {
-        // Check extensions if exact match fails
         for (const ext of extensions) {
           if (
             await fs
@@ -91,13 +88,12 @@ export async function processExcelRows(
         }
       }
 
-      // 3. Search Logic - Tier 2: SMB/Network Paths
+      // Search Logic (Tier 2: Network)
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
           .replace(/^(\.\.[\/\\])+/, "");
 
-        // Handle path substitutions
         if (smb.includes("image")) smb = smb.replace(/image/g, drivePath);
         else if (smb.includes("common"))
           smb = smb.replace(/common/g, drivePath);
@@ -113,7 +109,7 @@ export async function processExcelRows(
         }
       }
 
-      // 4. File Operation
+      // File Operation
       if (found) {
         const dest = await buildDestinationFilePath(
           trnMapped,
@@ -122,7 +118,12 @@ export async function processExcelRows(
           finalPath,
           rowNumber
         );
+
         await fs.writeFile(dest, await fs.readFile(srcPath));
+
+        // [FIX] Get the actual page count from the new file
+        const pageCountVal = await getPageCount(dest);
+
         successfulRows++;
         processedRows.push({
           id_fund: fund,
@@ -130,7 +131,7 @@ export async function processExcelRows(
           id_ihno: ihNo,
           id_path: finalPath,
           id_acno: acNo,
-          page_count: "Saved",
+          page_count: String(pageCountVal), // Saving Count or Error
         });
       } else {
         notFound++;
@@ -144,7 +145,6 @@ export async function processExcelRows(
         });
       }
 
-      // 5. [FIX] Batched Progress Update
       const now = Date.now();
       if (onProgress && now - lastUpdate >= BATCH_INTERVAL) {
         onProgress({
@@ -159,10 +159,10 @@ export async function processExcelRows(
     } catch (err) {
       errors++;
       logger.error(`Row ${rowNumber} Error:`, err);
+      // Optional: Add error rows to CSV if desired, currently only logging
     }
   }
 
-  // 6. Final Completion Update (Always runs)
   if (onProgress) {
     onProgress({
       totalRows: actualTotalRows,

@@ -2,7 +2,8 @@ import dotenv from "dotenv";
 import os from "os";
 import path from "path";
 import fs from "fs";
-import { WebSocketServer } from "ws";
+// [FIX] Remove local WebSocketServer import
+// import { WebSocketServer } from "ws";
 
 // --- Environment Variable Loading ---
 const isProduction = process.env.NODE_ENV === "production";
@@ -29,15 +30,14 @@ import { startSshTunnel } from "./src/utils/tunnel";
 import { connectMongo, disconnectMongo } from "./src/utils/dbConnect";
 import { warmupPgPool } from "./src/utils/dbConnect";
 import { verifyS3Connection } from "./src/api/s3Processor/s3Manager";
+// [FIX] Import the initializer
+import { initWebSocket } from "./src/utils/webSocketService";
 
 import { Server } from "net";
 
 const app = express();
 const port = process.env.NODE_ENV === "production" ? 3000 : 3000;
 
-// [FIX] Sanitize the frontend URL to remove any trailing slashes
-// This ensures "http://localhost:5173/" in .env becomes "http://localhost:5173"
-// which matches the browser's Origin header exactly.
 const rawFrontendUrl = process.env.API_FRONTEND_URL || "http://localhost:5173";
 const frontendUrl = rawFrontendUrl.replace(/\/$/, "");
 
@@ -95,18 +95,13 @@ const startServer = async () => {
     console.log(`Server running on http://localhost:${port}`);
   });
 
-  // 2. Initialize WebSocket Server attached to the HTTP instance
-  const wss = new WebSocketServer({ server: expressServer });
+  // 2. [FIX] Initialize the Singleton WebSocket Service
+  // This sets the internal 'wss' variable so broadcast() works
+  const wss = initWebSocket(expressServer);
 
-  // 3. Attach WSS to Express so Controllers can find it
+  // 3. Attach WSS to Express (Preserving your existing architecture)
   app.set("wss", wss);
   console.log("WebSocket Server initialized and attached to app.");
-
-  // Connection logging
-  wss.on("connection", (ws) => {
-    console.log("[WS] Client connected.");
-    ws.on("error", (err) => console.error("[WS] Error:", err));
-  });
 
   const gracefulShutdown = () => {
     console.log("Shutting down gracefully...");

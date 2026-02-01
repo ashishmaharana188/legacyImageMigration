@@ -94,14 +94,15 @@ export async function performSplit(
       createdSplitFiles.push({ originalPath: filePath, splitPath, page: 0 });
       currentTotalSplitFilesGenerated++;
 
-      // [FIX] Strictly follows SplitProgressUpdate interface
+      // [CRITICAL] Reporting every single file to the callback
+      // The Wrapper will decide when to throttle/broadcast
       progressCallback({
         type: "splitProgressUpdate",
-        taskKey: "splitFiles", // Required for Frontend Routing
+        taskKey: "splitFiles",
         totalSplitFilesGenerated: currentTotalSplitFilesGenerated,
         splitErrors: currentSplitErrors,
         currentlySplittingFiles: fileName,
-        message: `Generated: ${path.basename(splitPath)}`, // Now allowed by type
+        message: `Generated: ${path.basename(splitPath)}`,
         status: "Processing",
       });
     });
@@ -135,7 +136,6 @@ export async function performSplit(
       currentSplitErrors++;
       logger.error(`Total failure for ${fileName}`);
 
-      // [FIX] Strictly follows SplitProgressUpdate interface
       progressCallback({
         type: "splitProgressUpdate",
         taskKey: "splitFiles",

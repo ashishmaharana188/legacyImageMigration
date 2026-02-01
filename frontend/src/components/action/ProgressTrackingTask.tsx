@@ -13,9 +13,8 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
 }) => {
   const currentLogs = taskLogs[taskName] || [];
 
-  // [CONSOLIDATED] Look for the unique ID we standardized in the processor
+  // 1. Upload Progress Logic
   const uploadLog = currentLogs.find((log) => log.id === "LIVE_EXCEL_PROGRESS");
-
   if (uploadLog && taskName === "uploadAndScript") {
     return (
       <ProgressTrackingUI
@@ -32,22 +31,19 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     );
   }
 
-  // Handle Split Progress similarly if needed
-  const splitLog = currentLogs.find((log) => log.splitSummary);
-  if (splitLog && splitLog.splitSummary) {
-    const total = Number(splitLog.splitSummary.totalExpectedPagesFromCsv || 0);
-    const success = Number(splitLog.splitSummary.totalSplitFilesGenerated || 0);
-    const progress = total > 0 ? (success / total) * 100 : 0;
-
+  // 2. [FIX] Split Progress Logic (Aligned with WebSocket ID)
+  const splitLog = currentLogs.find((log) => log.id === "LIVE_SPLIT_PROGRESS");
+  if (splitLog && taskName === "splitFiles") {
     return (
       <ProgressTrackingUI
         title="PDF Split Progress"
-        progress={progress}
-        total={total}
-        successful={success}
-        errors={splitLog.splitSummary.splitErrors || 0}
+        progress={splitLog.progress}
+        total={splitLog.totalRows} // Maps to 'totalExpectedPagesFromCsv'
+        processed={splitLog.processedRows} // Maps to 'totalSplitFilesGenerated'
+        successful={splitLog.successfulRows}
+        errors={splitLog.errors}
         displayType="aggregate"
-        unit="pages"
+        unit="files"
       />
     );
   }
