@@ -9,6 +9,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "clean": "rm -rf dist",
+    "start:prod": "vite preview --port 5174",
     "generate-routes": "npx @tanstack/router-cli generate"
   },
   "dependencies": {

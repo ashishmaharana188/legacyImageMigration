@@ -27,11 +27,14 @@ const s3 = new S3Client({
   }),
 });
 
+export interface UploadOptions {
+  excludePattern?: RegExp;
+}
+
 export async function uploadOriginalToS3(
   localFilePath: string,
   s3Key: string
 ): Promise<string> {
-  // [FIX] Log Start (Terminal + File)
   logger.info(`Starting Single File Upload: ${path.basename(localFilePath)}`, {
     console: true,
   });
@@ -45,7 +48,6 @@ export async function uploadOriginalToS3(
 
   try {
     await s3.send(new PutObjectCommand(uploadParams));
-    // [FIX] Log Success (Terminal + File)
     logger.info(
       `Successfully uploaded ${path.basename(localFilePath)} to S3.`,
       { console: true }
@@ -93,7 +95,6 @@ export async function uploadSplitFilesToS3(
     try {
       await s3.send(new PutObjectCommand(uploadParams));
       uploadedKeys.push(s3Key);
-      // [FIX] Log Detail (File Only, No Console)
       logger.info(`Uploaded: ${fileName}`, { console: false });
     } catch (err: unknown) {
       if (isAuthError(err)) {
@@ -151,13 +152,13 @@ async function performIterativeUpload(
   localDir: string,
   bucket: string,
   prefix: string,
-  context: string
+  context: string,
+  options?: UploadOptions
 ) {
   if (!localDir || localDir.trim() === "") {
     throw new Error("Local directory path is empty or undefined.");
   }
 
-  // [FIX] High-Level Start Log (Terminal + File)
   logger.info(`[${context}] S3 Upload Running... Target: ${localDir}`, {
     console: true,
   });
@@ -236,6 +237,9 @@ async function performIterativeUpload(
     const currentDirName = path.basename(localPath);
     const isCurrentDirClientCode = /^CLIENT_CODE_\d+$/.test(currentDirName);
 
+    // [FIX] Log Deduplication Set for this directory
+    const loggedBaseFiles = new Set<string>();
+
     try {
       const entries = fs.readdirSync(localPath, { withFileTypes: true });
       const batchSize = 50;
@@ -248,6 +252,15 @@ async function performIterativeUpload(
           const entryPath = path.join(localPath, entry.name);
           const entryKey = `${s3Prefix}/${entry.name}`;
 
+          // Allow optional filter (e.g. for Originals safety check)
+          if (
+            options?.excludePattern &&
+            options.excludePattern.test(entry.name)
+          ) {
+            // No log here to keep things quiet
+            continue;
+          }
+
           if (entry.isDirectory()) {
             directoryQueue.push({
               localPath: entryPath,
@@ -259,17 +272,29 @@ async function performIterativeUpload(
               try {
                 await uploadFile(entryPath, bucket, entryKey);
                 successfulFilesCount++;
-                // [FIX] Detail Log (File Only)
-                logger.info(`[${context}] Uploaded: ${entry.name}`, {
-                  console: false,
-                });
+
+                // [FIX] Smart Logging Logic
+                if (context === "SPLITS") {
+                  // Attempt to strip page number: "File_14.pdf" -> "File.pdf"
+                  const baseName = entry.name.replace(/_\d+\.pdf$/, ".pdf");
+                  if (!loggedBaseFiles.has(baseName)) {
+                    loggedBaseFiles.add(baseName);
+                    logger.info(`[${context}] Uploaded: ${baseName}`, {
+                      console: false,
+                    });
+                  }
+                } else {
+                  // ORIGINALS: Log everything (these are single important files)
+                  logger.info(`[${context}] Uploaded: ${entry.name}`, {
+                    console: false,
+                  });
+                }
               } catch (uploadError: unknown) {
                 failedFilesCount++;
                 const errMsg =
                   uploadError instanceof Error
                     ? uploadError.message
                     : "Unknown upload error";
-                // [FIX] Error Log (Terminal + File)
                 logger.error(`[${context}] Failed: ${entry.name} - ${errMsg}`, {
                   console: true,
                 });
@@ -314,7 +339,6 @@ async function performIterativeUpload(
   results.successfulFilesCount = successfulFilesCount;
   results.failedFilesCount = failedFilesCount;
 
-  // [FIX] High-Level Completion Log (Terminal + File)
   logger.info(
     `[${context}] S3 Upload Success. Uploaded: ${successfulFilesCount}, Failed: ${failedFilesCount}`,
     { console: true }
@@ -340,7 +364,8 @@ export async function uploadDirectoryRecursive(
   localDir: string,
   bucket: string,
   prefix: string,
-  context: string
+  context: string,
+  options?: UploadOptions
 ) {
-  return performIterativeUpload(localDir, bucket, prefix, context);
+  return performIterativeUpload(localDir, bucket, prefix, context, options);
 }
