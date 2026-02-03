@@ -33,42 +33,6 @@ const S3UploadUI: React.FC<S3UploadUIProps> = ({
         <p className="text-sm text-gray-600 mb-4">
           Upload the original or split files to Amazon S3.
         </p>
-        <div className="mb-4">
-          <label
-            htmlFor="localDir"
-            className="block text-sm font-medium text-gray-700"
-          >
-            Local Directory
-          </label>
-          <input
-            type="text"
-            id="localDir"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            value={localDir}
-            onChange={(e) => setLocalDir(e.target.value)}
-            placeholder="Leave empty for defaults (Original=output, Split=split_output)"
-          />
-          <p className="text-xs text-gray-500 mt-1">
-            ⚠️ If you enter a path here, it overrides the default source folder
-            for BOTH buttons.
-          </p>
-        </div>
-        <div className="mb-4">
-          <label
-            htmlFor="prefix"
-            className="block text-sm font-medium text-gray-700"
-          >
-            S3 Prefix
-          </label>
-          <input
-            type="text"
-            id="prefix"
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
-            value={prefix}
-            onChange={(e) => setPrefix(e.target.value)}
-            placeholder="e.g., Data/"
-          />
-        </div>
       </div>
       <div className="flex flex-col gap-2">
         <button
