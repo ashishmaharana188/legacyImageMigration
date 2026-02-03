@@ -92,21 +92,68 @@ export const createWebSocketMessageProcessor = ({
         });
         break;
 
-      case "s3UploadProgress":
-        if (data.payload) {
-          const { processedDirectories, totalDirectories, currentDirectory } =
-            data.payload;
+      case "s3-directory-progress":
+      case "complete":
+        const { processedDirectories, totalDirectories, currentDirectory } =
+          data;
+
+        // 1. Update S3 Context State (for Breadcrumbs/Folder counts)
+        if (data.type === "s3-directory-progress") {
           progressAccumulator.current = {
-            processedDirectories,
-            totalDirectories,
-            currentDirectory,
+            processedDirectories: processedDirectories || 0,
+            totalDirectories: totalDirectories || 0,
+            currentDirectory: currentDirectory || "",
           };
           setS3UploadProgress({
-            processedDirectories,
-            totalDirectories,
-            currentDirectory,
+            processedDirectories: processedDirectories || 0,
+            totalDirectories: totalDirectories || 0,
+            currentDirectory: currentDirectory || "",
           });
         }
+
+        // 2. [FIX] Update Task Log for Global Summary Display
+        const percent =
+          totalDirectories > 0
+            ? Math.round((data.completedDirectories / totalDirectories) * 100)
+            : 0;
+
+        updateTaskLog("s3Upload", {
+          id: "LIVE_S3_PROGRESS",
+          status: data.type === "complete" ? "Completed" : "Uploading",
+          progress: data.type === "complete" ? 100 : percent,
+          total: totalDirectories,
+          processedRows: data.completedDirectories, // Using processedRows to fit LogEntry interface
+          message:
+            data.type === "complete"
+              ? "S3 Upload Completed"
+              : `Uploading: ${currentDirectory || "Processing..."}`,
+          timestamp: new Date().toISOString(),
+        });
+
+        // 3. Update UploadStatuses (for S3 Specific UI)
+        setUploadStatuses((prev) =>
+          prev.map((item) => {
+            if (
+              item.fileName === "Original File" ||
+              item.fileName === "Split Files"
+            ) {
+              const successFiles =
+                data.successfulFilesCount || item.successfulFiles || 0;
+              const errorFiles = data.failedFilesCount || item.errorFiles || 0;
+
+              return {
+                ...item,
+                status: data.type === "complete" ? "completed" : "Uploading",
+                progress: data.type === "complete" ? 100 : percent,
+                totalFiles: successFiles + errorFiles || totalDirectories,
+                processedFiles: successFiles + errorFiles,
+                successfulFiles: successFiles,
+                errorFiles: errorFiles,
+              };
+            }
+            return item;
+          })
+        );
         break;
 
       case "sqlProgressUpdate":
@@ -115,7 +162,6 @@ export const createWebSocketMessageProcessor = ({
         const liveId = isSql ? "LIVE_SQL_PROGRESS" : "LIVE_MONGO_PROGRESS";
         const metrics = data.metrics || {};
 
-        // 1. Update the Live Progress Bar
         updateTaskLog("imageDataTransfer", {
           id: liveId,
           status: data.status,
@@ -131,7 +177,6 @@ export const createWebSocketMessageProcessor = ({
               ? "Task Completed"
               : `Processing... ${data.processed}/${data.total}`),
           subTask: data.subTask,
-          // [FIX] Pass metrics to LIVE log so ProgressTrackingUI can see them!
           metrics: metrics,
           successfulRows:
             (metrics.inserted || 0) +
@@ -140,7 +185,6 @@ export const createWebSocketMessageProcessor = ({
           errors: metrics.failed || 0,
         });
 
-        // 2. Create PERMANENT History Log (Hidden from SummaryDisplay but stored)
         if (data.status === "Completed") {
           const historyId = `${data.subTask}_DONE_${Date.now()}`;
           const summaryMsg = isSql
@@ -163,7 +207,6 @@ export const createWebSocketMessageProcessor = ({
           });
         }
 
-        // 3. Error Log
         if (data.status === "Error") {
           updateTaskLog("imageDataTransfer", {
             id: `${data.subTask}_ERR_${Date.now()}`,

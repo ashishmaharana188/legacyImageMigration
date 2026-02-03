@@ -186,7 +186,7 @@ export const useS3BrowserHook = ({
 export const useS3UploadHook = ({
   updateTaskLog,
   setUploadStatuses,
-  clearTaskLog, // [FIX] Added missing prop destructuring
+  clearTaskLog,
 }: useS3UploadProps) => {
   const [originalLoading, setOriginalLoading] = useState(false);
   const [splitLoading, setSplitLoading] = useState(false);
@@ -194,9 +194,8 @@ export const useS3UploadHook = ({
   const handleUploadToS3 = useCallback(
     async (localDir: string, prefix: string) => {
       setOriginalLoading(true);
-      clearTaskLog("s3Upload"); // [FIX] Clear logs before starting
+      clearTaskLog("s3Upload");
 
-      // [FIX] Initialize State immediately (Optimistic UI)
       updateTaskLog("s3Upload", {
         id: `UP_ORIG_START_${Date.now()}`,
         status: "Starting",
@@ -213,6 +212,10 @@ export const useS3UploadHook = ({
           fileName: "Original File",
           status: "pending",
           progress: 0,
+          totalFiles: 0,
+          processedFiles: 0,
+          successfulFiles: 0,
+          errorFiles: 0,
         },
       ]);
 
@@ -227,7 +230,15 @@ export const useS3UploadHook = ({
         setUploadStatuses((prev) =>
           prev.map((upload) =>
             upload.fileName === "Original File"
-              ? { ...upload, status: "completed", progress: 100 }
+              ? {
+                  ...upload,
+                  status: "completed",
+                  progress: 100,
+                  successfulFiles: response.successfulFilesCount || 1,
+                  totalFiles:
+                    (response.successfulFilesCount || 0) +
+                    (response.failedFilesCount || 0),
+                }
               : upload
           )
         );
@@ -244,7 +255,12 @@ export const useS3UploadHook = ({
         setUploadStatuses((prev) =>
           prev.map((upload) =>
             upload.fileName === "Original File"
-              ? { ...upload, status: "failed", progress: 0 }
+              ? {
+                  ...upload,
+                  status: "failed",
+                  progress: 0,
+                  errorMessage: errorMessage,
+                }
               : upload
           )
         );
@@ -258,9 +274,8 @@ export const useS3UploadHook = ({
   const handleUploadSplitFilesToS3 = useCallback(
     async (localDir: string, prefix: string) => {
       setSplitLoading(true);
-      clearTaskLog("s3Upload"); // [FIX] Clear logs before starting
+      clearTaskLog("s3Upload");
 
-      // [FIX] Initialize State immediately (Optimistic UI)
       updateTaskLog("s3Upload", {
         id: `UP_SPLIT_START_${Date.now()}`,
         status: "Starting",
@@ -277,6 +292,10 @@ export const useS3UploadHook = ({
           fileName: "Split Files",
           status: "pending",
           progress: 0,
+          totalFiles: 0,
+          processedFiles: 0,
+          successfulFiles: 0,
+          errorFiles: 0,
         },
       ]);
 
@@ -291,7 +310,15 @@ export const useS3UploadHook = ({
         setUploadStatuses((prev) =>
           prev.map((upload) =>
             upload.fileName === "Split Files"
-              ? { ...upload, status: "completed", progress: 100 }
+              ? {
+                  ...upload,
+                  status: "completed",
+                  progress: 100,
+                  successfulFiles: response.successfulFilesCount || 0,
+                  totalFiles:
+                    (response.successfulFilesCount || 0) +
+                    (response.failedFilesCount || 0),
+                }
               : upload
           )
         );
@@ -308,7 +335,12 @@ export const useS3UploadHook = ({
         setUploadStatuses((prev) =>
           prev.map((upload) =>
             upload.fileName === "Split Files"
-              ? { ...upload, status: "failed", progress: 0 }
+              ? {
+                  ...upload,
+                  status: "failed",
+                  progress: 0,
+                  errorMessage: errorMessage,
+                }
               : upload
           )
         );

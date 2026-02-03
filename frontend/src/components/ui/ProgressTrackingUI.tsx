@@ -1,7 +1,13 @@
 import React, { useState } from "react";
 
 export interface ProgressTrackingUIProps {
-  title: string;
+  // [FIX] Standardized Props for Sidebar/Summary Display
+  label?: string;
+  status?: string;
+  details?: string;
+
+  // Existing Props for specific views
+  title?: string;
   progress?: number;
   total?: number;
   processed?: number;
@@ -10,20 +16,35 @@ export interface ProgressTrackingUIProps {
   notFound?: number;
   displayType?: "aggregate" | "default" | "simple";
   unit?: string;
+
   detailedMetrics?: {
     folioUpdated?: number;
     txnUpdated?: number;
-    inserted?: number; // [NEW]
+    inserted?: number;
   };
+
   badRowsDetails?: Array<{
     id_ihno: string;
     id_acno: string;
     page_count_status: string | number;
   }>;
+
+  // [FIX] Allow generic metrics pass-through
+  metrics?: {
+    inserted?: number;
+    updated?: number;
+    folioUpdated?: number;
+    txnUpdated?: number;
+    synced?: number;
+    failed?: number;
+  };
 }
 
 const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   title,
+  label, // [FIX] Destructure new props
+  status,
+  details,
   progress = 0,
   total,
   processed,
@@ -33,12 +54,75 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   badRowsDetails,
   displayType = "default",
   detailedMetrics,
+  metrics,
   unit = "files",
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const percentage = Math.round(progress);
 
-  // 1. The "Simple" View (For SQL/Mongo Live Tasks)
+  // Consolidate metrics
+  const finalMetrics = detailedMetrics || metrics;
+
+  // ---------------------------------------------------------
+  // 1. THE "SIDEBAR" / GENERIC VIEW (Standardized)
+  // ---------------------------------------------------------
+  // This view is triggered when 'label' or 'status' is provided by ProgressTrackingTask
+  if (label || status) {
+    const isError = status === "Error" || status === "failed";
+    const isSuccess =
+      status === "Success" || status === "completed" || status === "Done";
+
+    // Determine color based on status
+    const statusColor = isError
+      ? "text-red-600"
+      : isSuccess
+      ? "text-green-600"
+      : "text-blue-600";
+    const barColor = isError
+      ? "bg-red-500"
+      : isSuccess
+      ? "bg-green-500"
+      : "bg-blue-500";
+
+    return (
+      <div>
+        <div className="mt-2 mb-4 w-full">
+          <div className="flex justify-between items-center mb-1">
+            {/* Label (e.g., "Uploading: Data/Folder1") */}
+            <span
+              className="text-xs font-semibold text-gray-700 truncate max-w-[70%]"
+              title={label || title}
+            >
+              {label || title}
+            </span>
+            {/* Status (e.g., "UPLOADING 45%") */}
+            <span className={`text-[10px] font-bold uppercase ${statusColor}`}>
+              {status} {percentage}%
+            </span>
+          </div>
+
+          {/* Progress Bar */}
+
+          {/* Details (e.g., "45 / 100") */}
+          {details && (
+            <div className="text-[10px] text-gray-500 font-mono text-right">
+              {details}
+            </div>
+          )}
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+          <div
+            className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`}
+            style={{ width: `${percentage}%` }}
+          ></div>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------
+  // 2. THE "SIMPLE" VIEW (For SQL/Mongo Task Lists)
+  // ---------------------------------------------------------
   if (displayType === "simple") {
     return (
       <div className="mt-4 border border-gray-200 rounded p-3 bg-white shadow-sm">
@@ -47,7 +131,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
           <span className="text-xs font-mono text-gray-500">{percentage}%</span>
         </div>
 
-        {/* Progress Bar */}
         <div className="w-full bg-gray-200 rounded-full h-2.5 mb-3">
           <div
             className={`h-2.5 rounded-full transition-all duration-300 ease-out ${
@@ -57,10 +140,9 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
           ></div>
         </div>
 
-        {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-4 text-xs">
           <div className="flex flex-col gap-1">
-            <span className="text-gray-500 font-medium">CSV Processing</span>
+            <span className="text-gray-500 font-medium">Processing</span>
             <span className="text-gray-900 font-mono">
               Processed: {processed?.toLocaleString()} /{" "}
               {total?.toLocaleString()}
@@ -68,25 +150,22 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
           </div>
 
           <div className="flex flex-col gap-1">
-            <span className="text-gray-500 font-medium">DB Results</span>
+            <span className="text-gray-500 font-medium">Results</span>
             <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono">
-              {/* Case 1: Folio Update Task */}
-              {detailedMetrics?.folioUpdated !== undefined ? (
+              {finalMetrics?.folioUpdated !== undefined ? (
                 <>
                   <span className="text-emerald-700 font-semibold">
-                    Folios: {detailedMetrics.folioUpdated}
+                    Folios: {finalMetrics.folioUpdated}
                   </span>
                   <span className="text-blue-700 font-semibold">
-                    Txns: {detailedMetrics.txnUpdated}
+                    Txns: {finalMetrics.txnUpdated}
                   </span>
                 </>
-              ) : detailedMetrics?.inserted !== undefined ? (
-                /* Case 2: Execute SQL Task */
+              ) : finalMetrics?.inserted !== undefined ? (
                 <span className="text-green-700 font-semibold">
-                  Inserted: {detailedMetrics.inserted?.toLocaleString()}
+                  Inserted: {finalMetrics.inserted?.toLocaleString()}
                 </span>
               ) : (
-                /* Case 3: Default Success */
                 <span className="text-green-700 font-semibold">
                   Success: {successful?.toLocaleString()}
                 </span>
@@ -104,7 +183,9 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     );
   }
 
-  // 2. The "Aggregate" View (For Upload Headers)
+  // ---------------------------------------------------------
+  // 3. THE "AGGREGATE" VIEW (For Upload Headers)
+  // ---------------------------------------------------------
   if (displayType === "aggregate") {
     return (
       <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
@@ -134,7 +215,9 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     );
   }
 
-  // 3. The "Detailed" View (Default)
+  // ---------------------------------------------------------
+  // 4. THE "DETAILED" VIEW (Legacy Default)
+  // ---------------------------------------------------------
   return (
     <div className="mt-4">
       <div className="flex justify-between items-center">
@@ -174,37 +257,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
               <strong>Not Found:</strong> {notFound}
             </p>
           </div>
-
-          {badRowsDetails && badRowsDetails.length > 0 && (
-            <div className="mt-2">
-              <h6 className="font-semibold text-xs uppercase text-gray-500 mb-1">
-                Error Details:
-              </h6>
-              <div className="max-h-32 overflow-y-auto border rounded bg-white">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-gray-50 sticky top-0">
-                    <tr>
-                      <th className="px-2 py-1">IH No</th>
-                      <th className="px-2 py-1">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {badRowsDetails.map((row, index) => (
-                      <tr
-                        key={index}
-                        className="border-b last:border-0 hover:bg-gray-50"
-                      >
-                        <td className="px-2 py-1 font-mono">{row.id_ihno}</td>
-                        <td className="px-2 py-1 text-red-600">
-                          {row.page_count_status}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
         </div>
       )}
     </div>

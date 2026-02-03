@@ -204,6 +204,8 @@ async function performIterativeUpload(
         status: "Done",
         isDirectory: true,
         totalDirectories: 0,
+        successfulFilesCount: 0,
+        failedFilesCount: 0,
       })
     );
     logger.warn(`[${context}] No directories found to upload.`, {
@@ -237,7 +239,7 @@ async function performIterativeUpload(
     const currentDirName = path.basename(localPath);
     const isCurrentDirClientCode = /^CLIENT_CODE_\d+$/.test(currentDirName);
 
-    // [FIX] Log Deduplication Set for this directory
+    // Log Deduplication Set for this directory
     const loggedBaseFiles = new Set<string>();
 
     try {
@@ -252,12 +254,10 @@ async function performIterativeUpload(
           const entryPath = path.join(localPath, entry.name);
           const entryKey = `${s3Prefix}/${entry.name}`;
 
-          // Allow optional filter (e.g. for Originals safety check)
           if (
             options?.excludePattern &&
             options.excludePattern.test(entry.name)
           ) {
-            // No log here to keep things quiet
             continue;
           }
 
@@ -273,9 +273,7 @@ async function performIterativeUpload(
                 await uploadFile(entryPath, bucket, entryKey);
                 successfulFilesCount++;
 
-                // [FIX] Smart Logging Logic
                 if (context === "SPLITS") {
-                  // Attempt to strip page number: "File_14.pdf" -> "File.pdf"
                   const baseName = entry.name.replace(/_\d+\.pdf$/, ".pdf");
                   if (!loggedBaseFiles.has(baseName)) {
                     loggedBaseFiles.add(baseName);
@@ -284,7 +282,6 @@ async function performIterativeUpload(
                     });
                   }
                 } else {
-                  // ORIGINALS: Log everything (these are single important files)
                   logger.info(`[${context}] Uploaded: ${entry.name}`, {
                     console: false,
                   });
@@ -312,12 +309,15 @@ async function performIterativeUpload(
         if (i + batchSize >= entries.length) {
           if (isClientCodeParent || !isCurrentDirClientCode) {
             completedDirectories++;
+            // [FIX] Broadcasting REAL-TIME file stats
             broadcast(
               JSON.stringify({
                 type: "s3-directory-progress",
                 completedDirectories: completedDirectories,
                 totalDirectories: totalDirectories,
                 currentDirectory: s3Prefix,
+                successfulFilesCount: successfulFilesCount, // [ADDED]
+                failedFilesCount: failedFilesCount, // [ADDED]
               })
             );
           }

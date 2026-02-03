@@ -30,7 +30,18 @@ export interface useS3UploadProps {
   setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
 }
 
-export interface S3BrowserUIProps {
+export interface S3UploadUIProps {
+  originalLoading: boolean;
+  splitLoading: boolean;
+  handleUploadToS3: (localDir: string, prefix: string) => Promise<void>;
+  handleUploadSplitFilesToS3: (
+    localDir: string,
+    prefix: string
+  ) => Promise<void>;
+}
+
+// [FIX] Extend S3UploadUIProps so S3BrowserUI can accept upload handlers
+export interface S3BrowserUIProps extends S3UploadUIProps {
   items: S3Item[];
   currentPrefix: string;
   isLoading: boolean;
@@ -50,16 +61,6 @@ export interface S3BrowserUIProps {
   handleReload: () => void;
 }
 
-export interface S3UploadUIProps {
-  originalLoading: boolean; // [FIX] Separate loading state
-  splitLoading: boolean; // [FIX] Separate loading state
-  handleUploadToS3: (localDir: string, prefix: string) => Promise<void>;
-  handleUploadSplitFilesToS3: (
-    localDir: string,
-    prefix: string
-  ) => Promise<void>;
-}
-
 export interface S3UploadResponse {
   statusCode?: number;
   message?: string;
@@ -67,6 +68,8 @@ export interface S3UploadResponse {
   fileUrls?: Array<{ row: number; url: string; pageCount: number }>;
   error?: string;
   nextContinuationToken?: string;
+  successfulFilesCount?: number;
+  failedFilesCount?: number;
 }
 
 export interface S3UploadSummaryUIProps {
