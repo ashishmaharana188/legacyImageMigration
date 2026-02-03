@@ -21,14 +21,13 @@ import {
 
 class S3ProcessorController {
   async uploadToS3(req: Request, res: Response) {
-    // [LOG] Confirming which API is hit
-    logger.info("", {
+    logger.info("=================================================", {
       console: true,
     });
-    logger.info("API: uploadToS3 (ORIGINALS UPLOAD)", {
+    logger.info(">>> API HIT: uploadToS3 (ORIGINALS UPLOAD) <<<", {
       console: true,
     });
-    logger.info("", {
+    logger.info("=================================================", {
       console: true,
     });
 
@@ -41,10 +40,10 @@ class S3ProcessorController {
           ? userProvidedDir
           : defaultOutputRoot;
 
-      // SAFETY GUARD: Prevent accidental upload of split_output via this handler
+      // SAFETY GUARD
       if (targetRoot.includes("split_output")) {
         logger.warn(
-          `Blocked attempt to upload 'split_output' via 'uploadToS3' (Originals) handler.`,
+          `Blocked attempt to upload 'split_output' via 'uploadToS3' handler.`,
           { console: true }
         );
         return res.status(400).json({
@@ -88,47 +87,52 @@ class S3ProcessorController {
         });
       }
 
-      const uploadResults = await Promise.all(
-        clientDirs.map(async (clientDir) => {
-          const clientPath = path.join(targetRoot, clientDir.name);
-          const s3Prefix = getS3FilePrefix(clientDir.name);
+      // [FIX] SEQUENTIAL PROCESSING
+      // We process folders one by one to ensure the Progress Bar reflects one folder at a time
+      // without jumping between different totals.
+      const uploadResults = [];
+      let processedCount = 0;
 
-          logger.info({
+      for (const clientDir of clientDirs) {
+        processedCount++;
+        const clientPath = path.join(targetRoot, clientDir.name);
+        const s3Prefix = getS3FilePrefix(clientDir.name);
+
+        logger.info({
+          category: "task-steps",
+          function: "uploadToS3",
+          message: `[Folder ${processedCount}/${clientDirs.length}] Processing Original: ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
+          console: true,
+        });
+
+        try {
+          // Await completion BEFORE starting the next one
+          const result = await uploadDirectoryRecursive(
+            clientPath,
+            bucket,
+            s3Prefix,
+            "ORIGINALS"
+          );
+          uploadResults.push(result);
+        } catch (error) {
+          logger.error({
             category: "task-steps",
             function: "uploadToS3",
-            message: `Uploading Original Folder: ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
-            console: true,
+            message: `S3 upload error for ${clientDir.name}`,
+            error: error instanceof Error ? error.message : "Unknown error",
           });
-
-          try {
-            // [REVERTED] No options/filters passed here anymore. Just pure upload.
-            return await uploadDirectoryRecursive(
-              clientPath,
-              bucket,
-              s3Prefix,
-              "ORIGINALS"
-            );
-          } catch (error) {
-            logger.error({
-              category: "task-steps",
-              function: "uploadToS3",
-              message: `S3 upload error for ${clientDir.name}`,
-              error: error instanceof Error ? error.message : "Unknown error",
-            });
-            return {
-              successfulFilesCount: 0,
-              failedFilesCount: 1,
-              failedFileDetails: [
-                {
-                  name: clientDir.name,
-                  error:
-                    error instanceof Error ? error.message : "Unknown error",
-                },
-              ],
-            };
-          }
-        })
-      );
+          uploadResults.push({
+            successfulFilesCount: 0,
+            failedFilesCount: 1,
+            failedFileDetails: [
+              {
+                name: clientDir.name,
+                error: error instanceof Error ? error.message : "Unknown error",
+              },
+            ],
+          });
+        }
+      }
 
       const totalSuccessfulFiles = uploadResults.reduce(
         (sum, res) => sum + res.successfulFilesCount,
@@ -180,13 +184,13 @@ class S3ProcessorController {
   }
 
   async uploadSplitFilesToS3(req: Request, res: Response) {
-    logger.info("", {
+    logger.info("=================================================", {
       console: true,
     });
-    logger.info("API HIT: uploadSplitFilesToS3 (SPLITS UPLOAD)", {
+    logger.info(">>> API HIT: uploadSplitFilesToS3 (SPLITS UPLOAD) <<<", {
       console: true,
     });
-    logger.info("", {
+    logger.info("=================================================", {
       console: true,
     });
 
@@ -228,46 +232,49 @@ class S3ProcessorController {
         });
       }
 
-      const uploadResults = await Promise.all(
-        clientDirs.map(async (clientDir) => {
-          const clientPath = path.join(splitOutputRoot, clientDir.name);
-          const s3Prefix = getS3SplitPrefix(clientDir.name);
+      // [FIX] SEQUENTIAL PROCESSING FOR SPLITS
+      const uploadResults = [];
+      let processedCount = 0;
 
-          logger.info({
+      for (const clientDir of clientDirs) {
+        processedCount++;
+        const clientPath = path.join(splitOutputRoot, clientDir.name);
+        const s3Prefix = getS3SplitPrefix(clientDir.name);
+
+        logger.info({
+          category: "task-steps",
+          function: "uploadSplitFilesToS3",
+          message: `[Folder ${processedCount}/${clientDirs.length}] Processing Splits: ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
+          console: true,
+        });
+
+        try {
+          const result = await uploadDirectoryRecursive(
+            clientPath,
+            bucket,
+            s3Prefix,
+            "SPLITS"
+          );
+          uploadResults.push(result);
+        } catch (error) {
+          logger.error({
             category: "task-steps",
             function: "uploadSplitFilesToS3",
-            message: `Uploading SplitFiles for ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
-            console: true,
+            message: `S3 upload error for ${clientDir.name}`,
+            error: error instanceof Error ? error.message : "Unknown error",
           });
-
-          try {
-            return await uploadDirectoryRecursive(
-              clientPath,
-              bucket,
-              s3Prefix,
-              "SPLITS"
-            );
-          } catch (error) {
-            logger.error({
-              category: "task-steps",
-              function: "uploadSplitFilesToS3",
-              message: `S3 upload error for ${clientDir.name}`,
-              error: error instanceof Error ? error.message : "Unknown error",
-            });
-            return {
-              successfulFilesCount: 0,
-              failedFilesCount: 1,
-              failedFileDetails: [
-                {
-                  name: clientDir.name,
-                  error:
-                    error instanceof Error ? error.message : "Unknown error",
-                },
-              ],
-            };
-          }
-        })
-      );
+          uploadResults.push({
+            successfulFilesCount: 0,
+            failedFilesCount: 1,
+            failedFileDetails: [
+              {
+                name: clientDir.name,
+                error: error instanceof Error ? error.message : "Unknown error",
+              },
+            ],
+          });
+        }
+      }
 
       const totalSuccessfulFiles = uploadResults.reduce(
         (sum, res) => sum + res.successfulFilesCount,
@@ -316,7 +323,7 @@ class S3ProcessorController {
     }
   }
 
-  // ... (Other methods listS3Files, etc. remain unchanged)
+  // ... (Rest of the class: listS3Files, deleteS3Files, searchS3Files, searchS3Folders remains unchanged)
   async listS3Files(req: Request, res: Response) {
     try {
       const prefix = (req.query.prefix as string) || "";

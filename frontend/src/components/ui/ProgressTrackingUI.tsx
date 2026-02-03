@@ -77,12 +77,12 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
       ? "text-red-600"
       : isSuccess
       ? "text-green-600"
-      : "text-blue-600";
+      : "text-black";
     const barColor = isError
       ? "bg-red-500"
       : isSuccess
       ? "bg-green-500"
-      : "bg-blue-500";
+      : "bg-black";
 
     return (
       <div>
