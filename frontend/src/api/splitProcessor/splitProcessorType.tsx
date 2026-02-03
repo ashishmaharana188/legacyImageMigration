@@ -1,7 +1,7 @@
 export interface splitProcessorUIProps {
   loading: boolean;
-  handleSplitFiles: (file: File) => Promise<void>;
-  handleSplitFilesWithMuPDF: (file: File) => Promise<void>;
+  handleSplitFiles: () => Promise<void>;
+  handleSplitFilesWithMuPDF: () => Promise<void>;
   selectedFile: File | null;
   setSelectedFile: React.Dispatch<React.SetStateAction<File | null>>;
   splitFiles: string[];

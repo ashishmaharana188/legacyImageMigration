@@ -2,11 +2,20 @@ export interface UploadStatus {
   fileName: string;
   status: string;
   progress: number;
+  id?: number;
+  totalFiles?: number;
+  processedFiles?: number;
+  successfulFiles?: number;
+  errorFiles?: number;
+  errorMessage?: string;
+  error?: string;
 }
 
 export interface LogEntry {
   id: string;
   status?: string;
+  completed?: number;
+  total?: number;
   message?: string;
   timestamp?: string;
 

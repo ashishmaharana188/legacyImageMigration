@@ -36,7 +36,6 @@ export const handleFileChange = (
 
 /**
  * Internal execution engine for both Main and Fallback routes.
- * UPDATED: Does not manually set 100% progress to allow live WebSocket updates.
  */
 export const _executeRequest = async ({
   endpoint,
@@ -52,8 +51,20 @@ export const _executeRequest = async ({
   if (setIsUploading) setIsUploading(true);
   setUploadMessage(`${operationName}...`);
 
-  // Initialize the Sidebar Summary entry
+  // 1. Initialize Log Structure
   logUploadStart(updateTaskLog, operationName, logId);
+
+  // 2. [FIX] Manually populate Summary Display with initial "Starting" state
+  // This prevents the UI from being blank while waiting for the first WebSocket message
+  updateTaskLog(TASK_NAME, {
+    type: "uploadProgressUpdate", // Matches backend type
+    status: "Starting...",
+    progress: 0,
+    total: 0,
+    processed: 0,
+    message: `Initiating ${operationName}...`,
+    timestamp: new Date().toISOString(),
+  });
 
   try {
     let resData: FileResponse;

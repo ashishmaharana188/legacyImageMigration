@@ -1,5 +1,5 @@
 import { PoolClient } from "pg";
-import mongoose, { PipelineStage, BulkWriteOperation } from "mongoose";
+import mongoose, { PipelineStage, AnyBulkWriteOperation } from "mongoose";
 import {
   IAifDocument,
   IAifDocumentInput,
@@ -81,7 +81,7 @@ export async function mongoInsertMany(
 
 export async function mongoBulkWrite(
   model: mongoose.Model<IAifDocument>,
-  operations: BulkWriteOperation<IAifDocument>[]
+  operations: AnyBulkWriteOperation<IAifDocument>[]
 ): Promise<IBulkWriteResult> {
   return model.bulkWrite(operations) as unknown as IBulkWriteResult;
 }

@@ -66,7 +66,6 @@ export const useS3BrowserHook = ({
   const deleteMutation = useMutation({
     mutationFn: (key: string) => deleteS3Object(key),
     onSuccess: (_, key) => {
-      // [FIX] Added id and timestamp
       updateTaskLog("s3Browser", {
         id: `DEL_OK_${Date.now()}`,
         message: `${key} deleted successfully.`,
@@ -75,7 +74,6 @@ export const useS3BrowserHook = ({
       queryClient.invalidateQueries({ queryKey: ["s3Objects", currentPrefix] });
     },
     onError: (error: unknown, key) => {
-      // [FIX] Added id and timestamp
       const errorMessage = axios.isAxiosError(error)
         ? error.response?.data?.error || "An unknown error occurred."
         : "An unknown error occurred.";
@@ -94,7 +92,6 @@ export const useS3BrowserHook = ({
       if (!window.confirm(`Are you sure you want to delete "${key}"?`)) {
         return;
       }
-      // [FIX] Added id and timestamp
       updateTaskLog("s3Browser", {
         id: `DEL_START_${Date.now()}`,
         message: `Deleting ${key}...`,
@@ -189,26 +186,31 @@ export const useS3BrowserHook = ({
 export const useS3UploadHook = ({
   updateTaskLog,
   setUploadStatuses,
+  clearTaskLog, // [FIX] Added missing prop destructuring
 }: useS3UploadProps) => {
-  // [FIX] Maintained split loading states
   const [originalLoading, setOriginalLoading] = useState(false);
   const [splitLoading, setSplitLoading] = useState(false);
 
   const handleUploadToS3 = useCallback(
     async (localDir: string, prefix: string) => {
       setOriginalLoading(true);
-      // [FIX] Added id and timestamp
+      clearTaskLog("s3Upload"); // [FIX] Clear logs before starting
+
+      // [FIX] Initialize State immediately (Optimistic UI)
       updateTaskLog("s3Upload", {
         id: `UP_ORIG_START_${Date.now()}`,
+        status: "Starting",
         message: "Initiating S3 original file upload...",
+        progress: 0,
+        total: 0,
+        completed: 0,
         timestamp: new Date().toISOString(),
       });
 
-      // [FIX] Added required 'progress: 0' field
       setUploadStatuses((prev) => [
         ...prev,
         {
-          fileName: "Original File", // Matches UploadStatus interface
+          fileName: "Original File",
           status: "pending",
           progress: 0,
         },
@@ -250,24 +252,29 @@ export const useS3UploadHook = ({
         setOriginalLoading(false);
       }
     },
-    [updateTaskLog, setUploadStatuses]
+    [updateTaskLog, setUploadStatuses, clearTaskLog]
   );
 
   const handleUploadSplitFilesToS3 = useCallback(
     async (localDir: string, prefix: string) => {
       setSplitLoading(true);
-      // [FIX] Added id and timestamp
+      clearTaskLog("s3Upload"); // [FIX] Clear logs before starting
+
+      // [FIX] Initialize State immediately (Optimistic UI)
       updateTaskLog("s3Upload", {
         id: `UP_SPLIT_START_${Date.now()}`,
+        status: "Starting",
         message: "Initiating S3 split files upload...",
+        progress: 0,
+        total: 0,
+        completed: 0,
         timestamp: new Date().toISOString(),
       });
 
-      // [FIX] Added required 'progress: 0' field
       setUploadStatuses((prev) => [
         ...prev,
         {
-          fileName: "Split Files", // Matches UploadStatus interface
+          fileName: "Split Files",
           status: "pending",
           progress: 0,
         },
@@ -309,7 +316,7 @@ export const useS3UploadHook = ({
         setSplitLoading(false);
       }
     },
-    [updateTaskLog, setUploadStatuses]
+    [updateTaskLog, setUploadStatuses, clearTaskLog]
   );
 
   return {
