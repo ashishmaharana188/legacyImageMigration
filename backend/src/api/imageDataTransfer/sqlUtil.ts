@@ -135,6 +135,7 @@ export class SqlUtil {
               id_ihno: parseInt(row[2], 10),
               id_path: row[3].trim(),
               id_acno: row[4].trim(),
+              // Store as number if valid, otherwise keep as string (e.g. "Not Found")
               page_count: isNaN(parseInt(row[5], 10))
                 ? row[5].trim()
                 : parseInt(row[5], 10),
@@ -192,10 +193,9 @@ export class SqlUtil {
       client = await (await this.getPool()).connect();
       await pgBegin(client);
 
-      // [ALIGNMENT] Mapped to document_type (Old Code Logic)
       const trxnNameMap: Record<string, string> = {
         NEW: "Initial Contribution Form",
-        IC: "Initial Contribution Form", // Added alias for safety
+        IC: "Initial Contribution Form",
         NCT: "Non Commercial Transactions Form",
         RED: "Redemption Form",
         FUL: "Redemption Form",
@@ -205,7 +205,6 @@ export class SqlUtil {
         SWOF: "SWP Form",
       };
 
-      // [ALIGNMENT] Mapped to mime_type (Old Code Logic)
       const mimeType: Record<string, string> = {
         tif: "image/tiff",
         pdf: "application/pdf",
@@ -224,6 +223,8 @@ export class SqlUtil {
       clientRes.rows.forEach((r: any) => clientIdMap.set(r.client_code, r.id));
 
       let insertedRows = 0;
+      let skippedRows = 0;
+
       for (let i = 0; i < total; i += 500) {
         const chunk = transactions.slice(i, i + 500);
         const vParams: any[] = [];
@@ -231,13 +232,20 @@ export class SqlUtil {
         let pIdx = 1;
 
         for (const data of chunk) {
+          // [FIX] Guard Clause: Skip if page_count is not a valid number
+          if (typeof data.page_count !== "number") {
+            skippedRows++;
+            // Optional: log debug info if needed
+            // logger.debug(`Skipping row IHNO: ${data.id_ihno} due to non-numeric page_count: ${data.page_count}`);
+            continue;
+          }
+
           const actualId = clientIdMap.get(String(data.id_fund));
           if (actualId === undefined) continue;
 
           const ext = this.getFileExtension(data.id_path);
           const cleanExt = ext.replace(".", "");
 
-          // [ALIGNMENT] Calculate fields based on old code
           const process = this.trxnMap[data.id_trtype] || "Unknown";
           const activity = "Image Upload";
           const docType = trxnNameMap[data.id_trtype] || "Unknown";
@@ -245,7 +253,6 @@ export class SqlUtil {
           const mime =
             mimeType[cleanExt.toLowerCase()] || "application/octet-stream";
 
-          // [ALIGNMENT] Dynamic Document Path
           const basePath = `aif-in-a-box-assets-prod: Data/APPLICATION_FORMS/CLIENT_CODE_${data.id_fund}/`;
           const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
@@ -279,7 +286,7 @@ export class SqlUtil {
             "system",
             new Date(), // creation_date
             "system",
-            data.page_count,
+            data.page_count, // [FIX] Now guaranteed to be a number
             actualId,
           ];
           vStrings.push(`(${rowValues.map(() => `$${pIdx++}`).join(", ")})`);
@@ -318,6 +325,13 @@ export class SqlUtil {
       logger.info("Committing Transaction...", { console: true });
       await pgCommit(client);
 
+      if (skippedRows > 0) {
+        logger.warn(
+          `Skipped ${skippedRows} rows due to non-numeric page counts.`,
+          { console: true }
+        );
+      }
+
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "executeSql",
@@ -329,7 +343,14 @@ export class SqlUtil {
       logger.info("SQL Execution Completed Successfully.", { console: true });
     } catch (err: any) {
       if (client) await pgRollback(client);
-      logger.error("Execute SQL Failed", { error: err, console: true });
+      // [FIX] Enhanced Error Logging for Debugging
+      logger.error("Execute SQL Failed", {
+        error: err.message,
+        code: err.code,
+        routine: err.routine,
+        where: err.where, // Points to specific parameter index if available
+        console: true,
+      });
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "executeSql",
@@ -347,7 +368,6 @@ export class SqlUtil {
     updateAll: boolean,
     onProgress: (p: ImageDataProgress) => void
   ): Promise<void> {
-    // [FIX] Initial Log
     onProgress({
       type: "sqlProgressUpdate",
       subTask: "updateFolio",
@@ -359,8 +379,13 @@ export class SqlUtil {
 
     let transactions: any[] = [];
     const generated = await this.generateSql();
-    transactions = generated.transactions;
-    // [FIX] Total is strictly CSV rows
+
+    // [FIX] Filter invalid rows right at the start
+    // If we skipped inserting them, we must skip updating them too
+    transactions = generated.transactions.filter(
+      (t: any) => typeof t.page_count === "number"
+    );
+
     const total = transactions.length;
 
     if (total === 0) {
@@ -370,7 +395,7 @@ export class SqlUtil {
         total: 0,
         processed: 0,
         status: "Error",
-        message: "No data found in processed CSV",
+        message: "No valid numeric data found in processed CSV",
       });
       return;
     }
@@ -381,7 +406,7 @@ export class SqlUtil {
     let client: PoolClient | null = null;
 
     try {
-      logger.info(`Starting Update Process for ${total} CSV rows...`, {
+      logger.info(`Starting Update Process for ${total} valid rows...`, {
         console: true,
       });
       client = await (await this.getPool()).connect();
@@ -393,7 +418,6 @@ export class SqlUtil {
         console: true,
       });
 
-      // [FIX] Batch Temp Inserts
       for (let i = 0; i < total; i += 1000) {
         const chunk = transactions.slice(i, i + 1000);
         const vStrs = chunk.map(
@@ -413,7 +437,6 @@ export class SqlUtil {
           vParams
         );
 
-        // [FIX] Progress tracks Staging phase (0 to Total)
         onProgress({
           type: "sqlProgressUpdate",
           subTask: "updateFolio",
@@ -434,7 +457,6 @@ export class SqlUtil {
         updateAll ? [] : [processedFolioNumbers]
       );
 
-      // [FIX] Phase 2: Update (Progress stays at Total, Status changes)
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",
@@ -469,7 +491,6 @@ export class SqlUtil {
       const txnCount = resT.rowCount || 0;
       const totalUpdated = folioCount + txnCount;
 
-      // [FIX] Return Granular Metrics
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",

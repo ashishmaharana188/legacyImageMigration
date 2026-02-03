@@ -1,5 +1,5 @@
 import { PoolClient } from "pg";
-import mongoose, { PipelineStage, AnyBulkWriteOperation } from "mongoose";
+import mongoose, { PipelineStage, BulkWriteOperation } from "mongoose";
 import {
   IAifDocument,
   IAifDocumentInput,
@@ -42,10 +42,16 @@ WHERE d.client_id = cf.client_id AND d.user_attr2 = cf.folio_number AND d.create
 RETURNING d.user_attr1, d.user_attr2;
 `;
 export const SQL_UPDATE_TRANSACTION_REFERENCE_ID = `
-UPDATE investor.aif_document_details AS d SET transaction_reference_id = ts.transaction_number
+UPDATE investor.aif_document_details AS d 
+SET 
+    transaction_reference_id = ts.transaction_number,
+    folio_id = ts.folio_id 
 FROM trxn.aif_transaction_summary AS ts
-WHERE ts.client_id = d.client_id AND ts.folio_id = d.folio_id AND ts.user_attr5 = d.user_attr1
-  AND d.created_by = 'system' AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL) AND ts.created_by = 'aifappendersvc'
+WHERE ts.client_id = d.client_id 
+  AND ts.user_attr5 = d.user_attr1 
+  AND d.created_by = 'system' 
+  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL) 
+  AND ts.created_by = 'aifappendersvc'
   AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno) %WHERE_CLAUSE%
 RETURNING d.user_attr1, d.user_attr2;
 `;
@@ -81,7 +87,7 @@ export async function mongoInsertMany(
 
 export async function mongoBulkWrite(
   model: mongoose.Model<IAifDocument>,
-  operations: AnyBulkWriteOperation<IAifDocument>[]
+  operations: BulkWriteOperation<IAifDocument>[]
 ): Promise<IBulkWriteResult> {
   return model.bulkWrite(operations) as unknown as IBulkWriteResult;
 }
