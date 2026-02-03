@@ -1,12 +1,12 @@
 import React, { useState } from "react";
 
 export interface ProgressTrackingUIProps {
-  // [FIX] Standardized Props for Sidebar/Summary Display
+  // Standardized Props
   label?: string;
   status?: string;
   details?: string;
 
-  // Existing Props for specific views
+  // Existing Props
   title?: string;
   progress?: number;
   total?: number;
@@ -14,7 +14,7 @@ export interface ProgressTrackingUIProps {
   successful?: number;
   errors?: number;
   notFound?: number;
-  displayType?: "aggregate" | "default" | "simple";
+  displayType?: "aggregate" | "default" | "simple" | "sidebar";
   unit?: string;
 
   detailedMetrics?: {
@@ -29,7 +29,6 @@ export interface ProgressTrackingUIProps {
     page_count_status: string | number;
   }>;
 
-  // [FIX] Allow generic metrics pass-through
   metrics?: {
     inserted?: number;
     updated?: number;
@@ -42,7 +41,7 @@ export interface ProgressTrackingUIProps {
 
 const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   title,
-  label, // [FIX] Destructure new props
+  label,
   status,
   details,
   progress = 0,
@@ -59,20 +58,12 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const percentage = Math.round(progress);
-
-  // Consolidate metrics
   const finalMetrics = detailedMetrics || metrics;
 
-  // ---------------------------------------------------------
-  // 1. THE "SIDEBAR" / GENERIC VIEW (Standardized)
-  // ---------------------------------------------------------
-  // This view is triggered when 'label' or 'status' is provided by ProgressTrackingTask
-  if (label || status) {
+  if (displayType === "sidebar") {
     const isError = status === "Error" || status === "failed";
     const isSuccess =
       status === "Success" || status === "completed" || status === "Done";
-
-    // Determine color based on status
     const statusColor = isError
       ? "text-red-600"
       : isSuccess
@@ -85,44 +76,33 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
       : "bg-black";
 
     return (
-      <div>
-        <div className="mt-2 mb-4 w-full">
-          <div className="flex justify-between items-center mb-1">
-            {/* Label (e.g., "Uploading: Data/Folder1") */}
-            <span
-              className="text-xs font-semibold text-gray-700 truncate max-w-[70%]"
-              title={label || title}
-            >
-              {label || title}
-            </span>
-            {/* Status (e.g., "UPLOADING 45%") */}
-            <span className={`text-[10px] font-bold uppercase ${statusColor}`}>
-              {status} {percentage}%
-            </span>
-          </div>
-
-          {/* Progress Bar */}
-
-          {/* Details (e.g., "45 / 100") */}
-          {details && (
-            <div className="text-[10px] text-gray-500 font-mono text-right">
-              {details}
-            </div>
-          )}
+      <div className="mt-2 mb-4 w-full">
+        <div className="flex justify-between items-center mb-1">
+          <span
+            className="text-xs font-semibold text-gray-700 truncate max-w-[70%] pb-3"
+            title={label || title}
+          >
+            {label || title}
+          </span>
+          <span className={`text-[10px] font-bold uppercase ${statusColor}`}>
+            {status} {percentage}%
+          </span>
         </div>
         <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
           <div
-            className={`h-1.5 rounded-full transition-all duration-300 ${barColor}`}
+            className={`h-3 rounded-full transition-all duration-300 ${barColor}`}
             style={{ width: `${percentage}%` }}
           ></div>
         </div>
+        {details && (
+          <div className="text-[10px] text-gray-500 font-mono text-right">
+            {details}
+          </div>
+        )}
       </div>
     );
   }
 
-  // ---------------------------------------------------------
-  // 2. THE "SIMPLE" VIEW (For SQL/Mongo Task Lists)
-  // ---------------------------------------------------------
   if (displayType === "simple") {
     return (
       <div className="mt-4 border border-gray-200 rounded p-3 bg-white shadow-sm">
@@ -183,9 +163,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     );
   }
 
-  // ---------------------------------------------------------
-  // 3. THE "AGGREGATE" VIEW (For Upload Headers)
-  // ---------------------------------------------------------
   if (displayType === "aggregate") {
     return (
       <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
@@ -215,9 +192,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     );
   }
 
-  // ---------------------------------------------------------
-  // 4. THE "DETAILED" VIEW (Legacy Default)
-  // ---------------------------------------------------------
   return (
     <div className="mt-4">
       <div className="flex justify-between items-center">
@@ -257,6 +231,37 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
               <strong>Not Found:</strong> {notFound}
             </p>
           </div>
+
+          {badRowsDetails && badRowsDetails.length > 0 && (
+            <div className="mt-2">
+              <h6 className="font-semibold text-xs uppercase text-gray-500 mb-1">
+                Error Details:
+              </h6>
+              <div className="max-h-32 overflow-y-auto border rounded bg-white">
+                <table className="w-full text-sm text-left">
+                  <thead className="text-xs uppercase bg-gray-50 sticky top-0">
+                    <tr>
+                      <th className="px-2 py-1">IH No</th>
+                      <th className="px-2 py-1">Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {badRowsDetails.map((row, index) => (
+                      <tr
+                        key={index}
+                        className="border-b last:border-0 hover:bg-gray-50"
+                      >
+                        <td className="px-2 py-1 font-mono">{row.id_ihno}</td>
+                        <td className="px-2 py-1 text-red-600">
+                          {row.page_count_status}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

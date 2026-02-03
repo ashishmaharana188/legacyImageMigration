@@ -16,6 +16,7 @@ export interface LogEntry {
   status?: string;
   completed?: number;
   total?: number;
+  type?: string;
   message?: string;
   timestamp?: string;
 

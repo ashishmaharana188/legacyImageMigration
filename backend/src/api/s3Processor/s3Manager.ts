@@ -61,15 +61,18 @@ interface S3ListResponse {
   nextContinuationToken?: string;
 }
 
+// [FIX] Added maxKeys parameter (Default 1000)
 export async function listFiles(
   prefix: string,
-  continuationToken?: string
+  continuationToken?: string,
+  maxKeys: number = 1000
 ): Promise<S3ListResponse> {
   const command = new ListObjectsV2Command({
     Bucket: S3_BUCKET_NAME,
     Prefix: prefix,
     Delimiter: "/",
     ContinuationToken: continuationToken,
+    MaxKeys: maxKeys, // [FIX] Apply limit here
   });
 
   try {

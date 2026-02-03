@@ -21,6 +21,7 @@ import {
 
 class S3ProcessorController {
   async uploadToS3(req: Request, res: Response) {
+    // [LOG] Confirming which API is hit
     logger.info("=================================================", {
       console: true,
     });
@@ -40,10 +41,10 @@ class S3ProcessorController {
           ? userProvidedDir
           : defaultOutputRoot;
 
-      // SAFETY GUARD
+      // SAFETY GUARD: Prevent accidental upload of split_output via this handler
       if (targetRoot.includes("split_output")) {
         logger.warn(
-          `Blocked attempt to upload 'split_output' via 'uploadToS3' handler.`,
+          `Blocked attempt to upload 'split_output' via 'uploadToS3' (Originals) handler.`,
           { console: true }
         );
         return res.status(400).json({
@@ -323,19 +324,25 @@ class S3ProcessorController {
     }
   }
 
-  // ... (Rest of the class: listS3Files, deleteS3Files, searchS3Files, searchS3Folders remains unchanged)
   async listS3Files(req: Request, res: Response) {
     try {
       const prefix = (req.query.prefix as string) || "";
       const continuationToken = req.query.continuationToken as
         | string
         | undefined;
+      // [FIX] Read MaxKeys from query param (default to 1000 if not sent)
+      const maxKeys = req.query.maxKeys
+        ? parseInt(req.query.maxKeys as string)
+        : undefined;
+
       logger.info({
         category: "api-calls",
         function: "listS3Files",
-        message: `Initiating S3 file listing for prefix: ${prefix}`,
+        message: `Initiating S3 file listing for prefix: ${prefix}, maxKeys: ${maxKeys}`,
       });
-      const data = await listFiles(prefix, continuationToken);
+
+      // [FIX] Pass maxKeys to the manager
+      const data = await listFiles(prefix, continuationToken, maxKeys);
       res.status(200).json({ statusCode: 200, ...data });
     } catch (error: unknown) {
       const errorMessage =
