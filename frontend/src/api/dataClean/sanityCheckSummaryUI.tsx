@@ -1,106 +1,172 @@
-import React, { useState } from "react";
-import { SanityCheckSummaryDisplayProps, SanityCheckResponse } from "./sanityCheckType";
+// frontend/src/api/dataClean/sanityCheckSummaryUI.tsx
+
+import React from "react";
+import {
+  Box,
+  Button,
+  FormControlLabel,
+  Switch,
+  TextField,
+  Typography,
+  Card,
+  CardContent,
+  Divider,
+} from "@mui/material";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { SanityCheckSummaryDisplayProps } from "./sanityCheckType";
 
 const SanityCheckSummaryDisplay: React.FC<SanityCheckSummaryDisplayProps> = ({
-  log,
-  logKey,
+  handlePgSanityCheck,
+  handleMongoSanityCheck,
+  isDeleteEnabled,
+  setIsDeleteEnabled,
+  normalize,
+  setNormalize,
+  cutoffDate,
+  setCutoffDate,
+  clientCode,
+  setClientCode,
+  isLoadingPg,
+  isLoadingMongo,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
+  return (
+    <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <Card sx={{ maxWidth: 800, margin: "0 auto", mt: 4, boxShadow: 3 }}>
+        <CardContent>
+          <Box
+            display="flex"
+            justifyContent="space-between"
+            alignItems="center"
+            mb={2}
+          >
+            <Typography variant="h6" color="primary" fontWeight="bold">
+              Data Sanity Check & Cleanup
+            </Typography>
+            <Typography variant="caption" color="text.secondary">
+              Step 1: SQL Check | Step 2: Mongo Check
+            </Typography>
+          </Box>
 
-  const toggleExpansion = () => {
-    setIsExpanded(!isExpanded);
-  };
+          <Divider sx={{ mb: 3 }} />
 
-  const isSanityCheckLog = (log: any): log is SanityCheckResponse => {
-    return log && (log.dryRun !== undefined || log.duplicates !== undefined);
-  };
+          {/* Configuration Controls */}
+          <Box display="flex" gap={3} flexWrap="wrap" mb={4}>
+            <DatePicker
+              label="Cutoff Date"
+              value={cutoffDate}
+              onChange={(newValue) => setCutoffDate(newValue)}
+              slotProps={{
+                textField: {
+                  size: "small",
+                  helperText: "Filter data before this date",
+                },
+              }}
+            />
 
-  if (!isSanityCheckLog(log)) {
-    return null;
-  }
+            <TextField
+              label="Client Code"
+              value={clientCode}
+              onChange={(e) => setClientCode(e.target.value)}
+              size="small"
+              placeholder="e.g., 101"
+              helperText="Optional: Run for specific client"
+            />
+          </Box>
 
-  const sanityLog = log as SanityCheckResponse;
+          {/* Toggles */}
+          <Box
+            display="flex"
+            gap={4}
+            mb={4}
+            p={2}
+            bgcolor="#f8f9fa"
+            borderRadius={1}
+          >
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={normalize}
+                  onChange={(e) => setNormalize(e.target.checked)}
+                  color="info"
+                />
+              }
+              label={
+                <Box>
+                  <Typography variant="body2" fontWeight="medium">
+                    Normalize Keys
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Trim & Lowercase comparison
+                  </Typography>
+                </Box>
+              }
+            />
 
-  if (sanityLog.dryRun !== undefined && sanityLog.rows !== undefined) {
-    const duplicatesMap = new Map<
-      string,
-      { count: number; entries: any[] }
-    >();
-    sanityLog.rows.forEach((row: any) => {
-      const key = row.user_attr1;
-      if (!duplicatesMap.has(key)) {
-        duplicatesMap.set(key, { count: 0, entries: [] });
-      }
-      const entry = duplicatesMap.get(key)!;
-      entry.count++;
-      entry.entries.push(row);
-    });
-    const duplicateEntries = Array.from(duplicatesMap.values()).filter(
-      (entry) => entry.count > 1
-    );
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isDeleteEnabled}
+                  onChange={(e) => setIsDeleteEnabled(e.target.checked)}
+                  color="error"
+                />
+              }
+              label={
+                <Box>
+                  <Typography
+                    variant="body2"
+                    fontWeight="medium"
+                    color={isDeleteEnabled ? "error" : "text.primary"}
+                  >
+                    Enable Deletion (Live Mode)
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {isDeleteEnabled
+                      ? "Rows WILL be deleted"
+                      : "Dry Run Only (Safe)"}
+                  </Typography>
+                </Box>
+              }
+            />
+          </Box>
 
-    return (
-      <div>
-        <h5 className="font-semibold">PostgreSQL Sanity Check Summary:</h5>
-        <p>Dry Run: {sanityLog.dryRun ? "Yes" : "No"}</p>
-        <p>Cutoff Timestamp: {sanityLog.cutoffTms}</p>
-        <p>
-          Total Duplicates Found:{" "}
-          {duplicateEntries.reduce((acc, entry) => acc + entry.count - 1, 0)}
-        </p>
-        <button onClick={toggleExpansion}>
-          {isExpanded ? "Hide Details" : "Show Details"}
-        </button>
-        {isExpanded && (
-          <>
-            {duplicateEntries.length > 0 ? (
-              <div className="bg-gray-100 p-2 rounded mt-2">
-                <table className="w-full text-sm text-left">
-                  <thead className="text-xs uppercase bg-gray-50">
-                    <tr>
-                      <th scope="col" className="px-2 py-1">User Attr1</th>
-                      <th scope="col" className="px-2 py-1">Client ID</th>
-                      <th scope="col" className="px-2 py-1">Creation Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {duplicateEntries.map((entry, index) => (
-                      <React.Fragment key={index}>
-                        {entry.entries.map((row: any, rowIndex: number) => (
-                          <tr key={`${index}-${rowIndex}`} className="bg-white border-b">
-                            <td className="px-2 py-1">{row.user_attr1}</td>
-                            <td className="px-2 py-1">{row.client_id}</td>
-                            <td className="px-2 py-1">{row.creation_date}</td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ) : (
-              <p className="mt-2">No duplicates found.</p>
-            )}
-          </>
-        )}
-      </div>
-    );
-  } else if (sanityLog.duplicates && Array.isArray(sanityLog.duplicates)) {
-    return (
-      <div>
-        <h5 className="font-semibold">MongoDB Duplicate Check Summary:</h5>
-        <p>
-          Total Duplicate Documents:{" "}
-          {sanityLog.totalDuplicateDocuments !== undefined && sanityLog.totalDuplicateGroups !== undefined
-            ? sanityLog.totalDuplicateDocuments - sanityLog.totalDuplicateGroups
-            : "N/A"}
-        </p>
-        <p>Total documents after Cutoff: {sanityLog.totalDuplicateGroups !== undefined ? sanityLog.totalDuplicateGroups : "N/A"}</p>
-      </div>
-    );
-  }
+          <Divider sx={{ mb: 3 }} />
 
-  return null;
+          {/* Action Buttons */}
+          <Box display="flex" gap={3} justifyContent="flex-end">
+            <Button
+              variant="contained"
+              color={isDeleteEnabled ? "error" : "primary"}
+              onClick={() => handlePgSanityCheck(!isDeleteEnabled)}
+              disabled={isLoadingPg || isLoadingMongo}
+              sx={{ minWidth: 180 }}
+            >
+              {isLoadingPg
+                ? "Checking SQL..."
+                : isDeleteEnabled
+                ? "Run Live SQL Delete"
+                : "Run SQL Dry Run"}
+            </Button>
+
+            <Button
+              variant="contained"
+              color={isDeleteEnabled ? "error" : "secondary"}
+              onClick={() => handleMongoSanityCheck(!isDeleteEnabled)}
+              disabled={isLoadingPg || isLoadingMongo}
+              sx={{ minWidth: 180 }}
+            >
+              {isLoadingMongo
+                ? "Checking Mongo..."
+                : isDeleteEnabled
+                ? "Run Live Mongo Delete"
+                : "Run Mongo Dry Run"}
+            </Button>
+          </Box>
+        </CardContent>
+      </Card>
+    </LocalizationProvider>
+  );
 };
 
 export default SanityCheckSummaryDisplay;

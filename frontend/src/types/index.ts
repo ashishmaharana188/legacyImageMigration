@@ -19,34 +19,33 @@ export interface LogEntry {
   type?: string;
   message?: string;
   timestamp?: string;
-
-  // Progress specific fields
-  totalRows?: number;
   processedRows?: number;
+  progress?: number;
+  totalRows?: number;
   successfulRows?: number;
   errors?: number;
   notFound?: number;
-  progress?: number;
-  duplicates?: number;
 
-  // Split specific fields
-  splitSummary?: {
-    totalSplitFilesGenerated: number;
-    splitErrors: number;
-    totalExpectedPagesFromCsv: number;
-  };
-
-  // [FIX] Added missing fields for SQL/Mongo WebSocket support
-  subTask?: string;
+  // [STEP 4] Added for detailed metrics display
+  totalDuplicates?: number;
   metrics?: {
+    // Sanity Check
+    imperfectVsPerfect?: number;
+    olderVersions?: number;
+    olderImperfects?: number;
+    duplicates?: number;
+
+    // Image Data Transfer
+    folioUpdated?: number;
+    txnUpdated?: number;
     inserted?: number;
-    updated?: number;
-    folioUpdated?: number; // [NEW]
-    txnUpdated?: number; // [NEW]
     synced?: number;
     failed?: number;
+
+    [key: string]: number | undefined;
   };
-  badRowsFilePath?: string;
+  rows?: any[];
+  result?: string;
 }
 
 export interface S3UploadProgress {

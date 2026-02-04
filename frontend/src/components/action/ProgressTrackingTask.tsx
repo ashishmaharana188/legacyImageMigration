@@ -1,3 +1,5 @@
+// frontend/src/components/action/ProgressTrackingTask.tsx
+
 import React from "react";
 import ProgressTrackingUI from "../ui/ProgressTrackingUI";
 import { LogEntry } from "../../types";
@@ -14,7 +16,6 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
   const currentLogs = taskLogs[taskName] || [];
 
   if (taskName === "uploadAndScript") {
-    // Check for the specific Live ID used by WebSocket or the main status log
     const uploadLog = currentLogs.find(
       (log) => log.id === "LIVE_EXCEL_PROGRESS"
     );
@@ -58,9 +59,6 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     }
   }
 
-  // =========================================================
-  // 3. RESTORED: Image Data Transfer Logic (Simple View)
-  // =========================================================
   if (taskName === "imageDataTransfer") {
     const activeLogs = currentLogs.filter(
       (log) =>
@@ -85,11 +83,7 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
                 errors={log.errors || 0}
                 displayType="simple"
                 unit="records"
-                detailedMetrics={{
-                  folioUpdated: metrics.folioUpdated,
-                  txnUpdated: metrics.txnUpdated,
-                  inserted: metrics.inserted,
-                }}
+                detailedMetrics={metrics} // Pass generic metrics
               />
             );
           })}
@@ -99,18 +93,50 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
   }
 
   if (taskName === "s3Upload") {
-    // Filter for the live progress log
     const s3Log = currentLogs.find((log) => log.id === "LIVE_S3_PROGRESS");
 
     if (s3Log) {
       return (
         <ProgressTrackingUI
           key={s3Log.id}
-          displayType="sidebar" // Explicitly request the sidebar look
+          displayType="sidebar"
           label={s3Log.message || "Uploading to S3..."}
           status={s3Log.status || "Processing"}
           progress={s3Log.progress || 0}
           details={`${s3Log.processedRows || 0} / ${s3Log.total || 0} folders`}
+        />
+      );
+    }
+  }
+
+  // [FIX] Added missing handler for Sanity Checks
+  if (taskName === "pgSanityCheck" || taskName === "mongoSanityCheck") {
+    // Find the live update log (populated via WebSocket)
+    // Fallback: If no live log, look for a completed log with metrics
+    const sanityLog = currentLogs
+      .slice()
+      .reverse()
+      .find(
+        (log) =>
+          log.id === "LIVE_SANITY_PROGRESS" ||
+          (log.metrics && Object.keys(log.metrics).length > 0)
+      );
+
+    if (sanityLog) {
+      return (
+        <ProgressTrackingUI
+          key={sanityLog.id || "sanity-check-result"}
+          displayType="simple"
+          title={
+            taskName === "pgSanityCheck" ? "PG Data Clean" : "Mongo Data Clean"
+          }
+          status={sanityLog.status}
+          progress={sanityLog.progress || 100} // Default to 100 if just a result
+          // Use totalDuplicates from the log if available
+          total={sanityLog.totalDuplicates || 0}
+          // Pass the metrics object to be rendered
+          metrics={sanityLog.metrics}
+          unit="duplicates"
         />
       );
     }
