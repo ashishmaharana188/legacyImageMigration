@@ -1,5 +1,3 @@
-// frontend/src/components/action/SanityCheckTask.tsx
-
 import React, { useCallback, useState, useEffect } from "react";
 import axios from "axios";
 import SanityCheckSummaryDisplay from "../../api/dataClean/sanityCheckSummaryUI";
@@ -25,17 +23,16 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
   const [isLoadingPg, setIsLoadingPg] = useState(false);
   const [isLoadingMongo, setIsLoadingMongo] = useState(false);
 
-  // [FIX] WebSocket Listener - Bridges Backend to Frontend UI
+  // [STANDARD] WebSocket Listener
   useEffect(() => {
     const handleMessage = (message: any) => {
       if (message.type === "sanity-progress") {
         updateTaskLog(message.task, {
-          // [KEY] This ID must match what ProgressTrackingTask looks for
           id: "LIVE_SANITY_PROGRESS",
           status: message.status,
           message: message.message,
           progress: message.progress,
-          metrics: message.metrics, // Capture metrics from backend wrapper
+          metrics: message.metrics, // WebSocket provides the correct metrics structure
           totalDuplicates: message.totalDuplicates,
         });
 
@@ -54,7 +51,6 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
     async (dryRun: boolean) => {
       if (!cutoffDate) {
         updateTaskLog("pgSanityCheck", {
-          id: "LIVE_SANITY_PROGRESS",
           status: "Error",
           message: "Date required",
         });
@@ -64,7 +60,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       clearTaskLog("pgSanityCheck");
       setIsLoadingPg(true);
 
-      // 1. Initialize Log immediately so sidebar shows "Requesting..."
+      // Initial State
       updateTaskLog("pgSanityCheck", {
         id: "LIVE_SANITY_PROGRESS",
         status: "Running",
@@ -76,14 +72,13 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       const cutoffTms = `${cutoffDate.format("YYYY-MM-DD")}T00:00:00.0000`;
 
       try {
-        // 2. Fire and Forget request
+        // [FIX] Fire request but DO NOT overwrite log with response
         await axios.post("http://localhost:3000/sql/sanity-check-duplicates", {
           dryRun,
           normalize,
           cutoffTms,
           clientCode,
         });
-        // Do not await result; WebSocket handles the rest.
       } catch (error: any) {
         setIsLoadingPg(false);
         updateTaskLog("pgSanityCheck", {
@@ -102,6 +97,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       clearTaskLog("mongoSanityCheck");
       setIsLoadingMongo(true);
 
+      // Initial State
       updateTaskLog("mongoSanityCheck", {
         id: "LIVE_SANITY_PROGRESS",
         status: "Running",
@@ -113,6 +109,7 @@ const SanityCheckTask: React.FC<SanityCheckTaskProps> = ({
       const cutoffTms = cutoffDate.format("M/D/YYYY");
 
       try {
+        // [FIX] Fire request but DO NOT overwrite log with response
         await axios.post(
           "http://localhost:3000/mongo/sanity-check-duplicates",
           {
