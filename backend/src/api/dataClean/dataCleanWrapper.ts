@@ -1,13 +1,12 @@
-// backend/src/api/duplicateProcessor/duplicateProcessorWrapper.ts
+// backend/src/api/dataClean/dataCleanWrapper.ts
 
-import {
-  SqlLog,
-  MongoDuplicateCheckResult,
-  DryRunResultRow,
-} from "./dataCleanTypes";
+import { SqlLog, SanityCheckResult } from "./dataCleanTypes";
 import { DuplicateProcessorSqlUtil } from "./dataCleanSqlUtil";
 import { DuplicateProcessorMongoUtil } from "./dataCleanMongoUtil";
-import { SanityCheckResult } from "./dataCleanTypes";
+import { broadcast } from "../../utils/webSocketService";
+import { createFeatureLogger } from "../../utils/logger";
+
+const logger = createFeatureLogger("dataClean");
 
 export class DuplicateProcessorWrapper {
   private duplicateProcessorSqlUtil: DuplicateProcessorSqlUtil;
@@ -24,8 +23,17 @@ export class DuplicateProcessorWrapper {
     cutoffTms?: string;
     clientCode?: string;
   }): Promise<SanityCheckResult> {
-    // Correct: Returns the Interface directly
-    return this.duplicateProcessorSqlUtil.sanityCheckDuplicates(params);
+    // Broadcast logic will go here in Step 3
+
+    try {
+      const result = await this.duplicateProcessorSqlUtil.sanityCheckDuplicates(
+        params
+      );
+      return result;
+    } catch (error: any) {
+      logger.error("Wrapper: SQL Check Failed", { error: error.message });
+      throw error;
+    }
   }
 
   public async sanityCheckMongoDuplicates(params: {
@@ -35,11 +43,21 @@ export class DuplicateProcessorWrapper {
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
-    duplicates: MongoDuplicateCheckResult[];
     totalDuplicateGroups: number;
     totalDuplicateDocuments: number;
     logs: SqlLog[];
   }> {
-    return this.duplicateProcessorMongoUtil.sanityCheckMongoDuplicates(params);
+    // Broadcast logic will go here in Step 3
+
+    try {
+      const result =
+        await this.duplicateProcessorMongoUtil.sanityCheckMongoDuplicates(
+          params
+        );
+      return result;
+    } catch (error: any) {
+      logger.error("Wrapper: Mongo Check Failed", { error: error.message });
+      throw error;
+    }
   }
 }

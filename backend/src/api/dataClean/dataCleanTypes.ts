@@ -22,10 +22,15 @@ export interface SanityCheckResult {
   dryRun: boolean;
   cutoffTms: string;
   logs: SqlLog[];
-  rows?: DryRunResultRow[];
+  rows?: InternalDryRunRow[];
   imperfectDuplicates?: string[];
   totalDuplicatesFound?: number;
   deletedCount?: number;
+  metrics?: {
+    imperfectVsPerfect: number;
+    olderVersions: number;
+    olderImperfects: number;
+  };
 }
 
 export interface SanityCheckResponse {
@@ -33,15 +38,22 @@ export interface SanityCheckResponse {
   dryRun: boolean;
   cutoffTms: string;
   deletedCount?: number;
-  rows?: DryRunResultRow[];
+  rows?: InternalDryRunRow[];
   logs: SqlLog[];
   imperfectDuplicates?: string[];
   totalDuplicatesFound?: number;
 }
 
-export interface DryRunResultRow extends SanityCheckRow {
-  wouldBeDeleted: boolean;
-  reason: string;
+export interface InternalDryRunRow {
+  id: string;
+  client_id: string;
+  user_attr1: string;
+  user_attr2: string;
+  creation_date: string;
+  folio_id?: string;
+  transaction_reference_id?: string;
+  rn_desc: number;
+  perfect_rows_in_group: number;
 }
 
 export interface ImperfectDuplicateRow {
@@ -71,7 +83,7 @@ export interface MongoDuplicateGroupResult {
 }
 
 export interface MongoDuplicateCheckResult {
-  _id: { clientId: string; transactionNo: string };
+  groupId: any;
+  uniqueIds: string[];
   count: number;
-  documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
 }

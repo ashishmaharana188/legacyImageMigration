@@ -1,9 +1,8 @@
-// backend/src/api/dataClean/dataCleanController.ts
-
 import { Request, Response } from "express";
 import { DuplicateProcessorWrapper } from "./dataCleanWrapper";
 import { createFeatureLogger } from "../../utils/logger";
 
+// [STANDARD] Initialize feature logger
 const logger = createFeatureLogger("dataClean");
 
 class DuplicateProcessorController {
@@ -17,15 +16,14 @@ class DuplicateProcessorController {
     try {
       const { dryRun, normalize, cutoffTms, clientCode } = req.body;
 
-      // [FIX] Correct logger signature: message string first
-      logger.info("Initiating SQL duplicate sanity check.", {
+      logger.info("API: sanityCheckDuplicates started", {
         category: "api-calls",
         function: "sanityCheckDuplicates",
         dryRun,
         normalize,
         cutoffTms,
         clientCode,
-        console: true,
+        console: true, // [FIX] Force output to terminal
       });
 
       const result = await this.duplicateProcessorWrapper.sanityCheckDuplicates(
@@ -37,18 +35,31 @@ class DuplicateProcessorController {
         }
       );
 
-      res.status(200).json({ statusCode: 200, ...result });
-    } catch (error) {
-      // [FIX] Correct logger signature
-      logger.error("Failed to perform SQL duplicate sanity check", {
+      logger.info("API: sanityCheckDuplicates completed successfully", {
         category: "api-calls",
         function: "sanityCheckDuplicates",
-        error: error instanceof Error ? error.message : "Unknown error",
-        console: true,
+        totalDuplicates: result.totalDuplicatesFound,
+        console: true, // [FIX] Force output to terminal
       });
+
+      res.status(200).json({
+        statusCode: 200,
+        ...result,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      logger.error("API: sanityCheckDuplicates failed", {
+        category: "api-calls",
+        function: "sanityCheckDuplicates",
+        error: errorMessage,
+        console: true, // [FIX] Force output to terminal
+      });
+
       res.status(500).json({
         statusCode: 500,
-        error: "Failed to perform SQL duplicate sanity check",
+        error: errorMessage,
       });
     }
   }
@@ -57,8 +68,7 @@ class DuplicateProcessorController {
     try {
       const { dryRun, cutoffTms, clientId } = req.body;
 
-      // [FIX] Correct logger signature
-      logger.info("Initiating MongoDB duplicate sanity check.", {
+      logger.info("API: sanityCheckMongoDuplicates started", {
         category: "api-calls",
         function: "sanityCheckMongoDuplicates",
         dryRun,
@@ -74,18 +84,31 @@ class DuplicateProcessorController {
           clientId: clientId as string,
         });
 
-      res.status(200).json({ statusCode: 200, ...result });
-    } catch (error) {
-      // [FIX] Correct logger signature
-      logger.error("Failed to perform MongoDB duplicate sanity check", {
+      logger.info("API: sanityCheckMongoDuplicates completed successfully", {
         category: "api-calls",
         function: "sanityCheckMongoDuplicates",
-        error: error instanceof Error ? error.message : "Unknown error",
+        totalDuplicateGroups: result.totalDuplicateGroups,
         console: true,
       });
+
+      res.status(200).json({
+        statusCode: 200,
+        ...result,
+      });
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
+      logger.error("API: sanityCheckMongoDuplicates failed", {
+        category: "api-calls",
+        function: "sanityCheckMongoDuplicates",
+        error: errorMessage,
+        console: true,
+      });
+
       res.status(500).json({
         statusCode: 500,
-        error: "Failed to perform MongoDB duplicate sanity check",
+        error: errorMessage,
       });
     }
   }
