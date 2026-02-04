@@ -3,7 +3,7 @@
 import fs from "fs/promises";
 import path from "path";
 import { Pool, PoolClient } from "pg";
-import logger from "../../utils/logger";
+import { createFeatureLogger } from "../../utils/logger"; // [FIX] Import factory
 import {
   getPgPool,
   reconnectPgPool,
@@ -24,6 +24,9 @@ import {
 } from "./dataCleanCore";
 import { SanityCheckResult } from "./dataCleanTypes";
 
+// [FIX] Initialize dedicated logger
+const logger = createFeatureLogger("dataClean");
+
 export class DuplicateProcessorSqlUtil {
   private async reconnectPool(): Promise<void> {
     await reconnectPgPool();
@@ -34,6 +37,8 @@ export class DuplicateProcessorSqlUtil {
   public async warmup() {
     await warmupPgPool();
   }
+
+  // [FIX] Use the feature logger instance
   private readonly logger = logger;
 
   private async writeBadRowsToFile(
@@ -42,11 +47,21 @@ export class DuplicateProcessorSqlUtil {
   ): Promise<string | null> {
     if (badRows.length === 0) return null;
     const timestamp = new Date().toISOString().replace(/[:.-]/g, "_");
+
+    // [FIX] Ensure manual logs also go to the dataClean folder if possible,
+    // or keep them in root logs if that's the intention.
+    // Assuming standard logs/dataClean/ path:
     const filePath = path.join(
       __dirname,
-      "../../../../logs",
+      "../../../../logs/dataClean",
       `${timestamp}_${baseFilename}`
     );
+
+    // Create dir if it doesn't exist (just in case logger hasn't created it yet)
+    try {
+      await fs.mkdir(path.dirname(filePath), { recursive: true });
+    } catch (e) {}
+
     let content = "user_attr1,reason\n";
     badRows.forEach((row) => {
       content += `${row.user_attr1 || ""},"${row.reason}"\n`;
@@ -66,7 +81,6 @@ export class DuplicateProcessorSqlUtil {
     clientCode?: string;
   }): Promise<SanityCheckResult> {
     const logs: SqlLog[] = [];
-    // FIX: Default to safety. If dryRun is not explicitly FALSE, it is TRUE
     const dryRun = params.dryRun !== false;
     const {
       normalize = false,
@@ -142,7 +156,7 @@ export class DuplicateProcessorSqlUtil {
       if (dryRun) {
         // --- START DRY RUN BLOCK ---
         const dryRunRes = await pgQuery(client, dryRunSql, [cutoffTms]);
-        await pgRollback(client); // Ensure no changes are ever committed
+        await pgRollback(client);
 
         const processedRows: DryRunResultRow[] = dryRunRes.rows.map((row) => {
           const isPerfectRow = !!(
@@ -179,8 +193,10 @@ export class DuplicateProcessorSqlUtil {
           logs,
         };
       } else {
-        // --- START LIVE DELETION BLOCK (Wrapped in ELSE for physical isolation) ---
-        this.logger.warn("CRITICAL: Executing live deletion.");
+        // --- START LIVE DELETION BLOCK ---
+        this.logger.warn("CRITICAL: Executing live deletion.", {
+          console: true,
+        }); // [FIX] Added console tag
 
         const del1 = await pgQuery(client, deleteImperfectSql, [cutoffTms]);
         const del2 = await pgQuery(client, deleteOlderPerfectSql, [cutoffTms]);
@@ -188,7 +204,7 @@ export class DuplicateProcessorSqlUtil {
           cutoffTms,
         ]);
 
-        await pgCommit(client); // Only commit if dryRun was explicitly FALSE
+        await pgCommit(client);
 
         return {
           result: "success",

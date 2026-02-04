@@ -15,6 +15,11 @@ import {
   AWS_SESSION_TOKEN,
   AWS_DEFAULT_REGION,
 } from "../../../utils/s3Config";
+import { createFeatureLogger } from "../../utils/logger";
+
+// [ALIGNMENT] Initialize standard logger for the "s3Processor" feature
+// This ensures logs go to logs/s3Processor/logs.txt instead of just stdout
+const logger = createFeatureLogger("s3Processor");
 
 const agent = new https.Agent({
   maxSockets: 200,
@@ -40,17 +45,18 @@ const s3 = new S3Client({
 
 export async function verifyS3Connection(): Promise<void> {
   try {
-    console.log("Verifying S3 connection...");
+    logger.info("Verifying S3 connection...", { console: true });
     await s3.send(new ListBucketsCommand({}));
-    console.log("S3 connection successful.");
+    logger.info("S3 connection successful.", { console: true });
   } catch (error: unknown) {
     if (isAuthError(error)) {
-      console.error(
-        "S3 connection failed: Authentication token expired or invalid."
+      logger.error(
+        "S3 connection failed: Authentication token expired or invalid.",
+        { console: true }
       );
     } else {
       const msg = error instanceof Error ? error.message : String(error);
-      console.error(`S3 connection failed: ${msg}`);
+      logger.error(`S3 connection failed: ${msg}`, { console: true });
     }
   }
 }
@@ -61,7 +67,6 @@ interface S3ListResponse {
   nextContinuationToken?: string;
 }
 
-// [FIX] Added maxKeys parameter (Default 1000)
 export async function listFiles(
   prefix: string,
   continuationToken?: string,
@@ -72,7 +77,7 @@ export async function listFiles(
     Prefix: prefix,
     Delimiter: "/",
     ContinuationToken: continuationToken,
-    MaxKeys: maxKeys, // [FIX] Apply limit here
+    MaxKeys: maxKeys,
   });
 
   try {
@@ -89,10 +94,12 @@ export async function listFiles(
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (isAuthError(err)) {
-      console.error("S3 listFiles failed: Authentication expired.");
+      logger.error("S3 listFiles failed: Authentication expired.", {
+        console: true,
+      });
       throw new Error("S3 Credentials Expired");
     } else {
-      console.error(`S3 listFiles error: ${msg}`);
+      logger.error(`S3 listFiles error: ${msg}`, { console: true });
       throw new Error(msg);
     }
   }
@@ -112,15 +119,19 @@ export async function deleteFiles(keys: string[]): Promise<string[]> {
   try {
     const { Deleted } = await s3.send(command);
     const deletedKeys = Deleted?.map((d) => d.Key!) || [];
-    console.log(`Successfully deleted ${deletedKeys.length} files from S3.`);
+    logger.info(`Successfully deleted ${deletedKeys.length} files from S3.`, {
+      console: true,
+    });
     return deletedKeys;
   } catch (err: unknown) {
     if (isAuthError(err)) {
-      console.error("S3 deleteFiles failed: Authentication expired.");
+      logger.error("S3 deleteFiles failed: Authentication expired.", {
+        console: true,
+      });
       throw new Error("S3 Credentials Expired");
     } else {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`Error deleting files from S3: ${msg}`);
+      logger.error(`Error deleting files from S3: ${msg}`, { console: true });
       return [];
     }
   }
@@ -159,7 +170,7 @@ export async function searchFiles(
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Error searching files: ${msg}`);
+    logger.error(`Error searching files: ${msg}`, { console: true });
     throw new Error(msg);
   }
 }
@@ -196,7 +207,7 @@ export async function searchFolders(
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.error(`Error searching folders: ${msg}`);
+    logger.error(`Error searching folders: ${msg}`, { console: true });
     throw new Error(msg);
   }
 }

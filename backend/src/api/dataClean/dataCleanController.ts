@@ -1,8 +1,10 @@
-// backend/src/api/duplicateProcessor/duplicateProcessorController.ts
+// backend/src/api/dataClean/dataCleanController.ts
 
 import { Request, Response } from "express";
 import { DuplicateProcessorWrapper } from "./dataCleanWrapper";
-import logger from "../../utils/logger";
+import { createFeatureLogger } from "../../utils/logger";
+
+const logger = createFeatureLogger("dataClean");
 
 class DuplicateProcessorController {
   private duplicateProcessorWrapper: DuplicateProcessorWrapper;
@@ -13,22 +15,21 @@ class DuplicateProcessorController {
 
   async sanityCheckDuplicates(req: Request, res: Response) {
     try {
-      // FIX: Changed from req.query to req.body to read the POST JSON payload
       const { dryRun, normalize, cutoffTms, clientCode } = req.body;
 
-      logger.info({
+      // [FIX] Correct logger signature: message string first
+      logger.info("Initiating SQL duplicate sanity check.", {
         category: "api-calls",
         function: "sanityCheckDuplicates",
-        message: "Initiating SQL duplicate sanity check.",
         dryRun,
         normalize,
         cutoffTms,
         clientCode,
+        console: true,
       });
 
       const result = await this.duplicateProcessorWrapper.sanityCheckDuplicates(
         {
-          // FIX: Strict check. If dryRun is not explicitly FALSE, it stays TRUE (Safe)
           dryRun: dryRun !== false,
           normalize: normalize === true || normalize === "true",
           cutoffTms: cutoffTms as string,
@@ -38,11 +39,12 @@ class DuplicateProcessorController {
 
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
-      logger.error({
+      // [FIX] Correct logger signature
+      logger.error("Failed to perform SQL duplicate sanity check", {
         category: "api-calls",
         function: "sanityCheckDuplicates",
-        message: "Failed to perform SQL duplicate sanity check",
         error: error instanceof Error ? error.message : "Unknown error",
+        console: true,
       });
       res.status(500).json({
         statusCode: 500,
@@ -53,27 +55,34 @@ class DuplicateProcessorController {
 
   async sanityCheckMongoDuplicates(req: Request, res: Response) {
     try {
-      // FIX: Changed from req.query to req.body
       const { dryRun, cutoffTms, clientId } = req.body;
 
-      logger.info({
+      // [FIX] Correct logger signature
+      logger.info("Initiating MongoDB duplicate sanity check.", {
         category: "api-calls",
         function: "sanityCheckMongoDuplicates",
-        message: "Initiating MongoDB duplicate sanity check.",
         dryRun,
         cutoffTms,
         clientId,
+        console: true,
       });
 
       const result =
         await this.duplicateProcessorWrapper.sanityCheckMongoDuplicates({
-          dryRun: dryRun !== false, // Default to true for safety
+          dryRun: dryRun !== false,
           cutoffTms: cutoffTms as string,
           clientId: clientId as string,
         });
 
       res.status(200).json({ statusCode: 200, ...result });
     } catch (error) {
+      // [FIX] Correct logger signature
+      logger.error("Failed to perform MongoDB duplicate sanity check", {
+        category: "api-calls",
+        function: "sanityCheckMongoDuplicates",
+        error: error instanceof Error ? error.message : "Unknown error",
+        console: true,
+      });
       res.status(500).json({
         statusCode: 500,
         error: "Failed to perform MongoDB duplicate sanity check",

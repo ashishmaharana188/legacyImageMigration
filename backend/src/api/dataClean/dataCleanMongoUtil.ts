@@ -1,3 +1,5 @@
+// backend/src/api/dataClean/dataCleanMongoUtil.ts
+
 import {
   connectMongo,
   disconnectMongo,
@@ -5,7 +7,7 @@ import {
   getMongoDb,
 } from "../../utils/dbConnect";
 import mongoose, { Document, PipelineStage } from "mongoose";
-import logger from "../../utils/logger";
+import { createFeatureLogger } from "../../utils/logger";
 import {
   MongoDuplicateCheckResult,
   SqlLog,
@@ -14,6 +16,8 @@ import {
 } from "./dataCleanTypes";
 import { mongoAggregate, mongoDeleteMany } from "./dataCleanCore";
 import { IAifDocument } from "../imageDataTransfer/imageDataTransferTypes";
+
+const logger = createFeatureLogger("dataClean");
 
 export class DuplicateProcessorMongoUtil {
   private model: mongoose.Model<IAifDocument>;
@@ -36,49 +40,35 @@ export class DuplicateProcessorMongoUtil {
 
   private convertCutoffTmsToDate(cutoffTms: string): Date | null {
     try {
-      // Assuming cutoffTms is in "YYYY-MM-DDTHH:mm:ss.SSSS" format
-
       const date = new Date(cutoffTms);
-
       if (isNaN(date.getTime())) {
-        logger.error({
+        // [FIX] Pass string message first, then metadata object
+        logger.error(`Invalid cutoffTms date string: ${cutoffTms}`, {
           category: "task-steps",
-
-          message: `Invalid cutoffTms date string: ${cutoffTms}`,
+          console: true,
         });
-
         return null;
       }
-
       return date;
     } catch (error) {
-      logger.error({
+      logger.error(`Error converting cutoffTms to Date: ${error}`, {
         category: "task-steps",
-
-        message: `Error converting cutoffTms to Date: ${error}`,
+        console: true,
       });
-
       return null;
     }
   }
 
   public async sanityCheckMongoDuplicates(params: {
     dryRun?: boolean;
-
     cutoffTms?: string;
-
     clientId?: string;
   }): Promise<{
     result: "success" | "failed";
-
     dryRun: boolean;
-
     duplicates: MongoDuplicateCheckResult[];
-
     totalDuplicateGroups: number;
-
     totalDuplicateDocuments: number;
-
     logs: SqlLog[];
   }> {
     const logs: SqlLog[] = [];
@@ -86,9 +76,7 @@ export class DuplicateProcessorMongoUtil {
     let cutoffDate: Date | null = null;
 
     if (cutoffDateString) {
-      // Parse cutoffDateString (e.g., "9/5/2025") into a Date object at 00:00:00 AM
       const [day, month, year] = cutoffDateString.split("/").map(Number);
-      // Month is 0-indexed in JavaScript Date objects
       cutoffDate = new Date(year, month - 1, day, 0, 0, 0, 0);
 
       if (isNaN(cutoffDate.getTime())) {
@@ -107,18 +95,18 @@ export class DuplicateProcessorMongoUtil {
           logs,
         };
       }
-      logger.debug({
-        category: "task-steps",
-        message: `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`,
-      });
+      logger.debug(
+        `sanityCheckMongoDuplicates: Using cutoffDate for comparison: ${cutoffDate.toISOString()}`,
+        { category: "task-steps" }
+      );
     }
 
-    logger.debug({
-      category: "task-steps",
-      message: `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}, clientId: ${
+    logger.debug(
+      `sanityCheckMongoDuplicates: Received dryRun: ${dryRun}, clientId: ${
         clientId || "N/A"
       }`,
-    });
+      { category: "task-steps" }
+    );
 
     try {
       await this.connect();
@@ -127,36 +115,32 @@ export class DuplicateProcessorMongoUtil {
         ...(clientId ? [{ $match: { clientId: clientId } }] : []),
         {
           $addFields: {
-            // Split by comma and space to get date and time parts
             parts: { $split: ["$createdOn", ", "] },
           },
         },
         {
           $addFields: {
-            datePart: { $arrayElemAt: ["$parts", 0] }, // e.g., "8/3/2024"
-            timePart: { $arrayElemAt: ["$parts", 1] }, // e.g., "10:49:51 AM"
+            datePart: { $arrayElemAt: ["$parts", 0] },
+            timePart: { $arrayElemAt: ["$parts", 1] },
           },
         },
         {
           $addFields: {
-            // Split datePart by '/' to get day, month, year
             dateComponents: { $split: ["$datePart", "/"] },
-            // Split timePart by ' ' to separate time and AM/PM
             timeComponents: { $split: ["$timePart", " "] },
           },
         },
         {
           $addFields: {
-            day: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } }, // Day is first in D/M/YYYY
-            month: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } }, // Month is second in D/M/YYYY
+            day: { $toInt: { $arrayElemAt: ["$dateComponents", 0] } },
+            month: { $toInt: { $arrayElemAt: ["$dateComponents", 1] } },
             year: { $toInt: { $arrayElemAt: ["$dateComponents", 2] } },
-            timeOnly: { $arrayElemAt: ["$timeComponents", 0] }, // e.g., "10:49:51"
-            ampm: { $arrayElemAt: ["$timeComponents", 1] }, // e.g., "AM"
+            timeOnly: { $arrayElemAt: ["$timeComponents", 0] },
+            ampm: { $arrayElemAt: ["$timeComponents", 1] },
           },
         },
         {
           $addFields: {
-            // Split timeOnly by ':' to get hour, minute, second
             hmsComponents: { $split: ["$timeOnly", ":"] },
           },
         },
@@ -169,7 +153,6 @@ export class DuplicateProcessorMongoUtil {
         },
         {
           $addFields: {
-            // Convert 12-hour to 24-hour format
             hour24: {
               $cond: {
                 if: { $eq: ["$ampm", "PM"] },
@@ -193,7 +176,6 @@ export class DuplicateProcessorMongoUtil {
         },
         {
           $addFields: {
-            // Construct the final Date object using $dateFromParts
             createdOnDate: {
               $dateFromParts: {
                 year: "$year",
@@ -206,7 +188,6 @@ export class DuplicateProcessorMongoUtil {
             },
           },
         },
-        // Match documents created on or after the cutoff date
         ...(cutoffDate
           ? [{ $match: { createdOnDate: { $gte: cutoffDate } } }]
           : []),
@@ -240,7 +221,7 @@ export class DuplicateProcessorMongoUtil {
             count: { $sum: 1 },
             documents: {
               $push: { _id: "$_id", createdOnDate: "$createdOnDate" },
-            }, // Correctly populate documents array
+            },
           },
         },
         {
@@ -250,24 +231,23 @@ export class DuplicateProcessorMongoUtil {
         },
       ];
 
-      // Log the count of documents after the cutoff date filter
       const documentsAfterCutoff = await mongoAggregate<MongoCountResult>(
         this.model as any,
         [
           ...pipeline.slice(
             0,
             pipeline.findIndex((stage) => "$group" in stage)
-          ), // Get stages up to the group stage
+          ),
           { $count: "count" },
         ]
       );
 
-      logger.info({
-        category: "task-steps",
-        message: `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${
+      logger.info(
+        `sanityCheckMongoDuplicates: Documents after cutoff date filter: ${
           documentsAfterCutoff[0]?.count || 0
         }`,
-      });
+        { category: "task-steps", console: true }
+      );
 
       const duplicates = await mongoAggregate<MongoDuplicateGroupResult>(
         this.model as any,
@@ -280,17 +260,16 @@ export class DuplicateProcessorMongoUtil {
         0
       );
 
-      logger.info({
-        category: "task-steps",
-        message: `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`,
-      });
+      logger.info(
+        `sanityCheckMongoDuplicates: dry-run complete. Found ${totalDuplicateDocuments} duplicate documents across ${totalDuplicateGroups} groups.`,
+        { category: "task-steps", console: true }
+      );
 
       if (!dryRun) {
-        logger.info({
-          category: "task-steps",
-          message:
-            "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates.",
-        });
+        logger.info(
+          "sanityCheckMongoDuplicates: Dry run is false, proceeding with deletion of oldest duplicates.",
+          { category: "task-steps", console: true }
+        );
         const allDocumentsToDeleteIds: mongoose.Types.ObjectId[] = [];
         for (const dupGroup of duplicates) {
           if (dupGroup.documents.length > 1) {
@@ -321,10 +300,10 @@ export class DuplicateProcessorMongoUtil {
             status: "info",
             message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
           });
-          logger.debug({
-            category: "task-steps",
-            message: `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
-          });
+          logger.debug(
+            `Deleted ${deleteResult.deletedCount} oldest duplicate documents across all groups.`,
+            { category: "task-steps" }
+          );
         }
         logs.push({
           row: 0,
@@ -344,9 +323,9 @@ export class DuplicateProcessorMongoUtil {
         logs,
       };
     } catch (error) {
-      logger.error({
+      logger.error(`sanityCheckMongoDuplicates failed: ${error}`, {
         category: "task-steps",
-        message: `sanityCheckMongoDuplicates failed: ${error}`,
+        console: true,
       });
       logs.push({
         row: 0,
