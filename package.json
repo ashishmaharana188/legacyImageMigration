@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "install:all": "npm install",
-    "dev": "concurrently \"npm run dev --workspace=backend\" \"npm run dev --workspace=frontend\"",
+    "dev": "concurrently \"npm run dev --workspace=backend\" \"wait-on http-get://localhost:3000/config && npm run dev --workspace=frontend\"",
     "dev:frontend": "npm run dev --workspace=frontend",
     "dev:backend": "npm run dev --workspace=backend",
     "build": "npm run build:backend && npm run build:frontend",
@@ -34,7 +34,8 @@
   "license": "ISC",
   "devDependencies": {
     "@types/ws": "^8.18.1",
-    "concurrently": "^9.2.0"
+    "concurrently": "^9.2.1",
+    "wait-on": "^9.0.3"
   },
   "engines": {
     "node": ">=18.0.0",

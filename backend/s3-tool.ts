@@ -1,4 +1,11 @@
+<<<<<<< HEAD
 import { listFiles, deleteFiles, listAllFoldersAndFileCounts } from "./services/s3Manager";
+=======
+import {
+  listFiles,
+  deleteFiles,
+} from "../backend/src/api/s3Processor/s3Manager";
+>>>>>>> switch-branch
 import * as readline from "readline";
 import "dotenv/config";
 import * as fs from "fs/promises";

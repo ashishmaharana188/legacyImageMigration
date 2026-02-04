@@ -1,11 +1,11 @@
 import dotenv from "dotenv";
 import os from "os";
 import path from "path";
-import * as fs from "fs";
+import fs from "fs";
+// [FIX] Remove local WebSocketServer import
+// import { WebSocketServer } from "ws";
 
 // --- Environment Variable Loading ---
-// This block MUST be at the very top of the file, before any other imports,
-// to ensure all environment variables are loaded before any other code runs.
 const isProduction = process.env.NODE_ENV === "production";
 const envFile = isProduction ? ".env.production" : ".env.development";
 const userConfigDir = path.join(os.homedir(), ".appConfig");
@@ -14,123 +14,49 @@ const envPath = path.join(userConfigDir, envFile);
 if (fs.existsSync(envPath)) {
   dotenv.config({ path: envPath });
   console.log(`Loading environment variables from: ${envPath}`);
-  console.log(`NODE_ENV: ${process.env.NODE_ENV}`);
-  console.log(`USE_MONGO_SSH_TUNNEL: ${process.env.USE_MONGO_SSH_TUNNEL}`);
-  console.log(`MONGO_URI: ${process.env.MONGO_URI ? "SET" : "NOT SET"}`);
-  console.log(`LOCAL_URI: ${process.env.LOCAL_URI}`);
-
-  if (isProduction) {
-    console.log("Connected to Prod database");
-  } else {
-    console.log("Connected to Dev database");
-  }
 } else {
-  console.warn(`Warning: Environment file not found at: ${envPath}. Please ensure it exists.`);
+  console.warn(`Warning: Environment file not found at: ${envPath}`);
 }
 // --- End of Environment Variable Loading ---
 
 import express from "express";
+import uploadProcessRouter from "./src/api/uploadProcessor/uploadProcessorApp";
+import splitProcessorRouter from "./src/api/splitProcessor/splitProcessorApp";
+import imageDataTransferRouter from "./src/api/imageDataTransfer/imageDataTransferApp";
+import s3ProcessorRouter from "./src/api/s3Processor/s3ProcessorApp";
+import duplicateProcessorRouter from "./src/api/dataClean/dataCleanApp";
 import cors from "cors";
-import multer from "multer";
-import * as fsp from "fs/promises";
-import { fileController } from "./controllers/fileController";
-import { startSshTunnel } from "./services/tunnel";
-import { initWebSocket } from "./services/webSocketService";
-import { verifyS3Connection } from "./services/s3Manager";
-import { connectMongo, disconnectMongo, warmupPgPool } from "./controllers/dbConnect";
+import { startSshTunnel } from "./src/utils/tunnel";
+import { connectMongo, disconnectMongo } from "./src/utils/dbConnect";
+import { warmupPgPool } from "./src/utils/dbConnect";
+import { verifyS3Connection } from "./src/api/s3Processor/s3Manager";
+// [FIX] Import the initializer
+import { initWebSocket } from "./src/utils/webSocketService";
 
-// Global object to store upload progress
-export const uploadProgress = {
-  totalRows: 0,
-  processedRows: 0,
-  successfulRows: 0,
-  errors: 0,
-  notFound: 0,
-};
-
-// Graceful shutdown and error handling
-process.on("unhandledRejection", (reason, promise) => {
-  console.error("Unhandled Rejection at:", promise, "reason:", reason);
-});
-
-process.on("uncaughtException", (error) => {
-  console.error("Uncaught Exception:", error);
-  process.exit(1);
-});
+import { Server } from "net";
 
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.NODE_ENV === "production" ? 3000 : 3000;
 
-app.use(cors());
+const rawFrontendUrl = process.env.API_FRONTEND_URL || "http://localhost:5173";
+const frontendUrl = rawFrontendUrl.replace(/\/$/, "");
+
+app.use(
+  cors({
+    origin: frontendUrl,
+    credentials: true,
+  })
+);
 app.use(express.json());
 
-const uploadDir = "uploads";
-const processedDir = "processed";
-
-async function ensureDirectories() {
-  try {
-    if (
-      !(await fsp
-        .access(uploadDir)
-        .then(() => true)
-        .catch(() => false))
-    ) {
-      await fsp.mkdir(uploadDir, { recursive: true });
-      console.log(`Created directory: ${uploadDir}`);
-    }
-    if (
-      !(await fsp
-        .access(processedDir)
-        .then(() => true)
-        .catch(() => false))
-    ) {
-      await fsp.mkdir(processedDir, { recursive: true });
-      console.log(`Created directory: ${processedDir}`);
-    }
-  } catch (err) {
-    console.error("Failed to create directories:", err);
-    process.exit(1);
-  }
-}
-
-ensureDirectories();
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(
-      null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
-    );
-  },
-});
-
-const upload = multer({
-  storage: storage,
-  fileFilter: (req, file, cb) => {
-    if (
-      file.mimetype ===
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
-      file.originalname.endsWith(".xlsx")
-    ) {
-      cb(null, true);
-    } else {
-      cb(new Error("Only .xlsx files are allowed"));
-    }
-  },
-  limits: { fileSize: 10 * 1024 * 1024 },
-});
-
-app.get("/", (req, res) => {
+app.get("/config", (req, res) => {
   res.json({
-    message: "PDF Processor Backend is running!",
-    timestamp: new Date().toISOString(),
+    apiBaseUrl: process.env.APP_BASE_URL,
+    frontendUrl: frontendUrl,
   });
 });
 
+<<<<<<< HEAD
 app.get("/health", (req, res) => {
   res.json({ status: "healthy", timestamp: new Date().toISOString() });
 });
@@ -171,9 +97,16 @@ app.get("/s3-search-files", fileController.searchS3Files);
 app.get("/s3-search-folders", fileController.searchS3Folders);
 app.post("/s3-generate-report", fileController.generateS3Report);
 app.post("/reconnect", fileController.reconnect);
+=======
+app.use(uploadProcessRouter);
+app.use(splitProcessorRouter);
+app.use(imageDataTransferRouter);
+app.use(s3ProcessorRouter);
+app.use(duplicateProcessorRouter);
+>>>>>>> switch-branch
 
 const startServer = async () => {
-  let pgServer: any;
+  let pgServer: Server | undefined;
 
   if (process.env.USE_SSH_TUNNEL === "true") {
     pgServer = await startSshTunnel();
@@ -181,24 +114,37 @@ const startServer = async () => {
 
   try {
     await connectMongo();
-    console.log("MongoDB connection established during startup.");
+    console.log("MongoDB connection established.");
   } catch (error) {
-    console.error(
-      "Failed to establish MongoDB connection during startup:",
-      error
-    );
+    console.error("Failed to establish MongoDB connection:", error);
   }
 
-  await warmupPgPool();
+  try {
+    await warmupPgPool();
+    console.log("PostgreSQL connection pool warmed up.");
+  } catch (error) {
+    console.error("Failed to warm up PostgreSQL connection pool:", error);
+  }
 
-  await verifyS3Connection();
+  try {
+    await verifyS3Connection();
+    console.log("S3 connection verified.");
+  } catch (error) {
+    console.error("Failed to verify S3 connection:", error);
+  }
 
+  // 1. Start the HTTP Server
   const expressServer = app.listen(port, () => {
     console.log(`Server running on http://localhost:${port}`);
-    console.log("Express server listening, initializing WebSocket server...");
   });
 
-  initWebSocket(expressServer);
+  // 2. [FIX] Initialize the Singleton WebSocket Service
+  // This sets the internal 'wss' variable so broadcast() works
+  const wss = initWebSocket(expressServer);
+
+  // 3. Attach WSS to Express (Preserving your existing architecture)
+  app.set("wss", wss);
+  console.log("WebSocket Server initialized and attached to app.");
 
   const gracefulShutdown = () => {
     console.log("Shutting down gracefully...");
@@ -206,7 +152,6 @@ const startServer = async () => {
       console.log("Closed out remaining connections.");
       if (pgServer) {
         pgServer.close();
-        console.log("PostgreSQL SSH tunnel closed.");
       }
       disconnectMongo();
       process.exit(0);

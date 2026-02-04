@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
     "version": "0.2.0",
     "configurations": [
         {
@@ -50,4 +51,36 @@
             "sourceMaps": true
         }
     ]
+=======
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Launch Chrome (Dev)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}/frontend",
+      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+    },
+    {
+      "name": "Launch Chrome (Prod)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:5174",
+      "webRoot": "${workspaceFolder}/frontend",
+      "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+    },
+    {
+      "name": "Launch Firefox with Persistent Profile",
+      "type": "firefox",
+      "request": "launch",
+      "url": "http://localhost:5173",
+      "webRoot": "${workspaceFolder}",
+      // OPTION A: Points to a specific folder for this project
+      "profileDir": "${workspaceFolder}/.vscode/firefox-profile",
+      "keepProfileChanges": true,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+>>>>>>> switch-branch
 }

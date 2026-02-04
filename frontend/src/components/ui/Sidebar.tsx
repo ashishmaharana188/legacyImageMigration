@@ -8,6 +8,7 @@ import UploadFileIcon from "@mui/icons-material/UploadFile";
 import StorageIcon from "@mui/icons-material/Storage";
 import BugReportIcon from "@mui/icons-material/BugReport";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import CallSplitIcon from "@mui/icons-material/CallSplit"; // Added for Split Processor
 import SidebarItem from "./SidebarItem";
 import { Link } from "@tanstack/react-router";
 
@@ -101,28 +102,35 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
       </DrawerHeader>
       <Divider />
       <List>
-        <Link to="/upload-script" onClick={() => onSelectTask("upload-script")}>
+        <Link to="/uploadProcessorRouter" onClick={() => onSelectTask("upload-processor")}>
           <SidebarItem
             icon={<UploadFileIcon />}
-            text="Upload and Script"
+            text="Upload Processor"
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/sql-mongo" onClick={() => onSelectTask("sql-mongo")}>
+        <Link to="/splitProcessorRouter" onClick={() => onSelectTask("split-processor")}>
+          <SidebarItem
+            icon={<CallSplitIcon />}
+            text="Split Processor"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link to="/sqlMongoRouter" onClick={() => onSelectTask("sql-mongo")}>
           <SidebarItem
             icon={<StorageIcon />}
             text="SQL and Mongo Calls"
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/s3-browser" onClick={() => onSelectTask("s3-browser")}>
+        <Link to="/s3ManagerRouter" onClick={() => onSelectTask("s3-browser")}>
           <SidebarItem
             icon={<CloudUploadIcon />}
             text="S3 Browser"
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/sanity-check" onClick={() => onSelectTask("sanity-check")}>
+        <Link to="/dataCleanRouter" onClick={() => onSelectTask("sanity-check")}>
           <SidebarItem
             icon={<BugReportIcon />}
             text="Sanity Checks"

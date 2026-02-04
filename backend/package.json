@@ -4,10 +4,10 @@
   "type": "commonjs",
   "main": "index.js",
   "scripts": {
-    "build": "npm run clean && tsc -b",
-    "start:prod": "cross-env NODE_ENV=production concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
+    "build": "npm run clean && tsc && npx cpx \"src/**/*.py\" dist/src/",
+    "start:prod": "cross-env NODE_ENV=production concurrently \"tsc --watch\" \"nodemon --watch dist/src/ --ext js --exec node dist/app.js\"",
     "start": "node dist/app.js",
-    "dev": "cross-env NODE_ENV=development concurrently \"tsc --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\" vite",
+    "dev": "cross-env NODE_ENV=development concurrently \"tsc --watch\" \"npx cpx2 'src/**/*.py' dist/ --watch\" \"nodemon --watch dist --ext js --exec node dist/app.js\"",
     "clean": "rm -rf dist && rm -rf logs",
     "lint": "eslint .",
     "preview": "vite preview",

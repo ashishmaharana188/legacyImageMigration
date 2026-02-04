@@ -1,137 +1,67 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
+import { useTaskLog } from "../../contexts/TaskLogContext";
 import ProgressTrackingTask from "../action/ProgressTrackingTask";
-import DetailsDisplayTask from "../action/DetailsDisplayTask";
+// [REMOVED] import DetailsDisplayTask...
 
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  totalFiles?: number;
-  processedFiles?: number;
-  successfulFiles?: number;
-  errorFiles?: number;
-  notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
-}
+export const SummaryDisplay: React.FC = () => {
+  const { taskLogs, onClearLogs } = useTaskLog();
 
-interface SummaryDisplayProps {
-  taskLogs: { [key: string]: any[] };
-  uploadStatuses: UploadStatus[];
-  onClearLogs: (taskKey: string) => void;
-}
-
-const SummaryDisplay: React.FC<SummaryDisplayProps> = ({
-  taskLogs,
-  uploadStatuses,
-  onClearLogs,
-}) => {
-  const [allTaskLogs, setAllTaskLogs] = useState<{ [key: string]: any[] }>({});
-
-  const getLogIdentifier = (log: any): string => {
-    if (typeof log === "string") return log;
-    if (log.id) return log.id; // Prioritize log.id for unique identification
-    if (log.splitSummary) return "splitSummary";
-    if (log.originalFile) return `file-upload-${log.originalFile}`;
-    if (log.dryRun !== undefined) return "sanity-check-duplicates";
-    if (log.successfulRows !== undefined) return "sql-execution-summary";
-    if (log.transferredCount !== undefined) return "mongodb-transfer-summary";
-    if (log.updatedFolioRows !== undefined)
-      return "folio-transaction-update-summary";
-    if (log.updatedDocuments) return "mongo-update-summary";
-    if (log.duplicates) return "mongo-duplicate-check-summary";
-    if (log.message) return `${log.message}-${log.timestamp || Date.now()}`;
-    return JSON.stringify(log);
+  const getTitle = (key: string) => {
+    switch (key) {
+      case "uploadAndScript":
+        return "Excel Migration";
+      case "splitFiles":
+        return "Split Processor";
+      case "imageDataTransfer":
+        return "Image Data Transfer";
+      case "s3Upload":
+        return "S3 Upload";
+      case "sanityCheck":
+        return "Sanity Check";
+      default:
+        return key;
+    }
   };
 
-  useEffect(() => {
-    setAllTaskLogs((prevLogs) => {
-      const newLogs = { ...prevLogs };
-      let hasChanges = false;
-      // First, remove any taskKeys from allTaskLogs that are no longer present in taskLogs from context
-      for (const taskKey in newLogs) {
-        if (!(taskKey in taskLogs)) {
-          delete newLogs[taskKey];
-          hasChanges = true;
-        }
-      }
-
-      // Then, update or add taskLogs from context to allTaskLogs
-      for (const taskKey in taskLogs) {
-        if (taskLogs[taskKey].length === 0) {
-          if (newLogs[taskKey] && newLogs[taskKey].length > 0) {
-            newLogs[taskKey] = [];
-            hasChanges = true;
-          }
-          continue;
-        }
-
-        const existingLogs = new Map(
-          newLogs[taskKey]?.map((log) => [getLogIdentifier(log), log]) || []
-        );
-        taskLogs[taskKey].forEach((log) => {
-          const id = getLogIdentifier(log);
-          if (
-            !existingLogs.has(id) ||
-            JSON.stringify(existingLogs.get(id)) !== JSON.stringify(log)
-          ) {
-            existingLogs.set(id, log);
-            hasChanges = true;
-          }
-        });
-
-        if (hasChanges) {
-          newLogs[taskKey] = Array.from(existingLogs.values());
-        }
-      }
-      return hasChanges ? newLogs : prevLogs;
-    });
-  }, [taskLogs]);
-
   return (
-    <div className="mt-4 text-black h-full flex flex-col">
-      <h3 className="text-lg font-semibold mb-1">Task Logs</h3>
-      <div className="bg-gray-200 p-2 rounded flex-1 overflow-y-auto min-h-30">
-        {Object.entries(allTaskLogs).map(([task, logsArray]) => (
-          <div key={task} className="mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <h4 className="font-semibold capitalize">{task}</h4>
+    <div className="flex flex-col h-full bg-slate-50 font-sans text-slate-900 border-l border-slate-200">
+      <div className="p-4 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between rounded-2xl">
+        <h3 className="text-lg font-bold tracking-tight uppercase">
+          Task Logs
+        </h3>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
+        {Object.entries(taskLogs).length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-slate-400 py-20 italic text-sm">
+            No active processes found.
+          </div>
+        )}
+
+        {Object.entries(taskLogs).map(([taskKey, _logsArray]) => (
+          <section
+            key={taskKey}
+            className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden flex flex-col"
+          >
+            <div className="bg-slate-50 px-4 py-2 border-b border-slate-200 flex items-center justify-between">
+              <h4 className="font-bold uppercase text-[10px] tracking-widest text-slate-500">
+                {getTitle(taskKey)}
+              </h4>
               <button
-                onClick={() => onClearLogs(task)}
-                className="ml-2 px-3 py-1 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-black focus:ring-offset-2"
+                onClick={() => onClearLogs(taskKey)}
+                className="text-[10px] font-bold text-black hover:text-white hover:drop-shadow-[0_1.2px_1.2px_rgba(0,0,0,0.8)] uppercase"
               >
-                Clear Logs
+                Clear
               </button>
             </div>
-            <div className="bg-gray-100 p-2 rounded">
-              {task === "uploadAndScript" && (
-                <ProgressTrackingTask
-                  uploadStatuses={uploadStatuses}
-                  taskLogs={allTaskLogs}
-                />
-              )}
-              {logsArray.map((logItem: any) => (
-                <div key={getLogIdentifier(logItem)} className="mb-2 last:mb-0">
-                  {typeof logItem === "string" ? (
-                    <p>{logItem}</p>
-                  ) : (
-                    <DetailsDisplayTask
-                      log={logItem}
-                      logKey={getLogIdentifier(logItem)}
-                    />
-                  )}
-                </div>
-              ))}
+
+            <div className="p-4 space-y-4">
+              {/* Only Progress Bars remain */}
+              <ProgressTrackingTask taskLogs={taskLogs} taskName={taskKey} />
+
+              {/* [REMOVED] Details/History List */}
             </div>
-          </div>
+          </section>
         ))}
       </div>
     </div>

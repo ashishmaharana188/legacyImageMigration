@@ -1,71 +1,55 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
-
-interface UploadStatus {
-  fileName: string;
-  progress?: number;
-  status?: string;
-  isDirectory?: boolean;
-  totalFiles?: number;
-  processedFiles?: number;
-  successfulFiles?: number;
-  errorFiles?: number;
-  notFoundFiles?: number;
-  badRowsDetails?: Array<{
-    rowNumber: number;
-    id_fund: string;
-    id_trtype: string;
-    id_ihno: string;
-    id_path: string;
-    id_acno: string;
-    page_count_status: string | number;
-  }>;
-}
-
-interface TaskLogContextType {
-  taskLogs: { [key: string]: any[] };
-  uploadStatuses: UploadStatus[];
-  updateTaskLog: (taskKey: string, log: any) => void;
-  onClearLogs: (taskKey: string) => void;
-  setSummaryData: React.Dispatch<React.SetStateAction<{ [key: string]: any[]; }>>;
-  setUploadStatuses: React.Dispatch<React.SetStateAction<UploadStatus[]>>;
-}
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  ReactNode,
+} from "react";
+import { UploadStatus, LogEntry, TaskLogContextType } from "../types";
 
 const TaskLogContext = createContext<TaskLogContextType | undefined>(undefined);
 
-export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [taskLogs, setTaskLogs] = useState<{ [key: string]: any[] }>({});
+export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({
+  children,
+}) => {
+  const [taskLogs, setTaskLogs] = useState<{ [key: string]: LogEntry[] }>({});
   const [uploadStatuses, setUploadStatuses] = useState<UploadStatus[]>([]);
 
-  const updateTaskLog = (taskKey: string, log: any) => {
-    setTaskLogs(prevLogs => {
-      const newLogs = { ...prevLogs };
-      if (!newLogs[taskKey]) {
-        newLogs[taskKey] = [];
-      }
+  // [FIX] Removed 'activeProgress' state entirely.
+  // Progress is now stored inside 'taskLogs' to ensure isolation.
 
-      if (log.id) {
-        const existingLogIndex = newLogs[taskKey].findIndex((item: any) => item.id === log.id);
-        if (existingLogIndex > -1) {
-          newLogs[taskKey][existingLogIndex] = { ...newLogs[taskKey][existingLogIndex], ...log };
-        } else {
-          newLogs[taskKey] = [...newLogs[taskKey], log];
-        }
+  const updateTaskLog = useCallback((taskKey: string, log: LogEntry) => {
+    if (!log) return;
+
+    setTaskLogs((prevLogs) => {
+      const newLogs = { ...prevLogs };
+      const currentTaskLogs = newLogs[taskKey] || [];
+
+      // Check if we are updating an existing log entry (like a live progress bar)
+      const existingIndex = currentTaskLogs.findIndex(
+        (item) => item.id === log.id
+      );
+
+      if (existingIndex > -1) {
+        // Update the existing entry (keeps the progress bar alive without duplication)
+        const updatedList = [...currentTaskLogs];
+        updatedList[existingIndex] = { ...updatedList[existingIndex], ...log };
+        newLogs[taskKey] = updatedList;
       } else {
-        newLogs[taskKey] = [...newLogs[taskKey], log];
+        // Append new log entry
+        newLogs[taskKey] = [...currentTaskLogs, log];
       }
       return newLogs;
     });
-  };
+  }, []);
 
-  const onClearLogs = (taskKey: string) => {
-    setTaskLogs(prevLogs => {
-      const newLogs = { ...prevLogs };
+  const onClearLogs = useCallback((taskKey: string) => {
+    setTaskLogs((prev) => {
+      const newLogs = { ...prev };
       delete newLogs[taskKey];
       return newLogs;
     });
-  };
-
-  const setSummaryData = setTaskLogs; // Alias for clarity if needed elsewhere
+  }, []);
 
   return (
     <TaskLogContext.Provider
@@ -74,7 +58,7 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children })
         uploadStatuses,
         updateTaskLog,
         onClearLogs,
-        setSummaryData,
+        setSummaryData: setTaskLogs,
         setUploadStatuses,
       }}
     >
@@ -85,8 +69,7 @@ export const TaskLogProvider: React.FC<{ children: ReactNode }> = ({ children })
 
 export const useTaskLog = () => {
   const context = useContext(TaskLogContext);
-  if (context === undefined) {
-    throw new Error('useTaskLog must be used within a TaskLogProvider');
-  }
+  if (!context)
+    throw new Error("useTaskLog must be used within a TaskLogProvider");
   return context;
 };
