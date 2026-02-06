@@ -1,5 +1,3 @@
-// frontend/src/components/ui/ProgressTrackingUI.tsx
-
 import React, { useState } from "react";
 
 export interface ProgressMetrics {
@@ -10,11 +8,11 @@ export interface ProgressMetrics {
   synced?: number;
   failed?: number;
 
-  // [NEW] Sanity Check Metrics
-  duplicates?: number;
-  imperfectVsPerfect?: number;
-  olderVersions?: number;
-  olderImperfects?: number;
+  // [FIX] Added Sanity Check Metrics
+  duplicates?: number; // <--- Required for Mongo
+  imperfectVsPerfect?: number; // <--- Required for PG
+  olderVersions?: number; // <--- Required for PG
+  olderImperfects?: number; // <--- Required for PG
 }
 
 export interface ProgressTrackingUIProps {
@@ -57,11 +55,10 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const percentage = Math.round(progress);
 
-  // Merge metrics sources
+  // Merge metrics
   const finalMetrics: ProgressMetrics = { ...detailedMetrics, ...metrics };
 
   if (displayType === "sidebar") {
-    // ... (Sidebar render logic remains same) ...
     const isError = status === "Error" || status === "failed";
     const isSuccess =
       status === "Success" || status === "completed" || status === "Done";
@@ -137,7 +134,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
           <div className="flex flex-col gap-1">
             <span className="text-gray-500 font-medium">Results</span>
             <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono">
-              {/* Existing Image Data Metrics */}
               {finalMetrics.folioUpdated !== undefined && (
                 <>
                   <span className="text-emerald-700 font-semibold">
@@ -179,6 +175,8 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
                   Old-Imp: {finalMetrics.olderImperfects}
                 </span>
               )}
+
+              {/* [FIX] This is the specific line missing for Mongo */}
               {finalMetrics.duplicates !== undefined && (
                 <span className="text-orange-600 font-semibold">
                   Duplicates: {finalMetrics.duplicates}
@@ -191,7 +189,7 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     );
   }
 
-  // Aggregate View fallback
+  // Aggregate View Fallback
   return (
     <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
       <h4 className="font-semibold text-black mb-2">{title}</h4>
