@@ -5,6 +5,7 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable"],
     "esModuleInterop": true,
     "module": "ESNext",
+    "types": ["vite/client"],
     "skipLibCheck": true,
     "allowSyntheticDefaultImports": true,
     "moduleResolution": "bundler",

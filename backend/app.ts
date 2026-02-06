@@ -56,54 +56,11 @@ app.get("/config", (req, res) => {
   });
 });
 
-<<<<<<< HEAD
-app.get("/health", (req, res) => {
-  res.json({ status: "healthy", timestamp: new Date().toISOString() });
-});
-
-app.get("/upload-progress", (req, res) => {
-  res.json(uploadProgress);
-});
-
-app.post(
-  "/upload-excel",
-  upload.single("excel"),
-  fileController.processExcelFile
-);
-
-app.post("/run-fallback", upload.single("excel"), fileController.runFallback);
-
-app.get("/download/:filename", fileController.downloadFile);
-
-app.get("/download-file/:filePath", fileController.downloadReferencedFile);
-app.get(
-  "/download-generated-file/:filename",
-  fileController.downloadGeneratedFile
-);
-
-app.post("/split-files", fileController.splitFiles);
-app.post("/split-mupdf", fileController.splitFilesWithMuPDF);
-app.post("/upload-split-to-s3", fileController.uploadSplitFilesToS3);
-app.post("/process-sql-mongo", fileController.processSqlMongo);
-
-app.post("/sanity-check-duplicates", fileController.sanityCheckDuplicates);
-app.post("/sanity-check-duplicate-mongo", fileController.checkMongoDuplicates);
-app.post("/transfer-to-mongo", fileController.transferDataToMongo);
-app.post("/update-mongo-transactions", fileController.updateMongoTransactions);
-app.post("/upload-to-s3", fileController.uploadToS3);
-app.get("/s3-list-objects", fileController.listS3Files);
-app.post("/s3-delete-object", fileController.deleteS3Files);
-app.get("/s3-search-files", fileController.searchS3Files);
-app.get("/s3-search-folders", fileController.searchS3Folders);
-app.post("/s3-generate-report", fileController.generateS3Report);
-app.post("/reconnect", fileController.reconnect);
-=======
 app.use(uploadProcessRouter);
 app.use(splitProcessorRouter);
 app.use(imageDataTransferRouter);
 app.use(s3ProcessorRouter);
 app.use(duplicateProcessorRouter);
->>>>>>> switch-branch
 
 const startServer = async () => {
   let pgServer: Server | undefined;
