@@ -13,17 +13,19 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
 }) => {
   const currentLogs = taskLogs[taskName] || [];
 
+  // --- 1. UPLOAD PROCESSOR ---
   if (taskName === "uploadAndScript") {
     const uploadLog = currentLogs.find(
       (log) => log.id === "LIVE_EXCEL_PROGRESS"
     );
 
-    if (taskName === "uploadAndScript" && uploadLog) {
+    if (uploadLog) {
       return (
         <ProgressTrackingUI
           title="File Transfer Details"
           progress={uploadLog.progress || 0}
-          total={uploadLog.totalRows || 0}
+          // [FIX] Checking both totalRows and total to be safe
+          total={uploadLog.totalRows || uploadLog.total || 0}
           processed={uploadLog.processedRows || 0}
           successful={uploadLog.successfulRows || 0}
           errors={uploadLog.errors || 0}
@@ -46,7 +48,8 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
         <ProgressTrackingUI
           title="PDF Split Progress"
           progress={splitLog.progress || 0}
-          total={splitLog.totalRows || 0}
+          // [FIX] Checking both totalRows and total
+          total={splitLog.totalRows || splitLog.total || 0}
           processed={splitLog.processedRows || 0}
           successful={splitLog.successfulRows || 0}
           errors={splitLog.errors || 0}

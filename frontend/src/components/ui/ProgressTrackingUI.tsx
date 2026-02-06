@@ -192,12 +192,34 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   // Aggregate View Fallback
   return (
     <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
-      <h4 className="font-semibold text-black mb-2">{title}</h4>
-      <div className="w-full bg-gray-300 rounded-full h-3">
+      <div className="flex justify-between items-center mb-2">
+        <h4 className="font-semibold text-black">{title}</h4>
+        <span className="text-xs font-bold">{percentage}%</span>
+      </div>
+      <div className="w-full bg-gray-300 rounded-full h-4 mb-3">
         <div
-          className="bg-black h-3 rounded-full text-sm font-medium text-white text-center leading-6 transition-all duration-500 ease-out"
+          className="bg-black h-4 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}
         ></div>
+      </div>
+
+      {/* This section was missing previously */}
+      <div className="grid grid-cols-2 gap-y-2 text-[11px] font-medium uppercase tracking-tight">
+        <div className="text-gray-600">
+          Total {unit}:{" "}
+          <span className="text-black font-bold">{total || 0}</span>
+        </div>
+        <div className="text-green-700">
+          Success: <span className="font-bold">{successful || 0}</span>
+        </div>
+        <div className="text-red-600">
+          Errors: <span className="font-bold">{errors || 0}</span>
+        </div>
+        {notFound !== undefined && notFound > 0 && (
+          <div className="text-orange-600">
+            Not Found: <span className="font-bold">{notFound}</span>
+          </div>
+        )}
       </div>
     </div>
   );
