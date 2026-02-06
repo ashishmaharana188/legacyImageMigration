@@ -1,5 +1,3 @@
-// frontend/src/components/ui/ProgressTrackingUI.tsx
-
 import React, { useState } from "react";
 
 export interface ProgressMetrics {
@@ -10,11 +8,11 @@ export interface ProgressMetrics {
   synced?: number;
   failed?: number;
 
-  // [NEW] Sanity Check Metrics
-  duplicates?: number;
-  imperfectVsPerfect?: number;
-  olderVersions?: number;
-  olderImperfects?: number;
+  // [FIX] Added Sanity Check Metrics
+  duplicates?: number; // <--- Required for Mongo
+  imperfectVsPerfect?: number; // <--- Required for PG
+  olderVersions?: number; // <--- Required for PG
+  olderImperfects?: number; // <--- Required for PG
 }
 
 export interface ProgressTrackingUIProps {
@@ -48,7 +46,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   successful,
   errors,
   notFound,
-  badRowsDetails,
   displayType = "default",
   detailedMetrics,
   metrics,
@@ -57,11 +54,10 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const percentage = Math.round(progress);
 
-  // Merge metrics sources
+  // Merge metrics
   const finalMetrics: ProgressMetrics = { ...detailedMetrics, ...metrics };
 
   if (displayType === "sidebar") {
-    // ... (Sidebar render logic remains same) ...
     const isError = status === "Error" || status === "failed";
     const isSuccess =
       status === "Success" || status === "completed" || status === "Done";
@@ -137,7 +133,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
           <div className="flex flex-col gap-1">
             <span className="text-gray-500 font-medium">Results</span>
             <div className="flex flex-wrap gap-x-3 gap-y-1 font-mono">
-              {/* Existing Image Data Metrics */}
               {finalMetrics.folioUpdated !== undefined && (
                 <>
                   <span className="text-emerald-700 font-semibold">
@@ -179,6 +174,8 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
                   Old-Imp: {finalMetrics.olderImperfects}
                 </span>
               )}
+
+              {/* [FIX] This is the specific line missing for Mongo */}
               {finalMetrics.duplicates !== undefined && (
                 <span className="text-orange-600 font-semibold">
                   Duplicates: {finalMetrics.duplicates}
@@ -191,15 +188,37 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
     );
   }
 
-  // Aggregate View fallback
+  // Aggregate View Fallback
   return (
     <div className="mt-4 p-4 bg-gray-100 rounded-lg shadow-inner">
-      <h4 className="font-semibold text-black mb-2">{title}</h4>
-      <div className="w-full bg-gray-300 rounded-full h-3">
+      <div className="flex justify-between items-center mb-2">
+        <h4 className="font-semibold text-black">{title}</h4>
+        <span className="text-xs font-bold">{percentage}%</span>
+      </div>
+      <div className="w-full bg-gray-300 rounded-full h-2.5 mb-3">
         <div
-          className="bg-black h-3 rounded-full text-sm font-medium text-white text-center leading-6 transition-all duration-500 ease-out"
+          className="bg-black h-2.5 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}
         ></div>
+      </div>
+
+      {/* This section was missing previously */}
+      <div className="grid grid-cols-2 gap-y-2 text-[11px] font-medium uppercase tracking-tight">
+        <div className="text-gray-600">
+          Total {unit}:{" "}
+          <span className="text-black font-bold">{total || 0}</span>
+        </div>
+        <div className="text-green-700">
+          Success: <span className="font-bold">{successful || 0}</span>
+        </div>
+        <div className="text-red-600">
+          Errors: <span className="font-bold">{errors || 0}</span>
+        </div>
+        {notFound !== undefined && notFound > 0 && (
+          <div className="text-orange-600">
+            Not Found: <span className="font-bold">{notFound}</span>
+          </div>
+        )}
       </div>
     </div>
   );

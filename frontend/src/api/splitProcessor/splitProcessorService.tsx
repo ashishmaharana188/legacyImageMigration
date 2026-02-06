@@ -13,7 +13,10 @@ export const splitFile = async (
 export const splitFileWithMuPDF = async (
   endpoint: string
 ): Promise<SplitFileResponse> => {
-  await configPromise;
-  const res = await apiClient.post<SplitFileResponse>(`/${endpoint}`, {});
+  await configPromise; // Ensure configuration is loaded
+  const res = await axios.post<SplitFileResponse>(
+    `${API_BASE_URL}/${endpoint}`,
+    {}
+  );
   return res.data;
 };

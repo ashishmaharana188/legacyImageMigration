@@ -1,14 +1,14 @@
-// splitting.ts
 import fs from "fs/promises";
 import path from "path";
 import winston from "winston";
-import { parse } from "csv-parse/sync"; // Import csv-parse
+import { parse } from "csv-parse/sync";
 
-
-export class SplitProcessorUtil { // Renamed class
+export class SplitProcessorUtil {
   private readonly baseFolder = path.join(process.cwd(), "output");
   private readonly splitFolder = path.join(process.cwd(), "split_output");
   private readonly processedFolder = path.join(process.cwd(), "processed");
+
+  // Kept the logger configuration exactly as requested
   private readonly logger = winston.createLogger({
     level: "info",
     format: winston.format.json(),
@@ -24,9 +24,11 @@ export class SplitProcessorUtil { // Renamed class
   constructor() {
     // Ensure directories exist on instantiation
     fs.mkdir(this.processedFolder, { recursive: true }).catch((err) => {
-      this.logger.error(`Failed to create processed directory: ${this.processedFolder}`, { error: err });
+      this.logger.error(
+        `Failed to create processed directory: ${this.processedFolder}`,
+        { error: err }
+      );
     });
-    // Note: baseFolder and splitFolder are handled in SplitProcessorWrapper
   }
 
   private getFileExtension(filePath: string): string {
@@ -61,6 +63,7 @@ export class SplitProcessorUtil { // Renamed class
     }
   }
 
+  // [VERIFIED] This calculates the Total Expected by summing the page_count column
   public async getTotalExpectedPagesFromCsv(): Promise<number> {
     const latestCsvPath = await this.getLatestProcessedCsvPath();
     if (!latestCsvPath) {

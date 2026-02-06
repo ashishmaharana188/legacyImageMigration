@@ -23,24 +23,7 @@ export class SplitProcessorWrapper {
     this.splitProcessorUtil = new SplitProcessorUtil();
   }
 
-  private async countPdfFiles(dir: string): Promise<number> {
-    let count = 0;
-    try {
-      const items = await fs.readdir(dir);
-      for (const item of items) {
-        const fullPath = path.join(dir, item);
-        const stats = await fs.stat(fullPath);
-        if (stats.isDirectory()) {
-          count += await this.countPdfFiles(fullPath);
-        } else if (stats.isFile() && item.toLowerCase().endsWith(".pdf")) {
-          count++;
-        }
-      }
-    } catch (error) {
-      logger.warn(`Failed to count files in ${dir}`, { error });
-    }
-    return count;
-  }
+  // [REMOVED] countPdfFiles method - It caused the unit mismatch (Files vs Pages).
 
   async splitFiles(): Promise<SplitResult> {
     return this._executeSplit(false, "File splitting complete");
@@ -56,6 +39,7 @@ export class SplitProcessorWrapper {
   ): Promise<SplitResult> {
     const createdSplitFiles: SplitFileDetail[] = [];
 
+    // [FIX] Strictly fetch total from CSV. No fallback to file count.
     let totalExpectedPagesFromCsv = 0;
     try {
       totalExpectedPagesFromCsv =
@@ -64,14 +48,8 @@ export class SplitProcessorWrapper {
       logger.warn("Could not fetch total expected pages from CSV.");
     }
 
-    if (!totalExpectedPagesFromCsv || totalExpectedPagesFromCsv === 0) {
-      logger.info("CSV Total missing. Counting actual files...", {
-        console: true,
-      });
-      totalExpectedPagesFromCsv = await this.countPdfFiles(baseFolder);
-    }
-
-    if (totalExpectedPagesFromCsv === 0) totalExpectedPagesFromCsv = 1;
+    // If 0, we leave it as 0. Frontend handles 0 as "Indeterminate" or "Processing..."
+    // Falling back to '1' or 'file count' would break the percentage calculation.
 
     let totalSplitFilesGenerated = 0;
     let splitErrors = 0;
@@ -90,12 +68,14 @@ export class SplitProcessorWrapper {
 
     let lastBroadcastTime = 0;
 
+    // [NOTE] This function injects the CSV total into updates from the worker
     const handleWorkerProgress = (update: SplitProgressUpdate) => {
       const now = Date.now();
-      if (now - lastBroadcastTime > 2000 || update.status === "Error") {
+      // Throttle updates to avoid flooding WebSocket
+      if (now - lastBroadcastTime > 1000 || update.status === "Error") {
         const enrichedUpdate = {
           ...update,
-          totalExpectedPagesFromCsv,
+          totalExpectedPagesFromCsv, // <--- Correctly maps CSV total here
         };
         broadcast(JSON.stringify(enrichedUpdate));
         lastBroadcastTime = now;
@@ -126,27 +106,19 @@ export class SplitProcessorWrapper {
         }
 
         if (stats.isDirectory()) {
-          // Recursive step: Create the mirror folder and dive in
           await fs.mkdir(nextOutputDir, { recursive: true });
           await scanAndProcessDirectory(inputPath, nextOutputDir);
         } else if (stats.isFile() && item.toLowerCase().endsWith(".pdf")) {
-          // --- [SMART FIX START] ---
-          const fileNameNoExt = path.parse(item).name; // "FileA" from "FileA.pdf"
-          const parentFolderName = path.basename(outputDir); // "FileA" from ".../split_output/FileA"
+          const fileNameNoExt = path.parse(item).name;
+          const parentFolderName = path.basename(outputDir);
 
           let targetSplitFolder: string;
 
-          // Check: Is the file ALREADY inside a folder with the same name?
           if (parentFolderName === fileNameNoExt) {
-            // YES: Do not create another subfolder. Dump files here.
-            // Result: .../FileA/FileA_1.pdf
             targetSplitFolder = outputDir;
           } else {
-            // NO: Create a new folder for this file (Cleaner than dumping in root)
-            // Result: .../SomeFolder/FileA/FileA_1.pdf
             targetSplitFolder = path.join(outputDir, fileNameNoExt);
           }
-          // --- [SMART FIX END] ---
 
           const result = await performSplit(
             inputPath,

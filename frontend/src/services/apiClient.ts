@@ -1,3 +1,4 @@
+// frontend/src/api/apiClient.ts
 import axios from "axios";
 
 // 1. Create a shared Axios instance with a safe default
