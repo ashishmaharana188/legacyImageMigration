@@ -46,7 +46,6 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
   successful,
   errors,
   notFound,
-  badRowsDetails,
   displayType = "default",
   detailedMetrics,
   metrics,
@@ -196,9 +195,9 @@ const ProgressTrackingUI: React.FC<ProgressTrackingUIProps> = ({
         <h4 className="font-semibold text-black">{title}</h4>
         <span className="text-xs font-bold">{percentage}%</span>
       </div>
-      <div className="w-full bg-gray-300 rounded-full h-4 mb-3">
+      <div className="w-full bg-gray-300 rounded-full h-2.5 mb-3">
         <div
-          className="bg-black h-4 rounded-full transition-all duration-500 ease-out"
+          className="bg-black h-2.5 rounded-full transition-all duration-500 ease-out"
           style={{ width: `${percentage}%` }}
         ></div>
       </div>
