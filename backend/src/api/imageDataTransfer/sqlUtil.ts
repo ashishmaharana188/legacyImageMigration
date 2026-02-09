@@ -32,12 +32,14 @@ import {
   SQL_SELECT_CLIENT_ID_BY_CODE,
   SQL_SELECT_AIF_DOCUMENT_DETAILS,
   SQL_STREAM_UPDATE_DETAILS,
+  SQL_INSERT_ALL_TEMP_IMAGES,
+  SQL_UPDATE_ALL_TRXN_REF,
+  SQL_UPDATE_ALL_FOLIO_ID,
 } from "./imageDataTransferCore";
 
 const logger = createFeatureLogger("imageDataTransfer");
 
 export class SqlUtil {
-  // [ALIGNMENT] Mapped to document_process (Old Code Logic)
   private readonly trxnMap: Record<string, string> = {
     IC: "IC",
     NCT: "NCT",
@@ -59,10 +61,12 @@ export class SqlUtil {
     await reconnectPgPool();
   }
 
+  // [RESTORED] Helper method required for file processing
   private getFileExtension(filePath: string): string {
     return filePath ? path.extname(filePath).toLowerCase() : "";
   }
 
+  // [RESTORED] Helper method for counting rows (optional utility)
   private async countCsvRows(filePath: string): Promise<number> {
     let lines = 0;
     try {
@@ -78,6 +82,7 @@ export class SqlUtil {
     }
   }
 
+  // [RESTORED] Crucial method called by getAifDocumentDetails
   private async getProcessedFolioNumbers(): Promise<string[]> {
     const csvPath = path.join(__dirname, "../../../../processed");
     try {
@@ -107,7 +112,11 @@ export class SqlUtil {
     }
   }
 
-  async generateSql(): Promise<{ transactions: any[]; logs: SqlLog[] }> {
+  // [RESTORED] Full implementation of generateSql
+  private async generateSql(): Promise<{
+    transactions: any[];
+    logs: SqlLog[];
+  }> {
     try {
       logger.info("Generating SQL transactions from CSV...", { console: true });
       const csvPath = path.join(__dirname, "../../../../processed");
@@ -135,7 +144,6 @@ export class SqlUtil {
               id_ihno: parseInt(row[2], 10),
               id_path: row[3].trim(),
               id_acno: row[4].trim(),
-              // Store as number if valid, otherwise keep as string (e.g. "Not Found")
               page_count: isNaN(parseInt(row[5], 10))
                 ? row[5].trim()
                 : parseInt(row[5], 10),
@@ -186,9 +194,6 @@ export class SqlUtil {
         status: "Running",
         message: "Connecting to Database...",
       });
-      logger.info(`Connecting to DB to insert ${total} rows...`, {
-        console: true,
-      });
 
       client = await (await this.getPool()).connect();
       await pgBegin(client);
@@ -232,11 +237,8 @@ export class SqlUtil {
         let pIdx = 1;
 
         for (const data of chunk) {
-          // [FIX] Guard Clause: Skip if page_count is not a valid number
           if (typeof data.page_count !== "number") {
             skippedRows++;
-            // Optional: log debug info if needed
-            // logger.debug(`Skipping row IHNO: ${data.id_ihno} due to non-numeric page_count: ${data.page_count}`);
             continue;
           }
 
@@ -257,18 +259,18 @@ export class SqlUtil {
           const docPath = `${basePath}CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}/CLIENT_CODE_${data.id_fund}_TRANSACTION_NUMBER_${data.id_ihno}${ext}`;
 
           const rowValues = [
-            process, // document_process
-            activity, // document_activity
-            docType, // document_type
-            format, // document_format
-            docPath, // document_path
-            null, // folio_id
-            data.id_ihno.toString(), // transaction_reference_id
-            "A", // document_status
-            mime, // mime_type
-            null, // user_attr0
-            data.id_ihno.toString(), // user_attr1
-            data.id_acno, // user_attr2
+            process,
+            activity,
+            docType,
+            format,
+            docPath,
+            null,
+            data.id_ihno.toString(),
+            "A",
+            mime,
+            null,
+            data.id_ihno.toString(),
+            data.id_acno,
             null,
             null,
             null,
@@ -276,17 +278,17 @@ export class SqlUtil {
             null,
             null,
             null,
-            null, // approval_status
             null,
             null,
             null,
             null,
-            false, // del_flag
-            new Date(), // last_update_tms
+            null,
+            false,
+            new Date(),
             "system",
-            new Date(), // creation_date
+            new Date(),
             "system",
-            data.page_count, // [FIX] Now guaranteed to be a number
+            data.page_count,
             actualId,
           ];
           vStrings.push(`(${rowValues.map(() => `$${pIdx++}`).join(", ")})`);
@@ -314,15 +316,8 @@ export class SqlUtil {
           status: "Running",
           metrics: { inserted: insertedRows },
         });
-
-        if (currentCount % 5000 === 0) {
-          logger.info(`Inserted ${currentCount}/${total} rows...`, {
-            console: true,
-          });
-        }
       }
 
-      logger.info("Committing Transaction...", { console: true });
       await pgCommit(client);
 
       if (skippedRows > 0) {
@@ -340,17 +335,9 @@ export class SqlUtil {
         status: "Completed",
         metrics: { inserted: insertedRows },
       });
-      logger.info("SQL Execution Completed Successfully.", { console: true });
     } catch (err: any) {
       if (client) await pgRollback(client);
-      // [FIX] Enhanced Error Logging for Debugging
-      logger.error("Execute SQL Failed", {
-        error: err.message,
-        code: err.code,
-        routine: err.routine,
-        where: err.where, // Points to specific parameter index if available
-        console: true,
-      });
+      logger.error("Execute SQL Failed", { error: err.message, console: true });
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "executeSql",
@@ -364,8 +351,8 @@ export class SqlUtil {
     }
   }
 
+  // 1. SPECIFIC Update (CSV Based)
   async updateFolioAndTransaction(
-    updateAll: boolean,
     onProgress: (p: ImageDataProgress) => void
   ): Promise<void> {
     onProgress({
@@ -374,18 +361,14 @@ export class SqlUtil {
       total: 0,
       processed: 0,
       status: "Running",
-      message: "Reading CSV Data...",
+      message: "Reading CSV Data (Specific Mode)...",
     });
 
     let transactions: any[] = [];
     const generated = await this.generateSql();
-
-    // [FIX] Filter invalid rows right at the start
-    // If we skipped inserting them, we must skip updating them too
     transactions = generated.transactions.filter(
       (t: any) => typeof t.page_count === "number"
     );
-
     const total = transactions.length;
 
     if (total === 0) {
@@ -406,7 +389,7 @@ export class SqlUtil {
     let client: PoolClient | null = null;
 
     try {
-      logger.info(`Starting Update Process for ${total} valid rows...`, {
+      logger.info(`Starting SPECIFIC Update for ${total} valid rows...`, {
         console: true,
       });
       client = await (await this.getPool()).connect();
@@ -414,10 +397,7 @@ export class SqlUtil {
 
       await pgQuery(client, SQL_CREATE_TEMP_TRANSACTION_DATA);
 
-      logger.info(`Phase 1/2: Staging ${total} rows into temp table...`, {
-        console: true,
-      });
-
+      logger.info(`Phase 1/2: Staging ${total} rows...`, { console: true });
       for (let i = 0; i < total; i += 1000) {
         const chunk = transactions.slice(i, i + 1000);
         const vStrs = chunk.map(
@@ -448,14 +428,9 @@ export class SqlUtil {
       }
 
       await pgQuery(client, SQL_DELETE_TEMP_IMAGES_1);
-      await pgQuery(
-        client,
-        SQL_INSERT_TEMP_IMAGES_1.replace(
-          "%WHERE_CLAUSE%",
-          updateAll ? "TRUE" : "fo.folio_number = ANY($1::text[])"
-        ),
-        updateAll ? [] : [processedFolioNumbers]
-      );
+
+      // Execute Queries that STRICTLY require $1 (Folio Array)
+      await pgQuery(client, SQL_INSERT_TEMP_IMAGES_1, [processedFolioNumbers]);
 
       onProgress({
         type: "sqlProgressUpdate",
@@ -465,25 +440,14 @@ export class SqlUtil {
         status: "Running",
         message: "Phase 2/2: Executing Database Updates...",
       });
-      logger.info("Executing Update Query...", { console: true });
 
-      const resF = (await pgQuery(
-        client,
-        SQL_UPDATE_FOLIO_ID.replace(
-          "%WHERE_CLAUSE%",
-          updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"
-        ),
-        updateAll ? [] : [processedFolioNumbers]
-      )) as any;
+      const resF = (await pgQuery(client, SQL_UPDATE_FOLIO_ID, [
+        processedFolioNumbers,
+      ])) as any;
 
-      const resT = (await pgQuery(
-        client,
-        SQL_UPDATE_TRANSACTION_REFERENCE_ID.replace(
-          "%WHERE_CLAUSE%",
-          updateAll ? "" : "AND d.user_attr2 = ANY($1::text[])"
-        ),
-        updateAll ? [] : [processedFolioNumbers]
-      )) as any;
+      const resT = (await pgQuery(client, SQL_UPDATE_TRANSACTION_REFERENCE_ID, [
+        processedFolioNumbers,
+      ])) as any;
 
       await pgCommit(client);
 
@@ -503,10 +467,6 @@ export class SqlUtil {
           txnUpdated: txnCount,
         },
       });
-      logger.info(
-        `Update Completed. Folios: ${folioCount}, Txns: ${txnCount}`,
-        { console: true }
-      );
     } catch (err: any) {
       if (client) await pgRollback(client);
       logger.error("Update Folio/Transaction Failed", {
@@ -526,7 +486,109 @@ export class SqlUtil {
     }
   }
 
-  // --- Helpers for Mongo ---
+  // 2. GLOBAL Update (Update All)
+  async updateAllFolioAndTransaction(
+    onProgress: (p: ImageDataProgress) => void
+  ): Promise<void> {
+    onProgress({
+      type: "sqlProgressUpdate",
+      subTask: "updateFolio",
+      total: 0,
+      processed: 0,
+      status: "Running",
+      message: "Starting Global Update...",
+    });
+
+    let client: PoolClient | null = null;
+    try {
+      client = await (await this.getPool()).connect();
+      await pgBegin(client);
+
+      logger.info("Executing Global Update Step 1: Cleanup Temp Images", {
+        console: true,
+      });
+      await pgQuery(client, SQL_DELETE_TEMP_IMAGES_1);
+
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 3,
+        processed: 1,
+        status: "Running",
+        message: "Step 1: Populating Temp Images...",
+      });
+
+      logger.info("Executing Global Update Step 2: Insert All Temp Images", {
+        console: true,
+      });
+      await pgQuery(client, SQL_INSERT_ALL_TEMP_IMAGES);
+
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 3,
+        processed: 2,
+        status: "Running",
+        message: "Step 2: Updating Transaction References...",
+      });
+
+      logger.info(
+        "Executing Global Update Step 3: Update Transaction Refs (Global)",
+        { console: true }
+      );
+      const resT = (await pgQuery(client, SQL_UPDATE_ALL_TRXN_REF)) as any;
+
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 3,
+        processed: 3,
+        status: "Running",
+        message: "Step 3: Updating Folio IDs...",
+      });
+
+      logger.info("Executing Global Update Step 4: Update Folio IDs (Global)", {
+        console: true,
+      });
+      const resF = (await pgQuery(client, SQL_UPDATE_ALL_FOLIO_ID)) as any;
+
+      await pgCommit(client);
+
+      const txnCount = resT.rowCount || 0;
+      const folioCount = resF.rowCount || 0;
+
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 3,
+        processed: 3,
+        status: "Completed",
+        metrics: {
+          updated: txnCount + folioCount,
+          txnUpdated: txnCount,
+          folioUpdated: folioCount,
+        },
+      });
+      logger.info(
+        `Global Update Completed. Txns: ${txnCount}, Folios: ${folioCount}`,
+        { console: true }
+      );
+    } catch (err: any) {
+      if (client) await pgRollback(client);
+      logger.error("Global Update Failed", { error: err, console: true });
+      onProgress({
+        type: "sqlProgressUpdate",
+        subTask: "updateFolio",
+        total: 0,
+        processed: 0,
+        status: "Error",
+        message: err.message,
+      });
+    } finally {
+      if (client) client.release();
+    }
+  }
+
   public async getClientIdByCode(
     clientCode: string
   ): Promise<{ id: number } | undefined> {
@@ -544,6 +606,7 @@ export class SqlUtil {
   public async getAifDocumentDetails(
     clientId?: number
   ): Promise<AifDocumentDetail[]> {
+    // [RESTORED] Now this call will work because the method is defined above
     const folioNumbers = await this.getProcessedFolioNumbers();
     if (folioNumbers.length === 0) return [];
     let client = await (await this.getPool()).connect();

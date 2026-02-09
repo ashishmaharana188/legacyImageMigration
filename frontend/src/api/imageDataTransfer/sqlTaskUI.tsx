@@ -6,65 +6,89 @@ const SQLTaskUI: React.FC<SQLTaskUIProps> = ({
   handleExecuteSql,
   handleUpdateFolioAndTransaction,
   handleReconnect,
-  updateAll,
-  setUpdateAll,
+  isUpdateAll,
+  setIsUpdateAll,
 }) => {
   return (
-    <div className="border border-gray-300 rounded-lg p-4 flex flex-col justify-between">
+    <div className="border border-gray-300 rounded-lg p-4 flex flex-col justify-between h-full bg-white shadow-sm">
       <div>
-        <h4 className="font-semibold text-lg text-black mb-3">
+        <h4 className="font-semibold text-lg text-gray-800 mb-2">
           Folio & Transaction Update
         </h4>
         <p className="text-sm text-gray-600 mb-4">
-          Updates folio and transaction reference IDs in the database.
+          Updates transaction references and folio IDs in Postgres.
         </p>
-        <div className="flex flex-col gap-2 mb-4">
-          <label className="inline-flex items-center">
-            <input
-              type="radio"
-              className="form-checkbox"
-              name="updateOption"
-              value="processed"
-              checked={!updateAll}
-              onChange={() => setUpdateAll(false)}
-            />
-            <span className="ml-2 text-black">Update from Processed CSV</span>
+
+        {/* [NEW] Update Mode Toggle Section */}
+        <div className="mb-4 bg-gray-50 p-3 rounded-md border border-gray-200">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 block">
+            Update Scope
           </label>
-          <label className="inline-flex items-center">
-            <input
-              type="radio"
-              className="form-checkbox"
-              name="updateOption"
-              value="all"
-              checked={updateAll}
-              onChange={() => setUpdateAll(true)}
-            />
-            <span className="ml-2 text-black">Update All Records</span>
-          </label>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+              <input
+                type="radio"
+                name="updateMode"
+                checked={!isUpdateAll}
+                onChange={() => setIsUpdateAll(false)}
+                className="form-radio text-indigo-600 h-4 w-4"
+                disabled={loading}
+              />
+              <span className="text-sm text-gray-700">
+                <strong>Specific:</strong> Only update records from Processed
+                CSV
+              </span>
+            </label>
+            <label className="flex items-center space-x-2 cursor-pointer hover:bg-gray-100 p-1 rounded">
+              <input
+                type="radio"
+                name="updateMode"
+                checked={isUpdateAll}
+                onChange={() => setIsUpdateAll(true)}
+                className="form-radio text-red-600 h-4 w-4"
+                disabled={loading}
+              />
+              <span className="text-sm text-gray-700">
+                <strong>Global:</strong> Update ALL matching records (Careful)
+              </span>
+            </label>
+          </div>
         </div>
       </div>
-      <button
-        onClick={() => handleUpdateFolioAndTransaction(updateAll)}
-        className="btn w-full"
-        disabled={loading}
-      >
-        {loading ? "Updating..." : "Update Folio & Transaction"}
-      </button>
-      <div className="mt-4 flex gap-4 ">
+
+      <div className="flex flex-col gap-3 mt-2">
         <button
-          onClick={handleExecuteSql}
-          className="btn w-full"
+          onClick={handleUpdateFolioAndTransaction}
+          className={`btn w-full py-2 rounded-md transition-colors font-semibold ${
+            isUpdateAll
+              ? "bg-red-600 hover:bg-red-700 text-white border-red-700"
+              : "bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700"
+          } disabled:opacity-50`}
           disabled={loading}
         >
-          {loading ? "Executing..." : "Execute SQL"}
+          {loading
+            ? "Processing..."
+            : isUpdateAll
+            ? "Run Global Update"
+            : "Run Specific Update"}
         </button>
-        <button
-          onClick={handleReconnect}
-          className="btn btn-danger w-full"
-          disabled={loading}
-        >
-          {loading ? "Reconnecting..." : "Reconnect to DB"}
-        </button>
+
+        <div className="flex gap-2">
+          <button
+            onClick={handleExecuteSql}
+            className="flex-1 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+            disabled={loading}
+          >
+            Execute SQL
+          </button>
+          <button
+            onClick={handleReconnect}
+            className="flex-1 bg-white border border-gray-300 hover:bg-red-50 text-red-600 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50"
+            disabled={loading}
+          >
+            Reconnect DB
+          </button>
+        </div>
       </div>
     </div>
   );

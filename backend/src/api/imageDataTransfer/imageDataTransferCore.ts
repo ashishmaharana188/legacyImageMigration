@@ -7,6 +7,8 @@ import {
 } from "./imageDataTransferTypes";
 
 // --- SQL Queries ---
+
+// [EXISTING] Specific Update Queries (Safely Filtered)
 export const SQL_INSERT_AIF_DOCUMENT_DETAILS = `
 INSERT INTO investor.aif_document_details(
 document_process, document_activity, document_type, document_format, document_path,
@@ -20,17 +22,22 @@ page_count, client_id
 `;
 
 export const SQL_SELECT_CLIENT_MASTER_BY_CODES = `SELECT id, client_code FROM fund.client_master WHERE client_code = ANY($1::text[])`;
-export const SQL_DELETE_TEMP_IMAGES_1 = `DELETE FROM public.temp_images_1;`;
+export const SQL_DELETE_TEMP_IMAGES_1 = `DELETE FROM temp_images_1;`;
+
 export const SQL_INSERT_TEMP_IMAGES_1 = `
 INSERT INTO public.temp_images_1 (client_code, folio_number, IHNO)
 SELECT DISTINCT cm.client_code, fo.folio_number, ts.user_attr5 AS ihno
 FROM trxn.aif_transaction_summary ts
 JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
 JOIN fund.client_master cm ON cm.id = fo.client_id
-WHERE %WHERE_CLAUSE% AND ts.created_by = 'aifappendersvc' AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
+WHERE fo.folio_number = ANY($1::text[]) 
+  AND ts.created_by = 'aifappendersvc' 
+  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
+
 export const SQL_CREATE_TEMP_TRANSACTION_DATA = `CREATE TEMPORARY TABLE temp_transaction_data (id_ihno TEXT NOT NULL, id_acno TEXT NOT NULL) ON COMMIT DROP;`;
 export const SQL_INSERT_TEMP_TRANSACTION_DATA = `INSERT INTO temp_transaction_data (id_ihno, id_acno) VALUES %VALUES%;`;
+
 export const SQL_UPDATE_FOLIO_ID = `
 WITH client_folio AS (
   SELECT folio_number, id, client_id, (SELECT cm.client_code FROM fund.client_master cm WHERE cm.id = client_id) AS client_code
@@ -38,9 +45,11 @@ WITH client_folio AS (
 )
 UPDATE investor.aif_document_details AS d SET folio_id = cf.id FROM client_folio AS cf
 WHERE d.client_id = cf.client_id AND d.user_attr2 = cf.folio_number AND d.created_by = 'system'
-  AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno) %WHERE_CLAUSE%
+  AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno)
+  AND d.user_attr2 = ANY($1::text[])
 RETURNING d.user_attr1, d.user_attr2;
 `;
+
 export const SQL_UPDATE_TRANSACTION_REFERENCE_ID = `
 UPDATE investor.aif_document_details AS d 
 SET 
@@ -52,9 +61,54 @@ WHERE ts.client_id = d.client_id
   AND d.created_by = 'system' 
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL) 
   AND ts.created_by = 'aifappendersvc'
-  AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno) %WHERE_CLAUSE%
+  AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno)
+  AND d.user_attr2 = ANY($1::text[])
 RETURNING d.user_attr1, d.user_attr2;
 `;
+
+// [NEW] Update All Queries (As requested)
+export const SQL_INSERT_ALL_TEMP_IMAGES = `
+INSERT INTO temp_images_1 (client_code, folio_number, IHNO)
+SELECT client_code, folio_number, IHNO
+FROM (
+    SELECT DISTINCT
+        cm.client_code,
+        fo.folio_number,
+        ts.user_attr5 AS ihno
+    FROM
+        trxn.aif_transaction_summary ts
+    JOIN
+        investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
+    JOIN
+        fund.client_master cm ON cm.id = fo.client_id
+    WHERE
+        ts.created_by = 'aifappendersvc'
+        AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
+) AS cte;
+`;
+
+export const SQL_UPDATE_ALL_TRXN_REF = `
+UPDATE investor.aif_document_details AS d
+SET transaction_reference_id = ts.transaction_number
+FROM trxn.aif_transaction_summary AS ts
+WHERE ts.client_id = d.client_id
+  AND ts.folio_id = d.folio_id
+  AND ts.user_attr5 = d.user_attr1
+  AND d.created_by = 'system'
+  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
+  AND ts.created_by='aifappendersvc';
+`;
+
+export const SQL_UPDATE_ALL_FOLIO_ID = `
+UPDATE investor.aif_document_details AS d
+SET FOLIO_ID=af.id
+FROM INVESTOR.AIF_FOLIO AF
+WHERE af.folio_number=d.user_attr2
+AND d.client_id=af.client_id
+AND d.created_by='system'
+AND d.user_attr2 IS NOT NULL;
+`;
+
 export const SQL_SELECT_CLIENT_ID_BY_CODE = `SELECT id FROM fund.client_master WHERE client_code = $1`;
 export const SQL_SELECT_AIF_DOCUMENT_DETAILS = `
 SELECT add.*, cm.client_code
@@ -70,8 +124,6 @@ WHERE add.created_by = 'system' %CLIENT_ID_CLAUSE%;
 `;
 
 // --- MongoDB Operations ---
-
-// [FIX] Explicit casting using 'as unknown as ...' to handle Lean vs Strict types
 export async function mongoFindOne(
   model: mongoose.Model<IAifDocument>
 ): Promise<IAifDocumentInput | null> {
@@ -92,7 +144,6 @@ export async function mongoBulkWrite(
   return model.bulkWrite(operations) as unknown as IBulkWriteResult;
 }
 
-// [FIX] Explicit casting
 export async function mongoFind(
   model: mongoose.Model<IAifDocument>,
   query: Record<string, unknown>
@@ -100,7 +151,6 @@ export async function mongoFind(
   return model.find(query).lean() as unknown as IAifDocumentInput[];
 }
 
-// [FIX] Explicit casting
 export async function mongoAggregate(
   model: mongoose.Model<IAifDocument>,
   pipeline: PipelineStage[]
@@ -109,7 +159,6 @@ export async function mongoAggregate(
 }
 
 // --- PostgreSQL Operations ---
-
 export async function pgQuery(
   client: PoolClient,
   query: string,

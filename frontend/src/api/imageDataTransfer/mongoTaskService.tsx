@@ -1,17 +1,16 @@
-import axios from "axios";
+import apiClient from "../../services/apiClient";
+import { TransferResponse } from "./mongoTaskType";
 
-const API_BASE_URL = "http://localhost:3000/api/imageDataTransfer";
+// [CLEANUP] Removed updateMongoTransactionsService
 
-export const transferDataFromPostgresService = async (clientCode?: string) => {
+export const transferDataFromPostgresService = async (
+  clientCode?: string
+): Promise<TransferResponse> => {
   const params = clientCode ? { clientCode } : {};
-  const response = await axios.get(`${API_BASE_URL}/transfer-postgres`, {
-    params,
-  });
-  return response.data;
-};
-
-export const updateMongoTransactionsService = async (clientId?: number) => {
-  const params = clientId ? { clientId } : {};
-  const response = await axios.get(`${API_BASE_URL}/update-mongo`, { params });
+  const response = await apiClient.post<TransferResponse>(
+    "/image-data/transfer-mongo",
+    {},
+    { params }
+  );
   return response.data;
 };

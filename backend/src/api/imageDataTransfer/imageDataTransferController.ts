@@ -16,17 +16,31 @@ class ImageDataTransferController {
     }
   }
 
-  // [ASYNC START]
   async executeSql(req: Request, res: Response) {
     logger.info("API: Starting SQL Execution (Async)", { console: true });
-    this.wrapper.executeSql(); // No await
+    this.wrapper.executeSql();
     res.status(202).json({ message: "SQL Execution Started" });
   }
 
   async updateFolioAndTransaction(req: Request, res: Response) {
     logger.info("API: Starting Folio Update (Async)", { console: true });
-    this.wrapper.updateFolioAndTransaction(req.body.updateAll);
-    res.status(202).json({ message: "Folio Update Started" });
+
+    // [UPDATED] Check for updateAll flag in body
+    const { updateAll } = req.body;
+    const isUpdateAll = updateAll === true;
+
+    if (isUpdateAll) {
+      logger.info("Mode: GLOBAL UPDATE (All Records)", { console: true });
+    } else {
+      logger.info("Mode: SPECIFIC UPDATE (From CSV)", { console: true });
+    }
+
+    this.wrapper.updateFolioAndTransaction(isUpdateAll);
+    res.status(202).json({
+      message: isUpdateAll
+        ? "Global Folio Update Started"
+        : "Specific Folio Update Started",
+    });
   }
 
   async transferDataFromPostgres(req: Request, res: Response) {
@@ -36,12 +50,14 @@ class ImageDataTransferController {
   }
 
   async updateMongoTransactions(req: Request, res: Response) {
-    logger.info("API: Starting Mongo Sync (Async)", { console: true });
+    logger.info("API: Starting Mongo Sync (Async) - [DISABLED]", {
+      console: true,
+    });
     const clientId = req.query.clientId
       ? parseInt(req.query.clientId as string)
       : undefined;
     this.wrapper.updateMongoTransactions(clientId);
-    res.status(202).json({ message: "Sync Started" });
+    res.status(202).json({ message: "Sync Started (Disabled)" });
   }
 }
 

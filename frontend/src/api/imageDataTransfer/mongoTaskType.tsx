@@ -2,19 +2,24 @@ import { TaskLogContextType } from "../../types/index";
 
 export interface MongoTaskUIProps {
   loading: boolean;
+
   clientCode: string;
   setClientCode: (code: string) => void;
-  handleTransferToMongo: (
-    updateAll: boolean,
-    clientCode: string
-  ) => Promise<void>;
-  updateAllMongo: boolean;
-  setUpdateAllMongo: (updateAllMongo: boolean) => void;
+
+  // [FIX] This matches the hook signature
+  handleTransferToMongo: (clientCode: string) => Promise<void>;
 }
 
 export interface UseMongoTaskHookProps {
   updateTaskLog: TaskLogContextType["updateTaskLog"];
   clearTaskLog: (task: string) => void;
+}
+
+// [FIX] Exporting this interface so Service can use it
+export interface TransferResponse {
+  message: string;
+  transferredCount?: number;
+  error?: string;
 }
 
 export interface FileResponse {

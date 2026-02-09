@@ -25,19 +25,37 @@ export class ImageDataTransferWrapper {
         broadcast(JSON.stringify(progress));
       })
       .catch((err) => {
-        // [FIX] Explicit console log for background errors
         logger.error("Background SQL Error", { error: err, console: true });
       });
   }
 
-  public async updateFolioAndTransaction(updateAll: boolean): Promise<void> {
-    this.sqlUtil
-      .updateFolioAndTransaction(updateAll, (progress) => {
-        broadcast(JSON.stringify(progress));
-      })
-      .catch((err) => {
-        logger.error("Background Update Error", { error: err, console: true });
-      });
+  // [UPDATED] now accepts optional boolean flag
+  public async updateFolioAndTransaction(
+    isUpdateAll: boolean = false
+  ): Promise<void> {
+    if (isUpdateAll) {
+      this.sqlUtil
+        .updateAllFolioAndTransaction((progress) => {
+          broadcast(JSON.stringify(progress));
+        })
+        .catch((err) => {
+          logger.error("Background Global Update Error", {
+            error: err,
+            console: true,
+          });
+        });
+    } else {
+      this.sqlUtil
+        .updateFolioAndTransaction((progress) => {
+          broadcast(JSON.stringify(progress));
+        })
+        .catch((err) => {
+          logger.error("Background Specific Update Error", {
+            error: err,
+            console: true,
+          });
+        });
+    }
   }
 
   public async transferDataFromPostgres(clientCode?: string): Promise<void> {
