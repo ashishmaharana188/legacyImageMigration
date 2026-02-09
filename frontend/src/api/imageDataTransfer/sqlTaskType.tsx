@@ -2,11 +2,17 @@ import { TaskLogContextType } from "../../types/index";
 
 export interface SQLTaskUIProps {
   loading: boolean;
+
   handleExecuteSql: () => Promise<void>;
-  handleUpdateFolioAndTransaction: (updateAll: boolean) => Promise<void>;
+
+  // [FIX] Takes no arguments because the Hook reads the 'isUpdateAll' state internally
+  handleUpdateFolioAndTransaction: () => Promise<void>;
+
   handleReconnect: () => Promise<void>;
-  updateAll: boolean;
-  setUpdateAll: (updateAll: boolean) => void;
+
+  // [FIX] Added missing props
+  isUpdateAll: boolean;
+  setIsUpdateAll: (value: boolean) => void;
 }
 
 export interface UseSQLTaskHookProps {

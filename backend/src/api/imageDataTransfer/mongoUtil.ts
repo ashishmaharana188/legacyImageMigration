@@ -1,53 +1,33 @@
-import mongoose, { Document } from "mongoose";
-import { createFeatureLogger } from "../../utils/logger";
-import { SqlUtil } from "./sqlUtil";
-import {
-  connectMongo,
-  disconnectMongo,
-  getMongoModel,
-  getMongoDb,
-} from "../../utils/dbConnect";
+import mongoose from "mongoose";
+import { ImageDataProgress } from "./imageDataTransferTypes";
 import {
   mongoInsertMany,
-  mongoBulkWrite,
-  mongoFind,
   mongoFindOne,
+  mongoFind,
 } from "./imageDataTransferCore";
-import {
-  AifDocumentDetail,
-  IAifDocument,
-  IAifDocumentInput,
-  ImageDataProgress,
-} from "./imageDataTransferTypes";
+import { SqlUtil } from "./sqlUtil";
+import { createFeatureLogger } from "../../utils/logger";
+import { getMongoModel } from "../../utils/dbConnect";
+import { IAifDocument, IAifDocumentInput } from "./imageDataTransferTypes";
 
 const logger = createFeatureLogger("imageDataTransfer");
 
 export class MongoUtil {
+  private sqlUtil: SqlUtil;
   private model: mongoose.Model<IAifDocument>;
 
   constructor() {
+    this.sqlUtil = new SqlUtil();
     this.model = getMongoModel();
   }
 
-  public async connect() {
-    await connectMongo();
-  }
-  public getDb() {
-    return getMongoDb();
-  }
-  public async disconnect() {
-    await disconnectMongo();
-  }
-
-  public async transferDataFromPostgres(
+  async transferDataFromPostgres(
     clientCode: string | undefined,
     onProgress: (p: ImageDataProgress) => void
-  ) {
+  ): Promise<void> {
     try {
-      // [LOG] Start
-      logger.info(`Starting Mongo Transfer. Filter: ${clientCode || "ALL"}`, {
-        console: true,
-      });
+      // [LOG] Added console log
+      logger.info("Starting PG -> Mongo Transfer Logic...", { console: true });
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -55,53 +35,32 @@ export class MongoUtil {
         total: 0,
         processed: 0,
         status: "Running",
-        message: "Initializing Connections...",
+        message: "Fetching PG Data...",
       });
 
-      const sqlUtil = new SqlUtil();
-      await this.connect();
-      logger.info("MongoDB Connection Established.", { console: true });
-
-      let pgClientId: number | undefined;
-
-      // [LOG] Client Code Resolution
+      let targetClientId: number | undefined = undefined;
       if (clientCode) {
-        logger.info(`Resolving Client Code '${clientCode}'...`, {
-          console: true,
-        });
-        const clientRes = await sqlUtil.getClientIdByCode(clientCode);
-
-        if (clientRes) {
-          pgClientId = clientRes.id;
-          logger.info(
-            `Resolved Client Code '${clientCode}' to ID: ${pgClientId}`,
-            { console: true }
-          );
-        } else {
-          logger.warn(
-            `Client Code '${clientCode}' NOT found in Postgres. Proceeding might return 0 records.`,
-            { console: true }
-          );
-        }
+        const clientData = await this.sqlUtil.getClientIdByCode(clientCode);
+        if (!clientData) throw new Error(`Invalid Client Code: ${clientCode}`);
+        targetClientId = clientData.id;
       }
 
-      // [LOG] Fetching Data
-      logger.info(
-        `Fetching data from Postgres (Client ID: ${pgClientId || "ALL"})...`,
-        { console: true }
-      );
-      const pgData = await sqlUtil.getAifDocumentDetails(pgClientId);
+      const pgData = await this.sqlUtil.getAifDocumentDetails(targetClientId);
       const total = pgData.length;
+
+      // [LOG] Added console log for count
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
       if (total === 0) {
+        const msg = "No Data Found in PG (Check if Processed CSV exists)";
+        logger.warn(msg, { console: true }); // [LOG] Log warning to console
         onProgress({
           type: "mongoProgressUpdate",
           subTask: "transferMongo",
           total: 0,
           processed: 0,
-          status: "Completed",
-          message: "No data found to transfer",
+          status: "Error",
+          message: msg,
         });
         return;
       }
@@ -112,59 +71,69 @@ export class MongoUtil {
         total,
         processed: 0,
         status: "Running",
-        message: `Fetched ${total} records... Preparing Insert`,
+        message: `Found ${total} records. Checking Mongo...`,
       });
 
-      const documentsToInsert: IAifDocumentInput[] = [];
-      const trxnMap: Record<string, string> = { IC: "ICP", NCT: "NCTP" };
+      let insertedCount = 0;
+      const batchSize = 500;
 
-      for (const data of pgData) {
-        const docProcess = data.document_process || "";
-        documentsToInsert.push({
-          activityStatus: data.activity_status || "O",
-          clientId: data.client_code,
-          transactionNo: data.transaction_reference_id,
-          documentType: "APLCN",
-          processCode: trxnMap[docProcess] || docProcess,
-          sourceUser: "system",
-          applicationId: data.application_id,
-          createdBy: data.created_by,
-          creation_date: data.creation_date,
-          currentStage: data.current_stage,
-          documentFormat: data.document_format,
-          documentPath: data.document_path,
-          documentSize: data.document_size,
-          mimeType: data.mime_type,
-          lastUpdatedFrom: data.last_updated_from,
-          totalPageCount: data.total_page_count,
-          createdOn: new Date().toLocaleString(),
-          lastUpdatedOn: new Date().toLocaleString(),
-          // Ensure all required fields from IAifDocumentInput are mapped
-          barcode: "",
-          branchId: "",
-          createdFrom: "",
-          lastUpdatedBy: "system",
-          transactionCode: "",
-          transactionType: "",
-          workDate: "",
-        } as unknown as IAifDocumentInput);
-      }
+      for (let i = 0; i < total; i += batchSize) {
+        const chunk = pgData.slice(i, i + batchSize);
+        const docsToInsert: IAifDocumentInput[] = [];
 
-      // Bulk Insert in chunks
-      const batchSize = 1000;
-      logger.info(`Starting Bulk Insert of ${total} documents...`, {
-        console: true,
-      });
+        for (const row of chunk) {
+          const exists = await mongoFindOne(this.model);
 
-      for (let i = 0; i < documentsToInsert.length; i += batchSize) {
-        const chunk = documentsToInsert.slice(i, i + batchSize);
-        await mongoInsertMany(this.model, chunk);
+          if (exists) {
+            const isDup = await mongoFind(this.model, {
+              user_attr1: row.user_attr1,
+              user_attr2: row.user_attr2 || "",
+              clientId: row.client_code,
+              documentType: row.document_type,
+            });
+            if (isDup.length > 0) continue;
+          }
 
-        const currentCount = i + chunk.length;
+          // Map Postgres Row to Mongo Input Interface
+          docsToInsert.push({
+            activityStatus: row.activity_status || "O",
+            applicationId: row.application_id,
+            clientId: row.client_code,
+            transactionNo: row.transaction_reference_id,
+            documentType: "APLCN",
+            processCode: row.document_process,
+            sourceUser: row.source_user || "system",
+            createdBy: row.created_by,
+            creation_date: row.creation_date,
+            currentStage: row.current_stage || 0,
+            documentFormat: row.document_format,
+            documentPath: row.document_path,
+            documentSize: row.document_size || "0",
+            mimeType: row.mime_type,
+            lastUpdatedFrom: row.last_updated_from,
+            totalPageCount: row.page_count || row.total_page_count || 0,
+            createdOn: new Date().toLocaleString(),
+            lastUpdatedOn: new Date().toLocaleString(),
+            barcode: "",
+            branchId: "",
+            createdFrom: "",
+            lastUpdatedBy: row.last_updated_by || "system",
+            transactionCode: "",
+            transactionType: "",
+            workDate: "",
+          } as unknown as IAifDocumentInput);
+        }
 
-        // [LOG] Batch Progress
-        if (currentCount % 5000 === 0 || currentCount === total) {
-          logger.info(`Inserted ${currentCount}/${total} documents...`, {
+        if (docsToInsert.length > 0) {
+          await mongoInsertMany(this.model, docsToInsert);
+          insertedCount += docsToInsert.length;
+        }
+
+        const currentProcessed = Math.min(i + batchSize, total);
+
+        // [LOG] Log every 5000 records to console to avoid spamming
+        if (currentProcessed % 5000 === 0 || currentProcessed === total) {
+          logger.info(`Processed ${currentProcessed}/${total} records...`, {
             console: true,
           });
         }
@@ -173,136 +142,53 @@ export class MongoUtil {
           type: "mongoProgressUpdate",
           subTask: "transferMongo",
           total,
-          processed: currentCount,
+          processed: currentProcessed,
           status: "Running",
-          metrics: { inserted: currentCount },
+          metrics: { inserted: insertedCount },
         });
       }
 
-      logger.info("Mongo Transfer Completed Successfully.", { console: true });
+      logger.info(`Transfer Completed. Total Inserted: ${insertedCount}`, {
+        console: true,
+      });
+
       onProgress({
         type: "mongoProgressUpdate",
         subTask: "transferMongo",
         total,
         processed: total,
         status: "Completed",
-        metrics: { inserted: total },
+        metrics: { inserted: insertedCount },
       });
-    } catch (error: any) {
-      // [LOG] Error
-      logger.error("Mongo Transfer Failed", { error: error, console: true });
+    } catch (err: any) {
+      logger.error("Mongo Transfer Failed", {
+        error: err.message,
+        console: true,
+      });
       onProgress({
         type: "mongoProgressUpdate",
         subTask: "transferMongo",
         total: 0,
         processed: 0,
         status: "Error",
-        message: error.message,
+        message: err.message,
       });
     }
   }
 
-  public async updateMongoTransactions(
+  async updateMongoTransactions(
     clientId: number | undefined,
     onProgress: (p: ImageDataProgress) => void
-  ) {
-    let totalUpdated = 0;
-    let totalSynced = 0;
-    let processedCount = 0;
-
-    try {
-      logger.info(`Starting Mongo Sync (Client ID: ${clientId || "ALL"})...`, {
-        console: true,
-      });
-      const sqlUtil = new SqlUtil();
-      await this.connect();
-
-      const EST_BATCH_SIZE = 1000;
-
-      const processBatch = async (pgData: AifDocumentDetail[]) => {
-        const bulkOps: any[] = [];
-
-        const uniqueFilters = pgData.map((d) => ({
-          clientId: d.client_code,
-          transactionNo: d.user_attr1,
-        }));
-
-        // Optimize: Only fetch fields needed for comparison
-        const mongoDocs = await mongoFind(this.model, {
-          $or: uniqueFilters,
-          sourceUser: "system",
-        });
-
-        const mongoDocMap = new Map(
-          mongoDocs.map((d) => [`${d.clientId}-${d.transactionNo}`, d])
-        );
-
-        pgData.forEach((data) => {
-          const doc = mongoDocMap.get(`${data.client_code}-${data.user_attr1}`);
-          if (doc) {
-            // Check if transaction number matches the new reference ID
-            if (doc.transactionNo !== data.transaction_reference_id) {
-              bulkOps.push({
-                updateOne: {
-                  filter: { _id: doc._id },
-                  update: {
-                    $set: { transactionNo: data.transaction_reference_id },
-                  },
-                },
-              });
-              totalUpdated++;
-            } else {
-              totalSynced++;
-            }
-          }
-        });
-
-        if (bulkOps.length > 0) {
-          await mongoBulkWrite(this.model, bulkOps);
-        }
-
-        processedCount += pgData.length;
-
-        if (processedCount % 5000 === 0) {
-          logger.info(
-            `Sync Progress: Processed ${processedCount}, Updated ${totalUpdated}, Synced ${totalSynced}`,
-            { console: true }
-          );
-        }
-
-        onProgress({
-          type: "mongoProgressUpdate",
-          subTask: "syncMongo",
-          total: processedCount + EST_BATCH_SIZE, // Keep "running" ahead
-          processed: processedCount,
-          status: "Running",
-          metrics: { updated: totalUpdated, synced: totalSynced },
-        });
-      };
-
-      await sqlUtil.streamUpdateDetails(1000, processBatch, clientId);
-
-      logger.info(`Mongo Sync Completed. Total Updated: ${totalUpdated}`, {
-        console: true,
-      });
-      onProgress({
-        type: "mongoProgressUpdate",
-        subTask: "syncMongo",
-        total: processedCount,
-        processed: processedCount,
-        status: "Completed",
-        metrics: { updated: totalUpdated, synced: totalSynced },
-      });
-    } catch (error: any) {
-      logger.error("Mongo Sync Failed", { error: error, console: true });
-      onProgress({
-        type: "mongoProgressUpdate",
-        subTask: "syncMongo",
-        total: 0,
-        processed: 0,
-        status: "Error",
-        message: error.message,
-      });
-    }
+  ): Promise<void> {
+    logger.warn("Sync disabled.", { console: true });
+    onProgress({
+      type: "mongoProgressUpdate",
+      subTask: "syncMongo",
+      total: 0,
+      processed: 0,
+      status: "Warning",
+      message: "Sync functionality is disabled",
+    });
+    return Promise.resolve();
   }
 }

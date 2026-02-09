@@ -8,63 +8,66 @@ import { useTaskLog } from "../../contexts/TaskLogContext";
 
 export const useSqlTask = () => {
   const [loading, setLoading] = useState(false);
-  const [updateAll, setUpdateAll] = useState(false);
+  // [NEW] State for Update Mode (false = Specific/CSV, true = Global/All)
+  const [isUpdateAll, setIsUpdateAll] = useState(false);
+
   const { updateTaskLog } = useTaskLog();
 
   const handleExecuteSql = useCallback(async () => {
     setLoading(true);
-    // Initial Log
     updateTaskLog("imageDataTransfer", {
       id: "LIVE_SQL_PROGRESS",
       status: "Running",
-      message: "Requesting Start...",
+      message: "Requesting SQL Execution...",
       progress: 0,
     });
     try {
       await executeSqlService();
-      // Don't log success here; WebSocket will do it
     } catch (err: any) {
       updateTaskLog("imageDataTransfer", {
         id: "LIVE_SQL_PROGRESS",
         status: "Error",
-        message: "Start Failed",
+        message: err.message || "Execution Failed",
       });
     } finally {
-      setLoading(false); // Button becomes clickable again immediately? Or keep disabled?
-      // Usually keep disabled until WS says complete, but for now let's re-enable to allow retries.
+      setLoading(false);
     }
   }, [updateTaskLog]);
 
-  const handleUpdateFolioAndTransaction = useCallback(
-    async (isUpdateAll: boolean) => {
-      setLoading(true);
+  const handleUpdateFolioAndTransaction = useCallback(async () => {
+    setLoading(true);
+
+    const modeMsg = isUpdateAll
+      ? "GLOBAL UPDATE (All Records)"
+      : "SPECIFIC UPDATE (From CSV)";
+
+    updateTaskLog("imageDataTransfer", {
+      id: "LIVE_SQL_PROGRESS",
+      status: "Running",
+      message: `Requesting ${modeMsg}...`,
+      progress: 0,
+    });
+
+    try {
+      // [UPDATED] Pass the toggle state to the service
+      await updateFolioAndTransactionService(isUpdateAll);
+    } catch (err: any) {
       updateTaskLog("imageDataTransfer", {
         id: "LIVE_SQL_PROGRESS",
-        status: "Running",
-        message: "Requesting Update...",
-        progress: 0,
+        status: "Error",
+        message: err.message || "Update Start Failed",
       });
-      try {
-        await updateFolioAndTransactionService(isUpdateAll, [], []);
-      } catch (err: any) {
-        updateTaskLog("imageDataTransfer", {
-          id: "LIVE_SQL_PROGRESS",
-          status: "Error",
-          message: "Start Failed",
-        });
-      } finally {
-        setLoading(false);
-      }
-    },
-    [updateTaskLog]
-  );
+    } finally {
+      setLoading(false);
+    }
+  }, [updateTaskLog, isUpdateAll]);
 
   const handleReconnect = useCallback(async () => {
-    // Reconnect is fast, can stay HTTP
     setLoading(true);
     try {
       await reconnectDbService();
     } catch (e) {
+      // Silent catch
     } finally {
       setLoading(false);
     }
@@ -75,7 +78,8 @@ export const useSqlTask = () => {
     handleExecuteSql,
     handleUpdateFolioAndTransaction,
     handleReconnect,
-    updateAll,
-    setUpdateAll,
+    // [NEW] Export toggle state
+    isUpdateAll,
+    setIsUpdateAll,
   };
 };

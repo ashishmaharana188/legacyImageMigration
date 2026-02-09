@@ -1,27 +1,27 @@
-import axios from "axios";
+import apiClient from "../../services/apiClient";
+import { FileResponse } from "./sqlTaskType";
 
-const API_BASE_URL = "http://localhost:3000/api/imageDataTransfer";
-
-export const executeSqlService = async () => {
-  const response = await axios.post(`${API_BASE_URL}/execute-sql`);
+export const executeSqlService = async (): Promise<FileResponse> => {
+  const response = await apiClient.post<FileResponse>(
+    "/image-data/execute-sql"
+  );
   return response.data;
 };
 
+// [UPDATED] Accepts boolean to switch between CSV-based and Global update
 export const updateFolioAndTransactionService = async (
-  updateAll: boolean,
-  transactions: any[],
-  initialLogs: any[]
-) => {
-  const response = await axios.post(`${API_BASE_URL}/update-folio`, {
-    updateAll,
-    transactions,
-    initialLogs,
-  });
+  isUpdateAll: boolean
+): Promise<FileResponse> => {
+  const response = await apiClient.post<FileResponse>(
+    "/image-data/update-folio",
+    { updateAll: isUpdateAll } // Sends flag to backend
+  );
   return response.data;
 };
 
-// [ADDED]
-export const reconnectDbService = async () => {
-  const response = await axios.post(`${API_BASE_URL}/reconnect-db`);
+export const reconnectDbService = async (): Promise<FileResponse> => {
+  const response = await apiClient.post<FileResponse>(
+    "/image-data/reconnect-db"
+  );
   return response.data;
 };

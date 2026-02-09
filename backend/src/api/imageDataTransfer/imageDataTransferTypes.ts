@@ -7,29 +7,56 @@ export interface SqlLog {
   sql?: string;
 }
 
+// [FIX] Expanded interface to match actual SQL return columns
 export interface AifDocumentDetail {
-  activity_status: string;
+  activity_status?: string; // Optional as it might be mapped
   application_id: string | null;
+  client_id: number; // [Added]
   client_code: string;
   created_by: string;
   creation_date: string;
-  current_stage: number;
+  current_stage?: number;
   document_format: string;
   document_path: string;
-  document_size: string;
+  document_size?: string;
   document_type: string;
-  last_updated_from: string | null;
+  last_updated_from?: string | null;
+  last_updated_by?: string; // [Added]
+  last_update_tms?: string; // [Added]
   mime_type: string;
   document_process: string;
-  source_user: string;
-  total_page_count: number | null;
+  document_activity?: string; // [Added]
+  source_user?: string;
+  total_page_count?: number | null;
+  page_count?: number; // [Added] (SQL often returns this)
   transaction_reference_id: string;
+  folio_id?: number | null; // [Added]
+  document_status?: string; // [Added]
+
+  // [Added] Missing User Attributes
+  user_attr0?: string | null;
   user_attr1: string;
+  user_attr2?: string | null;
+  user_attr3?: string | null;
+  user_attr4?: string | null;
+  user_attr5?: string | null;
+  user_attr6?: string | null;
+  user_attr7?: string | null;
+  user_attr8?: string | null;
+  user_attr9?: string | null;
+
+  // [Added] Missing Audit/Approval fields
+  approval_status?: string | null;
+  approved_by?: string | null;
+  approved_on?: string | null;
+  comments?: string | null;
+  audit_code?: string | null;
+  del_flag?: boolean;
 }
 
 // Pure Data Interface
 export interface IAifDocumentInput {
-  _id?: Types.ObjectId | string; // Allow flexible _id
+  _id?: Types.ObjectId | string;
   activityStatus: string;
   barcode?: string;
   applicationId: string | null;
@@ -57,7 +84,6 @@ export interface IAifDocumentInput {
 }
 
 // Mongoose Document Interface
-// We extend Document (which has _id) and our Input properties (excluding _id to avoid conflict)
 export interface IAifDocument
   extends Document,
     Omit<IAifDocumentInput, "_id"> {}
@@ -88,13 +114,14 @@ export interface ImageDataProgress {
   subTask: "executeSql" | "updateFolio" | "transferMongo" | "syncMongo";
   total: number;
   processed: number;
-  status: "Running" | "Completed" | "Error";
+  // [FIX] Added 'Warning' to allowed statuses
+  status: "Running" | "Completed" | "Error" | "Warning";
   message?: string;
   metrics?: {
     inserted?: number;
-    updated?: number; // Kept for backward compatibility
-    folioUpdated?: number; // [NEW]
-    txnUpdated?: number; // [NEW]
+    updated?: number;
+    folioUpdated?: number;
+    txnUpdated?: number;
     synced?: number;
     failed?: number;
   };
