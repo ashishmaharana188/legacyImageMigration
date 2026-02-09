@@ -110,26 +110,53 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     }
   }
 
-  // [FIX] Ensure this block exists and handles both PG and Mongo checks
   if (taskName === "pgSanityCheck" || taskName === "mongoSanityCheck") {
-    const sanityLog = currentLogs
+    // 1. Try to find the LIVE log (from WebSocket)
+    let sanityLog = currentLogs
       .slice()
       .reverse()
       .find((log) => log.id === "LIVE_SANITY_PROGRESS");
 
+    // 2. Fallback: If no LIVE ID, take the latest log
+    if (!sanityLog && currentLogs.length > 0) {
+      sanityLog = currentLogs[currentLogs.length - 1];
+    }
+
     if (sanityLog) {
+      // Calculate fallback metrics if needed
+      let finalMetrics = sanityLog.metrics || {};
+
+      // Mongo specific fallback
+      if (
+        taskName === "mongoSanityCheck" &&
+        finalMetrics.duplicates === undefined
+      ) {
+        const totalDocs = (sanityLog as any).totalDuplicateDocuments;
+        const totalGroups = (sanityLog as any).totalDuplicateGroups;
+        if (totalDocs !== undefined && totalGroups !== undefined) {
+          finalMetrics = {
+            ...finalMetrics,
+            duplicates: totalDocs - totalGroups,
+          };
+        }
+      }
+
       return (
         <ProgressTrackingUI
-          key={sanityLog.id}
+          key={sanityLog.id || "sanity-check-result"}
           displayType="simple"
           title={
             taskName === "pgSanityCheck" ? "PG Data Clean" : "Mongo Data Clean"
           }
           status={sanityLog.status}
-          progress={sanityLog.progress || 0}
-          // [FIX] Map totalDuplicates from log to total prop
-          total={(sanityLog as any).totalDuplicates || 0}
-          metrics={sanityLog.metrics}
+          progress={sanityLog.progress || 100}
+          total={
+            sanityLog.totalDuplicates ||
+            (sanityLog as any).totalDuplicatesFound ||
+            0
+          }
+          // [CRITICAL] Pass the metrics object explicitly
+          metrics={finalMetrics}
           unit="duplicates"
         />
       );
