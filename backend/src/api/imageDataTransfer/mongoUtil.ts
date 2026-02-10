@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import { ImageDataProgress } from "./imageDataTransferTypes";
 import {
   mongoInsertMany,
-  mongoFindOne,
   mongoFind,
 } from "./imageDataTransferCore";
 import { SqlUtil } from "./sqlUtil";
@@ -21,13 +20,24 @@ export class MongoUtil {
     this.model = getMongoModel();
   }
 
+  // [HELPER] Safely convert any value to string to prevent Mongoose CastErrors
+  private safeString(val: any): string {
+    if (val === null || val === undefined) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "object") {
+      // If it's an empty object (which caused your crash), return empty string or stringify
+      if (Object.keys(val).length === 0) return "";
+      return JSON.stringify(val);
+    }
+    return String(val);
+  }
+
   async transferDataFromPostgres(
     clientCode: string | undefined,
     onProgress: (p: ImageDataProgress) => void
   ): Promise<void> {
     try {
-      // [LOG] Added console log
-      logger.info("Starting PG -> Mongo Transfer Logic...", { console: true });
+      logger.info(`Starting PG -> Mongo Transfer (Filter: ${clientCode || "ALL"})...`, { console: true });
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -38,29 +48,32 @@ export class MongoUtil {
         message: "Fetching PG Data...",
       });
 
+      // 1. Resolve Client ID
       let targetClientId: number | undefined = undefined;
       if (clientCode) {
         const clientData = await this.sqlUtil.getClientIdByCode(clientCode);
-        if (!clientData) throw new Error(`Invalid Client Code: ${clientCode}`);
+        if (!clientData) {
+            const msg = `Client Code '${clientCode}' not found in Postgres.`;
+            logger.warn(msg, { console: true });
+            throw new Error(msg);
+        }
         targetClientId = clientData.id;
       }
 
+      // 2. Fetch Data from Postgres
       const pgData = await this.sqlUtil.getAifDocumentDetails(targetClientId);
       const total = pgData.length;
 
-      // [LOG] Added console log for count
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
       if (total === 0) {
-        const msg = "No Data Found in PG (Check if Processed CSV exists)";
-        logger.warn(msg, { console: true }); // [LOG] Log warning to console
         onProgress({
           type: "mongoProgressUpdate",
           subTask: "transferMongo",
           total: 0,
           processed: 0,
-          status: "Error",
-          message: msg,
+          status: "Completed",
+          message: "No Data Found in PG",
         });
         return;
       }
@@ -71,35 +84,51 @@ export class MongoUtil {
         total,
         processed: 0,
         status: "Running",
-        message: `Found ${total} records. Checking Mongo...`,
+        message: `Found ${total} records. Starting Batch Insert...`,
       });
 
       let insertedCount = 0;
-      const batchSize = 500;
+      const batchSize = 1000;
 
+      // 3. Process in Batches
       for (let i = 0; i < total; i += batchSize) {
         const chunk = pgData.slice(i, i + batchSize);
+
+        // [FIX] Sanitize IDs to prevent "Cast to string failed for value {}"
+        const chunkTxnRefs = chunk
+          .map(row => this.safeString(row.transaction_reference_id))
+          .filter(id => id !== ""); // Remove empties to optimize query
+
+        // Bulk Duplicate Check
+        const existingDocs = await mongoFind(this.model, {
+          transactionNo: { $in: chunkTxnRefs },
+          ...(clientCode ? { clientId: clientCode } : {})
+        });
+
+        // Create Set for O(1) lookup
+        const existingSet = new Set<string>(
+            existingDocs.map((doc) => doc.transactionNo)
+        );
+
         const docsToInsert: IAifDocumentInput[] = [];
 
+        // 4. In-Memory Filter & Map
         for (const row of chunk) {
-          const exists = await mongoFindOne(this.model);
+          const safeTxnId = this.safeString(row.transaction_reference_id);
 
-          if (exists) {
-            const isDup = await mongoFind(this.model, {
-              user_attr1: row.user_attr1,
-              user_attr2: row.user_attr2 || "",
-              clientId: row.client_code,
-              documentType: row.document_type,
-            });
-            if (isDup.length > 0) continue;
+          // Check specific Transaction Reference ID
+          if (existingSet.has(safeTxnId)) {
+            continue; // Skip duplicate
           }
 
-          // Map Postgres Row to Mongo Input Interface
           docsToInsert.push({
             activityStatus: row.activity_status || "O",
             applicationId: row.application_id,
             clientId: row.client_code,
-            transactionNo: row.transaction_reference_id,
+
+            // [FIX] Use sanitized string value
+            transactionNo: safeTxnId,
+
             documentType: "APLCN",
             processCode: row.document_process,
             sourceUser: row.source_user || "system",
@@ -114,6 +143,14 @@ export class MongoUtil {
             totalPageCount: row.page_count || row.total_page_count || 0,
             createdOn: new Date().toLocaleString(),
             lastUpdatedOn: new Date().toLocaleString(),
+
+            user_attr0: row.user_attr0 || undefined,
+            user_attr1: row.user_attr1,
+            user_attr2: row.user_attr2 || undefined,
+            user_attr3: row.user_attr3 || undefined,
+            user_attr4: row.user_attr4 || undefined,
+            user_attr5: row.user_attr5 || undefined,
+
             barcode: "",
             branchId: "",
             createdFrom: "",
@@ -124,18 +161,16 @@ export class MongoUtil {
           } as unknown as IAifDocumentInput);
         }
 
+        // 5. Bulk Insert
         if (docsToInsert.length > 0) {
-          await mongoInsertMany(this.model, docsToInsert);
+          await this.model.insertMany(docsToInsert, { ordered: false });
           insertedCount += docsToInsert.length;
         }
 
         const currentProcessed = Math.min(i + batchSize, total);
 
-        // [LOG] Log every 5000 records to console to avoid spamming
         if (currentProcessed % 5000 === 0 || currentProcessed === total) {
-          logger.info(`Processed ${currentProcessed}/${total} records...`, {
-            console: true,
-          });
+           logger.info(`Processed ${currentProcessed}/${total} records...`, { console: true });
         }
 
         onProgress({
@@ -148,9 +183,7 @@ export class MongoUtil {
         });
       }
 
-      logger.info(`Transfer Completed. Total Inserted: ${insertedCount}`, {
-        console: true,
-      });
+      logger.info(`Transfer Completed. Total Inserted: ${insertedCount}`, { console: true });
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -161,10 +194,7 @@ export class MongoUtil {
         metrics: { inserted: insertedCount },
       });
     } catch (err: any) {
-      logger.error("Mongo Transfer Failed", {
-        error: err.message,
-        console: true,
-      });
+      logger.error("Mongo Transfer Failed", { error: err.message, console: true });
       onProgress({
         type: "mongoProgressUpdate",
         subTask: "transferMongo",
@@ -176,6 +206,7 @@ export class MongoUtil {
     }
   }
 
+  // [DISABLED] Sync Logic
   async updateMongoTransactions(
     clientId: number | undefined,
     onProgress: (p: ImageDataProgress) => void
