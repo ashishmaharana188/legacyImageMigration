@@ -40,7 +40,8 @@ export const useMongoTask = () => {
   return {
       loading,
       useCsv,
-    clientCode,
+      clientCode,
+    setUseCsv,
     setClientCode,
     handleTransferToMongo,
   };
