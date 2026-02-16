@@ -1,10 +1,5 @@
 import mongoose from "mongoose";
 import { ImageDataProgress } from "./imageDataTransferTypes";
-import {
-  mongoInsertMany,
-  mongoFindOne,
-  mongoFind,
-} from "./imageDataTransferCore";
 import { SqlUtil } from "./sqlUtil";
 import { createFeatureLogger } from "../../utils/logger";
 import { getMongoModel } from "../../utils/dbConnect";
@@ -21,13 +16,36 @@ export class MongoUtil {
     this.model = getMongoModel();
   }
 
+  // [HELPER] Safely convert value to string to prevent crashes
+  private safeString(val: any): string {
+    if (val === null || val === undefined) return "";
+    if (typeof val === "string") return val;
+    if (typeof val === "object") {
+      if (Object.keys(val).length === 0) return "";
+      return JSON.stringify(val);
+    }
+    return String(val);
+  }
+
+  // [HELPER] Force Dates to String Format (e.g. "16/2/2026, 3:03:12 pm")
+  private formatDate(val: any): string {
+    if (!val) return "";
+    // If it's already a string, return it
+    if (typeof val === "string") return val;
+    // If it's a JS Date object (from Postgres), convert to Locale String
+    if (val instanceof Date) return val.toLocaleString();
+    return String(val);
+  }
+
   async transferDataFromPostgres(
     clientCode: string | undefined,
     onProgress: (p: ImageDataProgress) => void
   ): Promise<void> {
     try {
-      // [LOG] Added console log
-      logger.info("Starting PG -> Mongo Transfer Logic...", { console: true });
+      logger.info(
+        `Starting Direct PG -> Mongo Transfer (Filter: ${clientCode || "ALL"})...`,
+        { console: true }
+      );
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -38,29 +56,32 @@ export class MongoUtil {
         message: "Fetching PG Data...",
       });
 
+      // 1. Resolve Client ID
       let targetClientId: number | undefined = undefined;
       if (clientCode) {
         const clientData = await this.sqlUtil.getClientIdByCode(clientCode);
-        if (!clientData) throw new Error(`Invalid Client Code: ${clientCode}`);
+        if (!clientData) {
+          const msg = `Client Code '${clientCode}' not found in Postgres.`;
+          logger.warn(msg, { console: true });
+          throw new Error(msg);
+        }
         targetClientId = clientData.id;
       }
 
+      // 2. Fetch Data from Postgres
       const pgData = await this.sqlUtil.getAifDocumentDetails(targetClientId);
       const total = pgData.length;
 
-      // [LOG] Added console log for count
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
       if (total === 0) {
-        const msg = "No Data Found in PG (Check if Processed CSV exists)";
-        logger.warn(msg, { console: true }); // [LOG] Log warning to console
         onProgress({
           type: "mongoProgressUpdate",
           subTask: "transferMongo",
           total: 0,
           processed: 0,
-          status: "Error",
-          message: msg,
+          status: "Completed",
+          message: "No Data Found in PG",
         });
         return;
       }
@@ -71,67 +92,86 @@ export class MongoUtil {
         total,
         processed: 0,
         status: "Running",
-        message: `Found ${total} records. Checking Mongo...`,
+        message: `Found ${total} records. Starting Direct Insert...`,
       });
 
       let insertedCount = 0;
       const batchSize = 1000;
 
+      // 3. Process in Batches (DIRECT INSERT MODE)
       for (let i = 0; i < total; i += batchSize) {
         const chunk = pgData.slice(i, i + batchSize);
         const docsToInsert: IAifDocumentInput[] = [];
 
         for (const row of chunk) {
-          const exists = await mongoFindOne(this.model);
+          // [SAFETY] Sanitize key fields
+          const safeTxnId = this.safeString(row.transaction_reference_id);
 
-          if (exists) {
-            const isDup = await mongoFind(this.model, {
-              user_attr1: row.user_attr1,
-              user_attr2: row.user_attr2 || "",
-              clientId: row.client_code,
-              documentType: row.document_type,
-            });
-            if (isDup.length > 0) continue;
-          }
+          // [FIX] Prepare Date Strings
+          // Use Postgres creation_date as the source of truth
+          const creationDateStr = this.formatDate(row.creation_date);
+          // Use Postgres last_update_tms, fallback to creation_date
+          const lastUpdateStr = row.last_update_tms
+            ? this.formatDate(row.last_update_tms)
+            : creationDateStr;
 
-          // Map Postgres Row to Mongo Input Interface
           docsToInsert.push({
             activityStatus: row.activity_status || "O",
             applicationId: row.application_id,
             clientId: row.client_code,
-            transactionNo: row.transaction_reference_id,
+
+            // Mapped Key Field
+            transactionNo: safeTxnId,
+
             documentType: "APLCN",
             processCode: row.document_process,
             sourceUser: row.source_user || "system",
             createdBy: row.created_by,
-            creation_date: row.creation_date,
+
+            // [FIX] Map all Date fields to Strings
+            createdOn: creationDateStr,
+            createdFrom: creationDateStr,
+            workDate: creationDateStr,
+            lastUpdatedOn: creationDateStr,
+            lastUpdatedFrom:  row.created_by || null, // Keeping null if empty as per req, or use ""
+
             currentStage: row.current_stage || 0,
             documentFormat: row.document_format,
             documentPath: row.document_path,
-            documentSize: row.document_size || "0",
+            // [FIX] Ensure Size/Pages are strings
+            documentSize: this.safeString(row.document_size || "0"),
+            totalPageCount: row.page_count
+              ? String(row.page_count)
+              : row.total_page_count
+              ? String(row.total_page_count)
+              : null,
+
             mimeType: row.mime_type,
-            lastUpdatedFrom: row.last_updated_from,
-            totalPageCount: row.page_count || row.total_page_count || 0,
-            createdOn: new Date().toLocaleString(),
-            lastUpdatedOn: new Date().toLocaleString(),
+
+            // User Attributes
+            user_attr0: row.user_attr0 || undefined,
+            user_attr1: row.user_attr1,
+            user_attr2: row.user_attr2 || undefined,
+            user_attr3: row.user_attr3 || undefined,
+            user_attr4: row.user_attr4 || undefined,
+            user_attr5: row.user_attr5 || undefined,
+
             barcode: "",
             branchId: "",
-            createdFrom: row.creation_date,
             lastUpdatedBy: row.last_updated_by || "system",
             transactionCode: row.document_process,
-            transactionType: row.document_type,
-            workDate: row.creation_date,
+            transactionType:  row.document_type,
           } as unknown as IAifDocumentInput);
         }
 
+        // 4. Bulk Insert (No Lookup)
         if (docsToInsert.length > 0) {
-          await mongoInsertMany(this.model, docsToInsert);
+          await this.model.insertMany(docsToInsert, { ordered: false });
           insertedCount += docsToInsert.length;
         }
 
         const currentProcessed = Math.min(i + batchSize, total);
 
-        // [LOG] Log every 5000 records to console to avoid spamming
         if (currentProcessed % 5000 === 0 || currentProcessed === total) {
           logger.info(`Processed ${currentProcessed}/${total} records...`, {
             console: true,
