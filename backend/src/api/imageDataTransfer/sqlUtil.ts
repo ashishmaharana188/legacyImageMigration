@@ -35,7 +35,8 @@ import {
   SQL_STREAM_UPDATE_DETAILS,
   SQL_INSERT_ALL_TEMP_IMAGES,
   SQL_UPDATE_ALL_TRXN_REF,
-  SQL_UPDATE_ALL_FOLIO_ID,
+SQL_UPDATE_ALL_FOLIO_ID,
+  SQL_INDEX_TEMP_TRANSACTION_DATA
 } from "./imageDataTransferCore";
 
 const logger = createFeatureLogger("imageDataTransfer");
@@ -432,7 +433,11 @@ export class SqlUtil {
 
       // Execute Queries that STRICTLY require $1 (Folio Array)
       await pgQuery(client, SQL_INSERT_TEMP_IMAGES_1, [processedFolioNumbers]);
-      logger.info(`Phase 2/2: Staging update folios...`, { console: true });
+        logger.info(`Phase 2/2: Staging update folios...`, { console: true });
+
+        logger.info("Indexing temporary data...", { console: true });
+        await pgQuery(client, SQL_INDEX_TEMP_TRANSACTION_DATA);
+
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",
@@ -442,13 +447,10 @@ export class SqlUtil {
         message: "Phase 2/2: Executing Database Updates...",
       });
 
-      const resF = (await pgQuery(client, SQL_UPDATE_FOLIO_ID, [
-        processedFolioNumbers,
-      ])) as any;
 
-      const resT = (await pgQuery(client, SQL_UPDATE_TRANSACTION_REFERENCE_ID, [
-        processedFolioNumbers,
-      ])) as any;
+
+      const resF = (await pgQuery(client, SQL_UPDATE_FOLIO_ID)) as any;
+            const resT = (await pgQuery(client, SQL_UPDATE_TRANSACTION_REFERENCE_ID)) as any;
 
       await pgCommit(client);
 

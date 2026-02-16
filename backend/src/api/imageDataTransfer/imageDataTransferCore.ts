@@ -40,14 +40,17 @@ export const SQL_INSERT_TEMP_TRANSACTION_DATA = `INSERT INTO temp_transaction_da
 
 export const SQL_UPDATE_FOLIO_ID = `
 WITH client_folio AS (
-  SELECT folio_number, id, client_id, (SELECT cm.client_code FROM fund.client_master cm WHERE cm.id = client_id) AS client_code
+  SELECT folio_number, id, client_id
   FROM investor.aif_folio
 )
-UPDATE investor.aif_document_details AS d SET folio_id = cf.id FROM client_folio AS cf
-WHERE d.client_id = cf.client_id AND d.user_attr2 = cf.folio_number AND d.created_by = 'system'
-  AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno)
-  AND d.user_attr2 = ANY($1::text[])
-RETURNING d.user_attr1, d.user_attr2;
+UPDATE investor.aif_document_details AS d
+SET folio_id = cf.id
+FROM client_folio AS cf, temp_transaction_data AS ttd
+WHERE d.client_id = cf.client_id
+  AND d.user_attr2 = cf.folio_number
+  AND d.user_attr1 = ttd.id_ihno      -- Match IHNO from CSV
+  AND d.user_attr2 = ttd.id_acno      -- Match Folio from CSV
+  AND d.created_by = 'system';
 `;
 
 export const SQL_UPDATE_TRANSACTION_REFERENCE_ID = `
@@ -55,15 +58,19 @@ UPDATE investor.aif_document_details AS d
 SET
     transaction_reference_id = ts.transaction_number,
     folio_id = ts.folio_id
-FROM trxn.aif_transaction_summary AS ts
+FROM trxn.aif_transaction_summary AS ts, temp_transaction_data AS ttd
 WHERE ts.client_id = d.client_id
   AND ts.user_attr5 = d.user_attr1
+  AND d.user_attr1 = ttd.id_ihno      -- Match IHNO from CSV
+  AND d.user_attr2 = ttd.id_acno      -- Match Folio from CSV
   AND d.created_by = 'system'
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
-  AND ts.created_by = 'aifappendersvc'
-  AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno)
-  AND d.user_attr2 = ANY($1::text[])
-RETURNING d.user_attr1, d.user_attr2;
+  AND ts.created_by = 'aifappendersvc';
+`;
+
+export const SQL_INDEX_TEMP_TRANSACTION_DATA = `
+  CREATE INDEX IF NOT EXISTS idx_temp_data_composite
+  ON temp_transaction_data (id_ihno, id_acno);
 `;
 
 // [NEW] Update All Queries (As requested)
