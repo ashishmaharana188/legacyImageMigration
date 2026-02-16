@@ -35,34 +35,41 @@ WHERE fo.folio_number = ANY($1::text[])
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
 
+export const SQL_INSERT_TEMP_IMAGES_FROM_CSV_KEYS = `
+INSERT INTO public.temp_images_1 (client_code, folio_number, IHNO)
+SELECT DISTINCT
+    cm.client_code,
+    fo.folio_number,
+    ttd.id_ihno -- Use the CSV's IHNO directly
+FROM temp_transaction_data ttd
+JOIN investor.aif_folio fo ON fo.folio_number = ttd.id_acno
+JOIN fund.client_master cm ON cm.id = fo.client_id;
+`;
+
 export const SQL_CREATE_TEMP_TRANSACTION_DATA = `CREATE TEMPORARY TABLE temp_transaction_data (id_ihno TEXT NOT NULL, id_acno TEXT NOT NULL) ON COMMIT DROP;`;
 export const SQL_INSERT_TEMP_TRANSACTION_DATA = `INSERT INTO temp_transaction_data (id_ihno, id_acno) VALUES %VALUES%;`;
 
 export const SQL_UPDATE_FOLIO_ID = `
-WITH client_folio AS (
-  SELECT folio_number, id, client_id
-  FROM investor.aif_folio
-)
 UPDATE investor.aif_document_details AS d
-SET folio_id = cf.id
-FROM client_folio AS cf, temp_transaction_data AS ttd
-WHERE d.client_id = cf.client_id
-  AND d.user_attr2 = cf.folio_number
-  AND d.user_attr1 = ttd.id_ihno      -- Match IHNO from CSV
-  AND d.user_attr2 = ttd.id_acno      -- Match Folio from CSV
+SET folio_id = f.id
+FROM temp_images_1 ti
+JOIN investor.aif_folio f ON f.folio_number = ti.folio_number
+JOIN fund.client_master cm ON f.client_id = cm.id AND cm.client_code = ti.client_code
+WHERE d.user_attr2 = ti.folio_number
+  AND d.user_attr1 = ti.ihno
+  AND d.client_id = f.client_id
   AND d.created_by = 'system';
 `;
 
 export const SQL_UPDATE_TRANSACTION_REFERENCE_ID = `
 UPDATE investor.aif_document_details AS d
-SET
-    transaction_reference_id = ts.transaction_number,
-    folio_id = ts.folio_id
-FROM trxn.aif_transaction_summary AS ts, temp_transaction_data AS ttd
-WHERE ts.client_id = d.client_id
-  AND ts.user_attr5 = d.user_attr1
-  AND d.user_attr1 = ttd.id_ihno      -- Match IHNO from CSV
-  AND d.user_attr2 = ttd.id_acno      -- Match Folio from CSV
+SET transaction_reference_id = ts.transaction_number
+FROM trxn.aif_transaction_summary AS ts, temp_images_1 ti
+WHERE d.client_id = ts.client_id
+  AND d.folio_id = ts.folio_id        -- [CRITICAL] Fast Integer Index Join
+  AND d.user_attr1 = ts.user_attr5
+  AND d.user_attr1 = ti.ihno          -- Filter scope by CSV
+  AND d.user_attr2 = ti.folio_number  -- Filter scope by CSV
   AND d.created_by = 'system'
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
   AND ts.created_by = 'aifappendersvc';
