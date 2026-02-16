@@ -44,10 +44,16 @@ class ImageDataTransferController {
   }
 
   async transferDataFromPostgres(req: Request, res: Response) {
-    logger.info("API: Starting Mongo Transfer (Async)", { console: true });
-    this.wrapper.transferDataFromPostgres(req.query.clientCode as string);
-    res.status(202).json({ message: "Transfer Started" });
-  }
+      logger.info("API: Starting Mongo Transfer (Async)", { console: true });
+
+      // [UPDATED] Extract params from body (preferred for POST) or query
+      const clientCode = req.body.clientCode || (req.query.clientCode as string);
+      // Default to true if not provided to maintain backward compatibility
+      const useCsv = req.body.useCsv !== undefined ? req.body.useCsv : true;
+
+      this.wrapper.transferDataFromPostgres(clientCode, useCsv);
+      res.status(202).json({ message: "Transfer Started" });
+    }
 
   async updateMongoTransactions(req: Request, res: Response) {
     logger.info("API: Starting Mongo Sync (Async) - [DISABLED]", {

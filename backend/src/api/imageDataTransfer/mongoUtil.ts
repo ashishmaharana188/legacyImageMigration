@@ -39,13 +39,16 @@ export class MongoUtil {
 
   async transferDataFromPostgres(
     clientCode: string | undefined,
-    onProgress: (p: ImageDataProgress) => void
+      onProgress: (p: ImageDataProgress) => void,
+    useCsv: boolean = true
   ): Promise<void> {
-    try {
-      logger.info(
-        `Starting Direct PG -> Mongo Transfer (Filter: ${clientCode || "ALL"})...`,
-        { console: true }
-      );
+
+      try {
+        const modeStr = useCsv ? "CSV Filter" : "Direct Client Filter";
+        logger.info(
+                `Starting PG -> Mongo Transfer [Mode: ${modeStr}] (Client: ${clientCode || "ALL"})...`,
+                { console: true }
+              );
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -74,14 +77,18 @@ export class MongoUtil {
 
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
-      if (total === 0) {
+        if (total === 0) {
+            const msg = useCsv
+                      ? "No Data Found in PG (Check if Processed CSV exists)"
+                      : `No Data Found in PG for Client Code ${clientCode}`;
+
         onProgress({
           type: "mongoProgressUpdate",
           subTask: "transferMongo",
           total: 0,
           processed: 0,
           status: "Completed",
-          message: "No Data Found in PG",
+          message:msg,
         });
         return;
       }

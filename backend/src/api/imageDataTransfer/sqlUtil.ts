@@ -30,7 +30,8 @@ import {
   SQL_UPDATE_FOLIO_ID,
   SQL_UPDATE_TRANSACTION_REFERENCE_ID,
   SQL_SELECT_CLIENT_ID_BY_CODE,
-  SQL_SELECT_AIF_DOCUMENT_DETAILS,
+    SQL_SELECT_AIF_DOCUMENT_DETAILS,
+  SQL_SELECT_AIF_DOCUMENT_DETAILS_BY_CLIENT,
   SQL_STREAM_UPDATE_DETAILS,
   SQL_INSERT_ALL_TEMP_IMAGES,
   SQL_UPDATE_ALL_TRXN_REF,
@@ -604,31 +605,44 @@ export class SqlUtil {
   }
 
   public async getAifDocumentDetails(
-    clientId?: number
-  ): Promise<AifDocumentDetail[]> {
-    // [RESTORED] Now this call will work because the method is defined above
-    const folioNumbers = await this.getProcessedFolioNumbers();
-    if (folioNumbers.length === 0) return [];
-    let client = await (await this.getPool()).connect();
-    try {
-      const queryParams: unknown[] = [folioNumbers];
-      let clientIdClause = clientId
-        ? ` AND add.client_id = $${queryParams.length + 1}`
-        : "";
-      if (clientId) queryParams.push(clientId);
-      const res = await pgQuery(
-        client,
-        SQL_SELECT_AIF_DOCUMENT_DETAILS.replace(
-          "%CLIENT_ID_CLAUSE%",
-          clientIdClause
-        ),
-        queryParams
-      );
-      return res.rows as AifDocumentDetail[];
-    } finally {
-      client.release();
+      clientId?: number,
+      requireCsv: boolean = true
+    ): Promise<AifDocumentDetail[]> {
+      let client = await (await this.getPool()).connect();
+      try {
+        // MODE 1: DIRECT INSERT (By Client ID)
+        if (!requireCsv) {
+          if (!clientId) {
+            throw new Error("Safety Error: Client Code is MANDATORY for Direct Insert mode.");
+          }
+          logger.info(`Executing Direct Query for Client ID: ${clientId}`, { console: true });
+          const res = await pgQuery(client, SQL_SELECT_AIF_DOCUMENT_DETAILS_BY_CLIENT, [clientId]);
+          return res.rows as AifDocumentDetail[];
+        }
+
+        // MODE 2: CSV FILTERED INSERT (Default)
+        const folioNumbers = await this.getProcessedFolioNumbers();
+        if (folioNumbers.length === 0) return [];
+
+        const queryParams: unknown[] = [folioNumbers];
+        let clientIdClause = clientId
+          ? ` AND add.client_id = $${queryParams.length + 1}`
+          : "";
+        if (clientId) queryParams.push(clientId);
+
+        const res = await pgQuery(
+          client,
+          SQL_SELECT_AIF_DOCUMENT_DETAILS.replace(
+            "%CLIENT_ID_CLAUSE%",
+            clientIdClause
+          ),
+          queryParams
+        );
+        return res.rows as AifDocumentDetail[];
+      } finally {
+        client.release();
+      }
     }
-  }
 
   public async streamUpdateDetails(
     batchSize: number,

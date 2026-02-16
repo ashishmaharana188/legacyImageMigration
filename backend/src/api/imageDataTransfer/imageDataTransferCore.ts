@@ -116,6 +116,14 @@ FROM investor.aif_document_details add
 JOIN fund.client_master cm ON add.client_id = cm.id
 WHERE add.user_attr2 = ANY($1::text[]) %CLIENT_ID_CLAUSE%;
 `;
+
+export const SQL_SELECT_AIF_DOCUMENT_DETAILS_BY_CLIENT = `
+SELECT add.*, cm.client_code
+FROM investor.aif_document_details add
+JOIN fund.client_master cm ON add.client_id = cm.id
+WHERE add.client_id = $1;
+`;
+
 export const SQL_STREAM_UPDATE_DETAILS = `
 SELECT cm.client_code, add.user_attr1, add.transaction_reference_id
 FROM investor.aif_document_details add
