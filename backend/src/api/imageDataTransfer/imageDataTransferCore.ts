@@ -1,5 +1,5 @@
 import { PoolClient } from "pg";
-import mongoose, { PipelineStage, BulkWriteOperation } from "mongoose";
+import mongoose, { PipelineStage, AnyBulkWriteOperation } from "mongoose";
 import {
   IAifDocument,
   IAifDocumentInput,
@@ -30,8 +30,8 @@ SELECT DISTINCT cm.client_code, fo.folio_number, ts.user_attr5 AS ihno
 FROM trxn.aif_transaction_summary ts
 JOIN investor.aif_folio fo ON ts.client_id = fo.client_id AND ts.folio_id = fo.id
 JOIN fund.client_master cm ON cm.id = fo.client_id
-WHERE fo.folio_number = ANY($1::text[]) 
-  AND ts.created_by = 'aifappendersvc' 
+WHERE fo.folio_number = ANY($1::text[])
+  AND ts.created_by = 'aifappendersvc'
   AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL);
 `;
 
@@ -51,15 +51,15 @@ RETURNING d.user_attr1, d.user_attr2;
 `;
 
 export const SQL_UPDATE_TRANSACTION_REFERENCE_ID = `
-UPDATE investor.aif_document_details AS d 
-SET 
+UPDATE investor.aif_document_details AS d
+SET
     transaction_reference_id = ts.transaction_number,
-    folio_id = ts.folio_id 
+    folio_id = ts.folio_id
 FROM trxn.aif_transaction_summary AS ts
-WHERE ts.client_id = d.client_id 
-  AND ts.user_attr5 = d.user_attr1 
-  AND d.created_by = 'system' 
-  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL) 
+WHERE ts.client_id = d.client_id
+  AND ts.user_attr5 = d.user_attr1
+  AND d.created_by = 'system'
+  AND (ts.trxn_status != 'R' OR ts.trxn_status IS NULL)
   AND ts.created_by = 'aifappendersvc'
   AND EXISTS (SELECT 1 FROM temp_transaction_data AS ttd WHERE d.user_attr1 = ttd.id_ihno AND d.user_attr2 = ttd.id_acno)
   AND d.user_attr2 = ANY($1::text[])
@@ -139,7 +139,7 @@ export async function mongoInsertMany(
 
 export async function mongoBulkWrite(
   model: mongoose.Model<IAifDocument>,
-  operations: BulkWriteOperation<IAifDocument>[]
+  operations: AnyBulkWriteOperation<IAifDocument>[]
 ): Promise<IBulkWriteResult> {
   return model.bulkWrite(operations) as unknown as IBulkWriteResult;
 }

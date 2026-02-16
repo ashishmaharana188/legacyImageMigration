@@ -431,7 +431,7 @@ export class SqlUtil {
 
       // Execute Queries that STRICTLY require $1 (Folio Array)
       await pgQuery(client, SQL_INSERT_TEMP_IMAGES_1, [processedFolioNumbers]);
-
+      logger.info(`Phase 2/2: Staging update folios...`, { console: true });
       onProgress({
         type: "sqlProgressUpdate",
         subTask: "updateFolio",

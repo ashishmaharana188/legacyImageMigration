@@ -75,7 +75,7 @@ export class MongoUtil {
       });
 
       let insertedCount = 0;
-      const batchSize = 500;
+      const batchSize = 1000;
 
       for (let i = 0; i < total; i += batchSize) {
         const chunk = pgData.slice(i, i + batchSize);
@@ -116,11 +116,11 @@ export class MongoUtil {
             lastUpdatedOn: new Date().toLocaleString(),
             barcode: "",
             branchId: "",
-            createdFrom: "",
+            createdFrom: row.creation_date,
             lastUpdatedBy: row.last_updated_by || "system",
-            transactionCode: "",
-            transactionType: "",
-            workDate: "",
+            transactionCode: row.document_process,
+            transactionType: row.document_type,
+            workDate: row.creation_date,
           } as unknown as IAifDocumentInput);
         }
 
