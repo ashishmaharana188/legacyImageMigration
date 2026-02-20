@@ -1,5 +1,3 @@
-// backend/src/api/dataClean/dataCleanSqlUtil.ts
-
 import { Pool, PoolClient } from "pg";
 import { createFeatureLogger } from "../../utils/logger";
 import {
@@ -136,12 +134,11 @@ export class DuplicateProcessorSqlUtil {
 
         await pgRollback(client);
 
-        // [METRICS CALCULATION ONLY - NO ROW STORAGE]
+        // [METRICS CALCULATION - FIXED TO MATCH DATABASE.TS LOGIC]
         let countImperfectVsPerfect = 0;
         let countOlderVersions = 0;
         let countOlderImperfects = 0;
 
-        // Iterate to count, but do NOT map to a huge array
         for (const row of dryRunRes.rows as InternalDryRunRow[]) {
           const isPerfectRow = !!(
             row.folio_id &&
@@ -150,20 +147,31 @@ export class DuplicateProcessorSqlUtil {
             row.user_attr2
           );
 
-          if (row.perfect_rows_in_group > 0 && !isPerfectRow) {
-            countImperfectVsPerfect++; // Metric 1
-          } else if (row.rn_desc > 1) {
-            if (isPerfectRow) {
-              countOlderVersions++; // Metric 2
+          // Rule 1: Group has at least one perfect row. Delete the imperfects.
+          if (row.perfect_rows_in_group > 0) {
+            if (!isPerfectRow) {
+              countImperfectVsPerfect++; // "Imperfect row in group with perfect row"
             } else {
-              countOlderImperfects++; // Metric 3 (Partial)
+              // It is a perfect row.
+              // Check if the group is ALL perfect rows (Pure Perfect Group)
+              if (row.perfect_rows_in_group === row.total_rows_in_group) {
+                // Rule 2: In an all-perfect group, keep newest, delete older.
+                if (row.rn_desc > 1) {
+                  countOlderVersions++;
+                }
+              }
+              // If group is Mixed (Perfect + Imperfect), we KEEP the perfect rows.
+              // So we do NOT increment countOlderVersions here.
             }
           }
+          // Rule 3: Group has NO perfect rows (All Imperfect).
+          else if (row.total_rows_in_group > 1) {
+             // Keep newest, delete older.
+             if (row.rn_desc > 1) {
+               countOlderImperfects++;
+             }
+          }
         }
-
-        // Add extra imperfects found by the specific query
-        const extraImperfects = imperfectRes.rows.length;
-        countOlderImperfects += extraImperfects;
 
         const totalDuplicates =
           countImperfectVsPerfect + countOlderVersions + countOlderImperfects;
@@ -178,7 +186,6 @@ export class DuplicateProcessorSqlUtil {
           dryRun: true,
           cutoffTms,
           totalDuplicatesFound: totalDuplicates,
-          // [STANDARD] Return specific metrics
           metrics: {
             imperfectVsPerfect: countImperfectVsPerfect,
             olderVersions: countOlderVersions,

@@ -97,7 +97,8 @@ groups_where_all_are_perfect AS (
     JOIN keys_after_cutoff kac ON d.client_id = kac.client_id AND %KEY_EXPR_D% = kac.k
     WHERE d.created_by = 'system' %CLIENT_FILTER_D%
     GROUP BY d.client_id, %KEY_EXPR_D%
-    HAVING COUNT(*) > 1 AND COUNT(CASE WHEN d.folio_id IS NULL OR d.transaction_reference_id IS NOT NULL OR d.user_attr1 IS NULL OR d.user_attr2 IS NULL OR d.client_id IS NULL THEN 1 END) = 0
+    -- [FIX] transaction_reference_id IS NULL (was IS NOT NULL)
+    HAVING COUNT(*) > 1 AND COUNT(CASE WHEN d.folio_id IS NULL OR d.transaction_reference_id IS NULL OR d.user_attr1 IS NULL OR d.user_attr2 IS NULL OR d.client_id IS NULL THEN 1 END) = 0
 ),
 ids_to_delete AS (
     SELECT id

@@ -1,9 +1,5 @@
 import mongoose from "mongoose";
 import { ImageDataProgress } from "./imageDataTransferTypes";
-import {
-  mongoInsertMany,
-  mongoFind,
-} from "./imageDataTransferCore";
 import { SqlUtil } from "./sqlUtil";
 import { createFeatureLogger } from "../../utils/logger";
 import { getMongoModel } from "../../utils/dbConnect";
@@ -20,24 +16,40 @@ export class MongoUtil {
     this.model = getMongoModel();
   }
 
-  // [HELPER] Safely convert any value to string to prevent Mongoose CastErrors
+  // [HELPER] Safely convert value to string to prevent crashes
   private safeString(val: any): string {
     if (val === null || val === undefined) return "";
     if (typeof val === "string") return val;
     if (typeof val === "object") {
-      // If it's an empty object (which caused your crash), return empty string or stringify
       if (Object.keys(val).length === 0) return "";
       return JSON.stringify(val);
     }
     return String(val);
   }
 
+  // [HELPER] Force Dates to String Format (e.g. "16/2/2026, 3:03:12 pm")
+  private formatDate(val: any): string {
+    if (!val) return "";
+    // If it's already a string, return it
+    if (typeof val === "string") return val;
+    // If it's a JS Date object (from Postgres), convert to Locale String
+    if (val instanceof Date) return val.toLocaleString();
+    return String(val);
+  }
+
   async transferDataFromPostgres(
     clientCode: string | undefined,
-    onProgress: (p: ImageDataProgress) => void
+    onProgress: (p: ImageDataProgress) => void,
+    useCsv: boolean = true
   ): Promise<void> {
     try {
-      logger.info(`Starting PG -> Mongo Transfer (Filter: ${clientCode || "ALL"})...`, { console: true });
+      const modeStr = useCsv ? "CSV Filter" : "Direct Client Filter";
+      logger.info(
+        `Starting PG -> Mongo Transfer [Mode: ${modeStr}] (Client: ${
+          clientCode || "ALL"
+        })...`,
+        { console: true }
+      );
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -53,9 +65,9 @@ export class MongoUtil {
       if (clientCode) {
         const clientData = await this.sqlUtil.getClientIdByCode(clientCode);
         if (!clientData) {
-            const msg = `Client Code '${clientCode}' not found in Postgres.`;
-            logger.warn(msg, { console: true });
-            throw new Error(msg);
+          const msg = `Client Code '${clientCode}' not found in Postgres.`;
+          logger.warn(msg, { console: true });
+          throw new Error(msg);
         }
         targetClientId = clientData.id;
       }
@@ -67,13 +79,17 @@ export class MongoUtil {
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
       if (total === 0) {
+        const msg = useCsv
+          ? "No Data Found in PG (Check if Processed CSV exists)"
+          : `No Data Found in PG for Client Code ${clientCode}`;
+
         onProgress({
           type: "mongoProgressUpdate",
           subTask: "transferMongo",
           total: 0,
           processed: 0,
           status: "Completed",
-          message: "No Data Found in PG",
+          message: msg,
         });
         return;
       }
@@ -84,66 +100,81 @@ export class MongoUtil {
         total,
         processed: 0,
         status: "Running",
-        message: `Found ${total} records. Starting Batch Insert...`,
+        message: `Found ${total} records. Starting Direct Insert...`,
       });
 
       let insertedCount = 0;
       const batchSize = 1000;
 
-      // 3. Process in Batches
+      // 3. Process in Batches (DIRECT INSERT MODE)
       for (let i = 0; i < total; i += batchSize) {
         const chunk = pgData.slice(i, i + batchSize);
 
         // [FIX] Sanitize IDs to prevent "Cast to string failed for value {}"
         const chunkTxnRefs = chunk
-          .map(row => this.safeString(row.transaction_reference_id))
-          .filter(id => id !== ""); // Remove empties to optimize query
+          .map((row) => this.safeString(row.transaction_reference_id))
+          .filter((id) => id !== ""); // Remove empties to optimize query
 
         // Bulk Duplicate Check
         const existingDocs = await mongoFind(this.model, {
           transactionNo: { $in: chunkTxnRefs },
-          ...(clientCode ? { clientId: clientCode } : {})
+          ...(clientCode ? { clientId: clientCode } : {}),
         });
 
         // Create Set for O(1) lookup
         const existingSet = new Set<string>(
-            existingDocs.map((doc) => doc.transactionNo)
+          existingDocs.map((doc) => doc.transactionNo)
         );
 
         const docsToInsert: IAifDocumentInput[] = [];
 
         // 4. In-Memory Filter & Map
         for (const row of chunk) {
+          // [SAFETY] Sanitize key fields
           const safeTxnId = this.safeString(row.transaction_reference_id);
 
-          // Check specific Transaction Reference ID
-          if (existingSet.has(safeTxnId)) {
-            continue; // Skip duplicate
-          }
+          // [FIX] Prepare Date Strings
+          // Use Postgres creation_date as the source of truth
+          const creationDateStr = this.formatDate(row.creation_date);
+          // Use Postgres last_update_tms, fallback to creation_date
+          const lastUpdateStr = row.last_update_tms
+            ? this.formatDate(row.last_update_tms)
+            : creationDateStr;
 
           docsToInsert.push({
             activityStatus: row.activity_status || "O",
             applicationId: row.application_id,
             clientId: row.client_code,
 
-            // [FIX] Use sanitized string value
+            // Mapped Key Field
             transactionNo: safeTxnId,
 
             documentType: "APLCN",
             processCode: row.document_process,
             sourceUser: row.source_user || "system",
             createdBy: row.created_by,
-            creation_date: row.creation_date,
+
+            // [FIX] Map all Date fields to Strings
+            createdOn: creationDateStr,
+            createdFrom: creationDateStr,
+            workDate: creationDateStr,
+            lastUpdatedOn: creationDateStr,
+            lastUpdatedFrom: row.created_by || null, // Keeping null if empty as per req, or use ""
+
             currentStage: row.current_stage || 0,
             documentFormat: row.document_format,
             documentPath: row.document_path,
-            documentSize: row.document_size || "0",
-            mimeType: row.mime_type,
-            lastUpdatedFrom: row.last_updated_from,
-            totalPageCount: row.page_count || row.total_page_count || 0,
-            createdOn: new Date().toLocaleString(),
-            lastUpdatedOn: new Date().toLocaleString(),
+            // [FIX] Ensure Size/Pages are strings
+            documentSize: this.safeString(row.document_size || "0"),
+            totalPageCount: row.page_count
+              ? String(row.page_count)
+              : row.total_page_count
+              ? String(row.total_page_count)
+              : null,
 
+            mimeType: row.mime_type,
+
+            // User Attributes
             user_attr0: row.user_attr0 || undefined,
             user_attr1: row.user_attr1,
             user_attr2: row.user_attr2 || undefined,
@@ -153,15 +184,13 @@ export class MongoUtil {
 
             barcode: "",
             branchId: "",
-            createdFrom: "",
             lastUpdatedBy: row.last_updated_by || "system",
-            transactionCode: "",
-            transactionType: "",
-            workDate: "",
+            transactionCode: row.document_process,
+            transactionType: row.document_type,
           } as unknown as IAifDocumentInput);
         }
 
-        // 5. Bulk Insert
+        // 4. Bulk Insert (No Lookup)
         if (docsToInsert.length > 0) {
           await this.model.insertMany(docsToInsert, { ordered: false });
           insertedCount += docsToInsert.length;
@@ -170,7 +199,9 @@ export class MongoUtil {
         const currentProcessed = Math.min(i + batchSize, total);
 
         if (currentProcessed % 5000 === 0 || currentProcessed === total) {
-           logger.info(`Processed ${currentProcessed}/${total} records...`, { console: true });
+          logger.info(`Processed ${currentProcessed}/${total} records...`, {
+            console: true,
+          });
         }
 
         onProgress({
@@ -183,7 +214,9 @@ export class MongoUtil {
         });
       }
 
-      logger.info(`Transfer Completed. Total Inserted: ${insertedCount}`, { console: true });
+      logger.info(`Transfer Completed. Total Inserted: ${insertedCount}`, {
+        console: true,
+      });
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -194,7 +227,10 @@ export class MongoUtil {
         metrics: { inserted: insertedCount },
       });
     } catch (err: any) {
-      logger.error("Mongo Transfer Failed", { error: err.message, console: true });
+      logger.error("Mongo Transfer Failed", {
+        error: err.message,
+        console: true,
+      });
       onProgress({
         type: "mongoProgressUpdate",
         subTask: "transferMongo",

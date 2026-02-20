@@ -58,18 +58,21 @@ export class ImageDataTransferWrapper {
     }
   }
 
-  public async transferDataFromPostgres(clientCode?: string): Promise<void> {
-    this.mongoUtil
-      .transferDataFromPostgres(clientCode, (progress) => {
-        broadcast(JSON.stringify(progress));
-      })
-      .catch((err) => {
-        logger.error("Background Mongo Transfer Error", {
-          error: err,
-          console: true,
+  public async transferDataFromPostgres(
+      clientCode?: string,
+      useCsv: boolean = true
+    ): Promise<void> {
+      this.mongoUtil
+        .transferDataFromPostgres(clientCode, (progress) => {
+          broadcast(JSON.stringify(progress));
+        }, useCsv)
+        .catch((err) => {
+          logger.error("Background Mongo Transfer Error", {
+            error: err,
+            console: true,
+          });
         });
-      });
-  }
+    }
 
   public async updateMongoTransactions(clientId?: number): Promise<void> {
     this.mongoUtil

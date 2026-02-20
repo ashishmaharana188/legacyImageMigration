@@ -4,7 +4,8 @@ import { useTaskLog } from "../../contexts/TaskLogContext";
 
 export const useMongoTask = () => {
   const [loading, setLoading] = useState(false);
-  const [clientCode, setClientCode] = useState("");
+    const [clientCode, setClientCode] = useState("");
+    const [useCsv, setUseCsv] = useState(true);
   const { updateTaskLog } = useTaskLog();
 
   // [CLEANUP] Removed updateAllMongo state and handleUpdateMongoTransactions
@@ -21,7 +22,7 @@ export const useMongoTask = () => {
     });
 
     try {
-      const data = await transferDataFromPostgresService(code);
+      const data = await transferDataFromPostgresService(code,useCsv);
       // Success is mostly handled via WebSocket, but we log the final response here
       console.log("Transfer Initiated", data);
     } catch (err: any) {
@@ -37,8 +38,10 @@ export const useMongoTask = () => {
   };
 
   return {
-    loading,
-    clientCode,
+      loading,
+      useCsv,
+      clientCode,
+    setUseCsv,
     setClientCode,
     handleTransferToMongo,
   };

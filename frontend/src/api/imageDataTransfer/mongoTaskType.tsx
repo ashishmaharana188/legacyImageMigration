@@ -4,7 +4,9 @@ export interface MongoTaskUIProps {
   loading: boolean;
 
   clientCode: string;
-  setClientCode: (code: string) => void;
+    setClientCode: (code: string) => void;
+    useCsv: boolean;
+      setUseCsv: (val: boolean) => void;
 
   // [FIX] This matches the hook signature
   handleTransferToMongo: (clientCode: string) => Promise<void>;
