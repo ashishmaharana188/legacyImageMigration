@@ -41,30 +41,35 @@ export const useSplitProcessorHook = ({
   };
 
   const handleSplitFilesWithMuPDF = async () => {
-    // 1. Clear old logs
-    clearTaskLog("splitFiles");
+    try {
+      // 1. Clear old logs
+      clearTaskLog("splitFiles");
 
-    // 2. [FIX] Manually initialize the state immediately (Optimistic UI)
-    updateTaskLog("splitFiles", {
-      type: "splitProgressUpdate",
-      status: "Starting (MuPDF)...",
-      totalExpectedPagesFromCsv: 0,
-      totalSplitFilesGenerated: 0,
-      splitErrors: 0,
-      progress: 0,
-      message: "Initiating MuPDF split process...",
-      timestamp: new Date().toISOString(),
-    });
+      // 2. [FIX] Manually initialize the state immediately (Optimistic UI)
+      updateTaskLog("splitFiles", {
+        type: "splitProgressUpdate",
+        status: "Starting (MuPDF)...",
+        totalExpectedPagesFromCsv: 0,
+        totalSplitFilesGenerated: 0,
+        splitErrors: 0,
+        progress: 0,
+        message: "Initiating MuPDF split process...",
+        timestamp: new Date().toISOString(),
+      });
 
-    // 3. Call Utility with ALL required arguments
-    await utilHandleSplitFilesWithMuPDF(
-      updateTaskLog,
-      clearTaskLog,
-      setSplitMessage,
-      setLoading,
-      setIsUploading,
-      setUploadStatuses
-    );
+      // 3. Call Utility with ALL required arguments
+      await utilHandleSplitFilesWithMuPDF(
+        updateTaskLog,
+        clearTaskLog,
+        setSplitMessage,
+        setLoading,
+        setIsUploading,
+        setUploadStatuses
+      );
+    } catch (error) {
+      console.error("Critical Error Before API Call:", error);
+      setSplitMessage("Critical error occured");
+    }
   };
 
   return {

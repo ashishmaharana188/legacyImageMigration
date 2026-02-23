@@ -14,9 +14,6 @@ export const splitFileWithMuPDF = async (
   endpoint: string
 ): Promise<SplitFileResponse> => {
   await configPromise; // Ensure configuration is loaded
-  const res = await axios.post<SplitFileResponse>(
-    `${API_BASE_URL}/${endpoint}`,
-    {}
-  );
+  const res = await apiClient.post<SplitFileResponse>(`/${endpoint}`, {});
   return res.data;
 };
