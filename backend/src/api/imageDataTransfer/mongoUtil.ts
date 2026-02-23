@@ -4,6 +4,7 @@ import { SqlUtil } from "./sqlUtil";
 import { createFeatureLogger } from "../../utils/logger";
 import { getMongoModel } from "../../utils/dbConnect";
 import { IAifDocument, IAifDocumentInput } from "./imageDataTransferTypes";
+import { mongoFind } from "./imageDataTransferCore";
 
 const logger = createFeatureLogger("imageDataTransfer");
 

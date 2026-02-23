@@ -54,6 +54,7 @@ export interface InternalDryRunRow {
   transaction_reference_id?: string;
   rn_desc: number;
   perfect_rows_in_group: number;
+  total_rows_in_group: number;
 }
 
 export interface ImperfectDuplicateRow {
