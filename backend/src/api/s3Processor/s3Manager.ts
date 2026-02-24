@@ -14,7 +14,7 @@ import {
   AWS_SECRET_ACCESS_KEY,
   AWS_SESSION_TOKEN,
   AWS_DEFAULT_REGION,
-} from "../../../utils/s3Config";
+} from "../../utils/s3Config";
 import { createFeatureLogger } from "../../utils/logger";
 
 // [ALIGNMENT] Initialize standard logger for the "s3Processor" feature
