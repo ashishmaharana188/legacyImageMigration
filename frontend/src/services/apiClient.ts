@@ -3,7 +3,7 @@ import axios from "axios";
 
 // 1. Create a shared Axios instance with a safe default
 const apiClient = axios.create({
-  baseURL: process.env.APP_BASE_URL || "http://localhost:3000",
+  baseURL: import.meta.env.VITE_APP_BASE_URL || "http://localhost:3000",
 });
 
 // 2. Export a SINGLE promise that all services will wait for
