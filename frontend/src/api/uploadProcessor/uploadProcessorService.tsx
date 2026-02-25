@@ -1,6 +1,6 @@
 import axios from "axios";
 import { FileResponse } from "./uploadProcessorType";
-
+import apiClient from "../../services/apiClient"
 export let API_BASE_URL: string = "http://localhost:3000";
 const initConfiguration = async () => {
   try {
@@ -71,5 +71,15 @@ export const runFallbackCheck = async (
       },
     }
   );
+  return res.data;
+};
+
+export const executeAthenaQuery = async (
+  query: string,
+  clientDirName: string = "default_client"
+): Promise<{ statusCode: number; csvData: string }> => {
+  await configPromise;
+  // If you switched to using apiClient directly as discussed earlier:
+  const res = await apiClient.post(`/run-athena`, { query, clientDirName });
   return res.data;
 };

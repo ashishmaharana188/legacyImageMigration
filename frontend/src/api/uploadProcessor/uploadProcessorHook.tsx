@@ -2,7 +2,8 @@ import { useState, useEffect } from "react";
 import {
   handleFileChange as utilHandleFileChange,
   handleUpload as utilHandleUpload,
-  handleFallback as utilHandleFallback, // Import the utility function
+  handleFallback as utilHandleFallback,
+  handleRunAthena as utilHandleRunAthena, // [NEW] Import the Athena utility
 } from "./uploadProcessorUtil";
 import { webSocketService } from "../../services/webSocketService";
 import { UploadStatus } from "../../types/index";
@@ -23,6 +24,11 @@ export const useUploadProcessorHook = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [isUploading, setIsUploading] = useState<boolean>(false);
 
+  // [NEW] Athena States
+  const [athenaQuery, setAthenaQuery] = useState<string>('SELECT * FROM "your_database"."your_table" LIMIT 10;');
+    const [athenaResults, setAthenaResults] = useState<string | null>(null);
+    const [athenaError, setAthenaError] = useState<string | null>(null);
+
   useEffect(() => {
     const handleMessage = (msg: any) => {
       if (msg.type === "excelProcessingComplete") {
@@ -36,34 +42,54 @@ export const useUploadProcessorHook = ({
     return () => webSocketService.removeListener(handleMessage);
   }, []);
 
+  // [NEW] Download CSV Helper (Kept in the hook as it interacts with DOM directly)
+  // [NEW] Download CSV Helper and Auto-Select
+  const downloadAthenaCsv = () => {
+      if (!athenaResults) return;
+
+      // 1. Create the CSV Blob
+      const blob = new Blob([athenaResults], { type: "text/csv;charset=utf-8;" });
+      const fileName = `athena_results_${Date.now()}.csv`;
+
+      // 2. Trigger the browser download
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      link.click();
+
+      // 3. Auto-Queue the file into the Upload Processor
+      const generatedFile = new File([blob], fileName, { type: "text/csv" });
+      setSelectedFile(generatedFile); // This immediately enables the "Upload and Process" button
+
+      setUploadMessage(`Success! Automatically queued: ${fileName}`);
+      setAthenaResults(null); // Optional: Clear results so the user knows they moved to the next step
+    };
+
   return {
-    selectedFile,
-    uploadMessage,
-    loading,
-    isUploading,
-    handleFileChange: (e: any) =>
-      utilHandleFileChange(e, setSelectedFile, setUploadMessage),
-    handleUpload: () =>
-      utilHandleUpload(
-        selectedFile,
-        updateTaskLog,
-        clearTaskLog,
-        setUploadMessage,
-        setLoading,
-        setIsUploading,
-        setUploadStatuses
-      ),
-    // FIX: Added missing handleFallback to the hook return
-    handleFallback: () =>
-      utilHandleFallback(
-        selectedFile,
-        updateTaskLog,
-        clearTaskLog,
-        setUploadMessage,
-        setLoading
-      ),
-  };
+      selectedFile,
+      uploadMessage,
+      loading,
+      isUploading,
+      // Athena returns
+      athenaQuery,
+      athenaResults,
+      athenaError,
+      setAthenaQuery,
+      downloadAthenaCsv,
+      handleRunAthena: () =>
+        utilHandleRunAthena(athenaQuery, setLoading, setAthenaResults, setAthenaError, setUploadMessage),
+      // Existing returns
+      handleFileChange: (e: any) =>
+        utilHandleFileChange(e, setSelectedFile, setUploadMessage),
+      handleUpload: () =>
+        utilHandleUpload(selectedFile, updateTaskLog, clearTaskLog, setUploadMessage, setLoading, setIsUploading, setUploadStatuses),
+      handleFallback: () =>
+        utilHandleFallback(selectedFile, updateTaskLog, clearTaskLog, setUploadMessage, setLoading),
+    };
 };
+
+// --- Your existing helper hooks remain completely untouched below ---
 
 export const useUploadProgressSummary = ({
   uploadStatuses,

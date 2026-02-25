@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { processExcelFile as wrapperProcessExcelFile } from "./uploadProcessorWrapper";
+import { runAndDownloadAthenaQuery } from "../../utils/athenaService";
 
 class UploadProcessorController {
   async processExcelFile(req: Request, res: Response) {
@@ -55,6 +56,29 @@ class UploadProcessorController {
   async runFallback(req: Request, res: Response) {
     /* fallback logic */
   }
+  // [NEW] Athena Query Executor
+    async runAthena(req: Request, res: Response): Promise<void> {
+      try {
+        // 1. We only need the query now, no clientDirName
+        const { query } = req.body;
+
+        if (!query) {
+          res.status(400).json({ error: "SQL Query is required" });
+          return;
+        }
+
+        // 2. Pass ONLY the query to the service
+        const csvData = await runAndDownloadAthenaQuery(query);
+
+        res.status(200).json({ statusCode: 200, csvData });
+      } catch (error: any) {
+        console.error("Athena Query Error:", error);
+        res.status(500).json({ error: "Athena query failed", details: error.message });
+      }
+    }
+
 }
+
+
 
 export const uploadProcessorController = new UploadProcessorController();

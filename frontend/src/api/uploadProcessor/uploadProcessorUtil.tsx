@@ -11,6 +11,9 @@ import {
   logUploadFailure,
 } from "./uploadProcessorLog";
 
+import { executeAthenaQuery } from "./uploadProcessorService";
+
+
 const TASK_NAME = "uploadAndScript";
 
 /**
@@ -155,4 +158,39 @@ export const handleFallback = async (
     logId: "fallback-status",
     operationName: "Running Fallback",
   });
+};
+
+export const handleRunAthena = async (
+  athenaQuery: string,
+  setLoading: React.Dispatch<React.SetStateAction<boolean>>,
+  setAthenaResults: React.Dispatch<React.SetStateAction<string | null>>,
+  setAthenaError: React.Dispatch<React.SetStateAction<string | null>>,
+  setUploadMessage: React.Dispatch<React.SetStateAction<string>>
+) => {
+  if (!athenaQuery || athenaQuery.trim() === "") return;
+
+  try {
+    setLoading(true);
+    setAthenaError(null);   // Clear previous errors
+    setAthenaResults(null); // Clear previous results
+    setUploadMessage("");   // Clear global message to avoid clutter
+
+    // Call the backend service
+    const response = await executeAthenaQuery(athenaQuery);
+
+    // Success: Store the raw CSV string
+    setAthenaResults(response.csvData);
+  } catch (error: any) {
+    console.error("Athena Query Failed:", error);
+    // Extract the exact SQL error message returned from AWS/Backend
+    const errorMsg =
+      error.response?.data?.details ||
+      error.response?.data?.error ||
+      error.message ||
+      "Failed to execute query due to an unknown error.";
+
+    setAthenaError(errorMsg);
+  } finally {
+    setLoading(false);
+  }
 };

@@ -1,64 +1,59 @@
-import ExcelJS from "exceljs";
 import path from "path";
-import { processExcelRows } from "./uploadExcelProcessor";
-import { createProcessedExcelFile } from "./uploadProcessorUtil";
-import { createFeatureLogger } from "../../utils/logger";
-
-// Initialize Feature-Specific Logger
-const logger = createFeatureLogger("uploadProcessor");
+import fs from "fs/promises";
+import ExcelJS from "exceljs";
+import { parse as parseCsv } from "csv-parse/sync";
+import { processDataRows } from "./uploadExcelProcessor";
+import { getFileExtension, getTrxnMap } from "./uploadProcessorUtil";
+import { ProcessExcelRowsResult } from "./uploadProcessorTypes";
 
 export async function processExcelFile(
-  inputFilePath: string,
+  filePath: string,
   onProgress?: (stats: any) => void
-) {
-  // [CHECKPOINT] INITIATED
-  logger.info(`Initiating Excel Processing: ${path.basename(inputFilePath)}`, {
-    console: true,
-  });
+): Promise<ProcessExcelRowsResult & { outputFileName: string }> {
+  try {
+    const ext = path.extname(filePath).toLowerCase();
+    let dataRows: Record<string, any>[] = [];
 
-  const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.readFile(inputFilePath);
-  const worksheet = workbook.worksheets[0];
+    if (ext === ".csv") {
+      const fileContent = await fs.readFile(filePath, "utf-8");
+      // 1. Parse CSV and normalize headers to lowercase
+      dataRows = parseCsv(fileContent, {
+        columns: (headers) => headers.map((h: string) => h.trim().toLowerCase()),
+        skip_empty_lines: true,
+      });
+    } else if (ext === ".xlsx" || ext === ".xls") {
+      const workbook = new ExcelJS.Workbook();
+      await workbook.xlsx.readFile(filePath);
+      const worksheet = workbook.worksheets[0];
 
-  const headerRow = worksheet.getRow(1);
-  const headerIndices: { [key: string]: number } = {};
-  headerRow.eachCell((cell, colNumber) => {
-    const header = cell.text?.trim().toLowerCase();
-    if (header) headerIndices[header] = colNumber;
-  });
+      const headerRow = worksheet.getRow(1);
+      const headers = (headerRow.values as string[]).map(h => h ? String(h).trim().toLowerCase() : "");
 
-  const trxnMap: Record<string, string> = {
-    NEW: "IC",
-    NCT: "NCT",
-    RED: "RED",
-    FUL: "RED",
-    IPO: "IOBI",
-    SIN: "IOBIS",
-    SWOP: "SWP",
-    SWOF: "SWP",
-  };
+      // 2. Parse Excel and map values to lowercase header keys
+      for (let i = 2; i <= worksheet.rowCount; i++) {
+        const row = worksheet.getRow(i);
+        if (!row.hasValues) continue;
 
-  const getFileExtension = (filePath: string) =>
-    path.extname(filePath).toLowerCase();
+        const rowData: Record<string, any> = {};
+        row.eachCell((cell, colNumber) => {
+          if (headers[colNumber]) {
+            rowData[headers[colNumber]] = cell.text ? String(cell.text).trim() : "";
+          }
+        });
+        dataRows.push(rowData);
+      }
+    } else {
+      throw new Error("Unsupported format. Use .csv or .xlsx");
+    }
 
-  // Call Processor (Logger is instantiated inside the processor to ensure consistency)
-  const result = await processExcelRows(
-    worksheet,
-    headerIndices,
-    trxnMap,
-    getFileExtension,
-    onProgress
-  );
+    const trxnMap = await getTrxnMap();
 
-  const outputFileName = await createProcessedExcelFile(
-    result.processedRows,
-    inputFilePath
-  );
+    // 3. Send uniform JSON data to the processor
+    const result = await processDataRows(dataRows, trxnMap, getFileExtension, onProgress);
 
-  // [CHECKPOINT] SUCCESS
-  logger.info(`Excel Processing Complete. Output: ${outputFileName}`, {
-    console: true,
-  });
-
-  return { ...result, outputFileName };
+    return { ...result, outputFileName: `processed_${path.basename(filePath)}` };
+  } catch (error) {
+    console.error("Error formatting file:", error);
+    throw error;
+  }
 }
