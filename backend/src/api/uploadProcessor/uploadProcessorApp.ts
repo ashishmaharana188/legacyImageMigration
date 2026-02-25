@@ -18,6 +18,8 @@ router.post("/run-fallback", upload.single("excel"), (req, res) =>
   uploadProcessorController.runFallback(req, res)
 );
 
-router.post("/run-athena", (req, res) => uploadProcessorController.runAthena(req, res));
+router.post("/run-athena", (req, res) =>
+  uploadProcessorController.runAthena(req, res)
+);
 
 export default router;

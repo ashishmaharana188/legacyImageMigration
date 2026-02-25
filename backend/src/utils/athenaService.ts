@@ -1,11 +1,41 @@
-import { AthenaClient, StartQueryExecutionCommand, GetQueryExecutionCommand } from "@aws-sdk/client-athena";
+import {
+  AthenaClient,
+  StartQueryExecutionCommand,
+  GetQueryExecutionCommand,
+} from "@aws-sdk/client-athena";
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { S3_BUCKET_NAME, getAthenaResultsPrefix } from "./s3Config";
 import { Readable } from "stream";
 
-const athenaClient = new AthenaClient({ region: process.env.AWS_REGION || "ap-south-1" });
-const s3Client = new S3Client({ region: process.env.AWS_REGION || "ap-south-1" });
+// 1. Setup specific credentials if provided in the .env file
+const athenaCredentials =
+  process.env.ATHENA_AWS_ACCESS_KEY_ID &&
+  process.env.ATHENA_AWS_SECRET_ACCESS_KEY
+    ? {
+        accessKeyId: process.env.ATHENA_AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.ATHENA_AWS_SECRET_ACCESS_KEY,
+        sessionToken: process.env.ATHENA_AWS_SESSION_TOKEN,
+      }
+    : undefined; // Falls back to default AWS credentials if undefined
 
+const region = process.env.AWS_REGION || "ap-south-1";
+
+// 2. Initialize localized clients using the specific credentials
+const athenaClient = new AthenaClient({
+  region,
+  credentials: athenaCredentials,
+});
+
+// The S3 client that fetches the CSV must ALSO use the Dev credentials
+// because Athena writes to the Dev bucket!
+const athenaS3Client = new S3Client({
+  region,
+  credentials: athenaCredentials,
+});
+
+// Use the explicit Athena bucket from .env, or fallback to the default S3 config
+const ATHENA_BUCKET =
+  process.env.ATHENA_S3_BUCKET_NAME || "aif-in-a-box-assets-dev";
 const streamToString = (stream: Readable): Promise<string> =>
   new Promise((resolve, reject) => {
     const chunks: any[] = [];
@@ -14,16 +44,19 @@ const streamToString = (stream: Readable): Promise<string> =>
     stream.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
   });
 
-export async function runAndDownloadAthenaQuery(sqlQuery: string): Promise<string> {
+export async function runAndDownloadAthenaQuery(
+  sqlQuery: string
+): Promise<string> {
   const prefix = getAthenaResultsPrefix();
-  const outputLocation = `s3://${S3_BUCKET_NAME}/${prefix}`; // s3://aif-in-a-box-assets-dev/Data/APPLICATION_FORMS/athenresults/
 
-  // 1. Start the Query using your exact configuration
+  // Explicitly point the output location to the Dev bucket
+  const outputLocation = `s3://${ATHENA_BUCKET}/${prefix}`;
+
   const startCommand = new StartQueryExecutionCommand({
     QueryString: sqlQuery,
     QueryExecutionContext: {
-      Catalog: "AwsDataCatalog", // Explicitly set Catalog
-      Database: "aif_mirror_1",  // Explicitly set Database
+      Catalog: "AwsDataCatalog",
+      Database: "aif_mirror_1",
     },
     ResultConfiguration: {
       OutputLocation: outputLocation,
@@ -35,10 +68,11 @@ export async function runAndDownloadAthenaQuery(sqlQuery: string): Promise<strin
 
   if (!queryExecutionId) throw new Error("Failed to start Athena query");
 
-  // 2. Poll until SUCCEEDED
   let isRunning = true;
   while (isRunning) {
-    const statusCommand = new GetQueryExecutionCommand({ QueryExecutionId: queryExecutionId });
+    const statusCommand = new GetQueryExecutionCommand({
+      QueryExecutionId: queryExecutionId,
+    });
     const statusResponse = await athenaClient.send(statusCommand);
     const state = statusResponse.QueryExecution?.Status?.State;
 
@@ -52,14 +86,15 @@ export async function runAndDownloadAthenaQuery(sqlQuery: string): Promise<strin
     }
   }
 
-  // 3. Download the resulting CSV (Athena automatically names it {QueryExecutionId}.csv)
   const s3Key = `${prefix}${queryExecutionId}.csv`;
   const getObjectCommand = new GetObjectCommand({
-    Bucket: S3_BUCKET_NAME,
+    Bucket: ATHENA_BUCKET, // Point to the Dev bucket
     Key: s3Key,
   });
 
-  const s3Response = await s3Client.send(getObjectCommand);
+  // Use the Dev-authenticated S3 client to download it
+  const s3Response = await athenaS3Client.send(getObjectCommand);
+
   if (!s3Response.Body) throw new Error("S3 returned an empty body");
 
   return await streamToString(s3Response.Body as Readable);

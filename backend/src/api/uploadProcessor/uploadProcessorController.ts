@@ -98,6 +98,10 @@ class UploadProcessorController {
         .json({ error: "Pipeline failed", details: error.message });
     }
   }
+
+  async runFallback(req: Request, res: Response) {
+    /* fallback logic */
+  }
 }
 
 export const uploadProcessorController = new UploadProcessorController();
