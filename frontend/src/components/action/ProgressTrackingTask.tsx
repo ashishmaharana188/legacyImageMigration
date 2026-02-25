@@ -110,7 +110,6 @@ const ProgressTrackingTask: React.FC<ProgressTrackingTaskProps> = ({
     }
   }
 
-  // [FIX] Ensure this block exists and handles both PG and Mongo checks
   if (taskName === "pgSanityCheck" || taskName === "mongoSanityCheck") {
     // 1. Try to find the LIVE log (from WebSocket)
     let sanityLog = currentLogs

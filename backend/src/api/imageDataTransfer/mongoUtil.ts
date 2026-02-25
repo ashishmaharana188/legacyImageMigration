@@ -4,6 +4,7 @@ import { SqlUtil } from "./sqlUtil";
 import { createFeatureLogger } from "../../utils/logger";
 import { getMongoModel } from "../../utils/dbConnect";
 import { IAifDocument, IAifDocumentInput } from "./imageDataTransferTypes";
+import { mongoFind } from "./imageDataTransferCore";
 
 const logger = createFeatureLogger("imageDataTransfer");
 
@@ -39,16 +40,17 @@ export class MongoUtil {
 
   async transferDataFromPostgres(
     clientCode: string | undefined,
-      onProgress: (p: ImageDataProgress) => void,
+    onProgress: (p: ImageDataProgress) => void,
     useCsv: boolean = true
   ): Promise<void> {
-
-      try {
-        const modeStr = useCsv ? "CSV Filter" : "Direct Client Filter";
-        logger.info(
-                `Starting PG -> Mongo Transfer [Mode: ${modeStr}] (Client: ${clientCode || "ALL"})...`,
-                { console: true }
-              );
+    try {
+      const modeStr = useCsv ? "CSV Filter" : "Direct Client Filter";
+      logger.info(
+        `Starting PG -> Mongo Transfer [Mode: ${modeStr}] (Client: ${
+          clientCode || "ALL"
+        })...`,
+        { console: true }
+      );
 
       onProgress({
         type: "mongoProgressUpdate",
@@ -77,10 +79,10 @@ export class MongoUtil {
 
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
-        if (total === 0) {
-            const msg = useCsv
-                      ? "No Data Found in PG (Check if Processed CSV exists)"
-                      : `No Data Found in PG for Client Code ${clientCode}`;
+      if (total === 0) {
+        const msg = useCsv
+          ? "No Data Found in PG (Check if Processed CSV exists)"
+          : `No Data Found in PG for Client Code ${clientCode}`;
 
         onProgress({
           type: "mongoProgressUpdate",
@@ -88,7 +90,7 @@ export class MongoUtil {
           total: 0,
           processed: 0,
           status: "Completed",
-          message:msg,
+          message: msg,
         });
         return;
       }
@@ -108,8 +110,26 @@ export class MongoUtil {
       // 3. Process in Batches (DIRECT INSERT MODE)
       for (let i = 0; i < total; i += batchSize) {
         const chunk = pgData.slice(i, i + batchSize);
+
+        // [FIX] Sanitize IDs to prevent "Cast to string failed for value {}"
+        const chunkTxnRefs = chunk
+          .map((row) => this.safeString(row.transaction_reference_id))
+          .filter((id) => id !== ""); // Remove empties to optimize query
+
+        // Bulk Duplicate Check
+        const existingDocs = await mongoFind(this.model, {
+          transactionNo: { $in: chunkTxnRefs },
+          ...(clientCode ? { clientId: clientCode } : {}),
+        });
+
+        // Create Set for O(1) lookup
+        const existingSet = new Set<string>(
+          existingDocs.map((doc) => doc.transactionNo)
+        );
+
         const docsToInsert: IAifDocumentInput[] = [];
 
+        // 4. In-Memory Filter & Map
         for (const row of chunk) {
           // [SAFETY] Sanitize key fields
           const safeTxnId = this.safeString(row.transaction_reference_id);
@@ -140,7 +160,7 @@ export class MongoUtil {
             createdFrom: creationDateStr,
             workDate: creationDateStr,
             lastUpdatedOn: creationDateStr,
-            lastUpdatedFrom:  row.created_by || null, // Keeping null if empty as per req, or use ""
+            lastUpdatedFrom: row.created_by || null, // Keeping null if empty as per req, or use ""
 
             currentStage: row.current_stage || 0,
             documentFormat: row.document_format,
@@ -167,7 +187,7 @@ export class MongoUtil {
             branchId: "",
             lastUpdatedBy: row.last_updated_by || "system",
             transactionCode: row.document_process,
-            transactionType:  row.document_type,
+            transactionType: row.document_type,
           } as unknown as IAifDocumentInput);
         }
 
@@ -223,6 +243,7 @@ export class MongoUtil {
     }
   }
 
+  // [DISABLED] Sync Logic
   async updateMongoTransactions(
     clientId: number | undefined,
     onProgress: (p: ImageDataProgress) => void
