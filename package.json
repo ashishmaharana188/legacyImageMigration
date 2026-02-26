@@ -44,7 +44,7 @@
   "dependencies": {
     "@aws-sdk/client-athena": "^3.997.0",
     "@aws-sdk/client-s3": "^3.997.0",
-    "csv-parse": "^6.1.0",
-    "cpx2": "^8.0.0"
+    "cpx2": "^8.0.0",
+    "csv-parse": "^6.1.0"
   }
 }
