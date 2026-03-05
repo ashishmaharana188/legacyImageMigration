@@ -1,69 +1,56 @@
-/* eslint-disable no-useless-escape */
 import {
   ProcessedRow,
   ProcessExcelRowsResult,
 } from "../uploadProcessor/uploadProcessorTypes";
 import { buildDestinationFilePath, getPageCount } from "./uploadProcessorUtil";
-import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
 import { createFeatureLogger } from "../../utils/logger";
 
-// Initialize Feature-Specific Logger
 const logger = createFeatureLogger("uploadProcessor");
 
-type ProgressCallback = (stats: {
-  totalRows: number;
-  processedRows: number;
-  successfulRows: number;
-  errors: number;
-  notFound: number;
-}) => void;
-
-export async function processExcelRows(
-  worksheet: ExcelJS.Worksheet,
-  headerIndices: { [key: string]: number },
+// 1. Accepts a generic array of JSON objects (works for both CSV and Excel)
+export async function processDataRows(
+  dataRows: Record<string, any>[],
   trxnMap: Record<string, string>,
   getFileExtension: (filePath: string) => string,
-  onProgress?: ProgressCallback
+  onProgress?: (stats: any) => void
 ): Promise<ProcessExcelRowsResult> {
-  let totalRows = 0;
-  let successfulRows = 0;
-  let errors = 0;
-  let notFound = 0;
+  let totalRows = 0,
+    successfulRows = 0,
+    errors = 0,
+    notFound = 0;
   const processedRows: ProcessedRow[] = [];
-  const actualTotalRows = worksheet.rowCount - 1;
-
+  const actualTotalRows = dataRows.length;
   const extensions = [".pdf", ".tif", ".tiff", ".jpg", ".jpeg", ".png"];
 
   let lastUpdate = 0;
   const BATCH_INTERVAL = 1000;
 
-  for (let rowNumber = 2; rowNumber <= worksheet.rowCount; rowNumber++) {
-    const row = worksheet.getRow(rowNumber);
-    if (!row.hasValues || !row.getCell(headerIndices["id_fund"]).value)
-      continue;
+  for (let i = 0; i < dataRows.length; i++) {
+    const row = dataRows[i];
+    const rowNumber = i + 2;
+
+    // Skip if 'id_fund' is missing
+    if (!row["id_fund"]) continue;
 
     totalRows++;
 
     try {
-      const fund = row.getCell(headerIndices["id_fund"]).text?.trim() || "";
-      const pathVal = row.getCell(headerIndices["id_path"]).text?.trim() || "";
-      const serverId =
-        row.getCell(headerIndices["id_serverip"]).text?.trim() || "";
-      const drivePath =
-        row.getCell(headerIndices["id_drivepath"]).text?.trim() || "";
-      const ihNo = row.getCell(headerIndices["id_ihno"]).text?.trim() || "";
-      const trxnTypeRaw =
-        row.getCell(headerIndices["id_trtype"]).text?.trim() || "";
-      const acNo = row.getCell(headerIndices["id_acno"]).text?.trim() || "";
+      // 2. Map strictly by string name!
+      const fund = String(row["id_fund"] || "").trim();
+      const pathVal = String(row["id_path"] || "").trim();
+      const serverId = String(row["id_serverip"] || "").trim();
+      const drivePath = String(row["id_drivepath"] || "").trim();
+      const ihNo = String(row["id_ihno"] || "").trim();
+      const trxnTypeRaw = String(row["id_trtype"] || "").trim();
+      const acNo = String(row["id_acno"] || "").trim();
       const trnMapped = trxnMap[trxnTypeRaw] || trxnTypeRaw;
 
-      let srcPath = "";
-      let found = false;
-      let finalPath = pathVal;
+      let srcPath = "",
+        found = false,
+        finalPath = pathVal;
 
-      // Tier 1: Local Search
       const localBase = path.join(process.cwd(), "localFiles", pathVal);
       if (
         await fs
@@ -89,16 +76,13 @@ export async function processExcelRows(
         }
       }
 
-      // Tier 2: Network Search
       if (!found && serverId && pathVal) {
         let smb = path
           .normalize(`${serverId}\\${pathVal}`.replace(/\//g, "\\"))
           .replace(/^(\.\.[\/\\])+/, "");
-
         if (smb.includes("image")) smb = smb.replace(/image/g, drivePath);
         else if (smb.includes("common"))
           smb = smb.replace(/common/g, drivePath);
-
         if (
           await fs
             .access(smb)
@@ -118,10 +102,8 @@ export async function processExcelRows(
           finalPath,
           rowNumber
         );
-
         await fs.writeFile(dest, await fs.readFile(srcPath));
         const pageCountVal = await getPageCount(dest);
-
         successfulRows++;
         processedRows.push({
           id_fund: fund,
@@ -131,11 +113,6 @@ export async function processExcelRows(
           id_acno: acNo,
           page_count: String(pageCountVal),
         });
-
-        // [DETAIL LOG] File Only
-        logger.info(
-          `Row ${rowNumber}: Success - ${finalPath} (${pageCountVal} pages)`
-        );
       } else {
         notFound++;
         processedRows.push({
@@ -146,17 +123,6 @@ export async function processExcelRows(
           id_acno: acNo,
           page_count: "Not Found",
         });
-
-        // [DETAIL LOG] File Only
-        logger.info(`Row ${rowNumber}: Not Found - ${pathVal}`);
-      }
-
-      // [CHECKPOINT] RUNNING (Throttled Console Output)
-      if (totalRows % 100 === 0) {
-        logger.info(
-          `Running... Processed ${totalRows} / ${actualTotalRows} rows`,
-          { console: true }
-        );
       }
 
       const now = Date.now();
@@ -172,12 +138,11 @@ export async function processExcelRows(
       }
     } catch (err) {
       errors++;
-      // Errors always show in console due to consoleFilter
       logger.error(`Row ${rowNumber} Error:`, { error: err });
     }
   }
 
-  if (onProgress) {
+  if (onProgress)
     onProgress({
       totalRows: actualTotalRows,
       processedRows: totalRows,
@@ -185,7 +150,5 @@ export async function processExcelRows(
       errors,
       notFound,
     });
-  }
-
   return { totalRows, successfulRows, errors, notFound, processedRows };
 }

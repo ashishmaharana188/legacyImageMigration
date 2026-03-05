@@ -52,7 +52,14 @@ export interface uploadProcessorUIProps {
   uploadMessage: string;
   loading: boolean;
   isUploading: boolean;
-  handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  handleUpload: () => Promise<void>;
-  handleFallback: () => Promise<void>;
+  // Athena Editor Props
+  athenaQuery: string;
+  athenaResults: string | null;
+  athenaError: string | null; // [NEW] Track SQL errors
+  setAthenaQuery: (query: string) => void;
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleUpload: () => void;
+  handleFallback: () => void;
+  handleRunAthena: () => Promise<void>;
+  downloadAthenaCsv: () => void;
 }

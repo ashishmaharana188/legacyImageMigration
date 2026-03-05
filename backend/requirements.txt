@@ -1,0 +1,13 @@
+# --- PDF Processing & Splitting ---
+PyMuPDF==1.23.8       # Provides 'fitz' for mupdf_splitter.py
+PyPDF2==3.0.1         # Legacy fallback PDF splitting
+pypdf==4.0.1          # Modern fallback PDF splitting
+pikepdf==8.13.0       # Often used for robust PDF repairing/splitting
+ 
+# --- Image Processing (TIFF, JPG, PNG) ---
+Pillow==10.2.0        # Provides 'PIL' for image manipulation/splitting
+opencv-python==4.9.0  # Provides 'cv2' if you do advanced image cropping/processing
+ 
+# --- Conversion Utilities ---
+pdf2image==1.17.0     # If you convert PDF pages to images
+img2pdf==0.5.1        # If you convert split images back to PDFs

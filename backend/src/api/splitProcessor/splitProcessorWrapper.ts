@@ -108,7 +108,10 @@ export class SplitProcessorWrapper {
         if (stats.isDirectory()) {
           await fs.mkdir(nextOutputDir, { recursive: true });
           await scanAndProcessDirectory(inputPath, nextOutputDir);
-        } else if (stats.isFile() && item.toLowerCase().endsWith(".pdf")) {
+        } else if (
+          stats.isFile() &&
+          [".pdf", ".tif", ".tiff"].includes(path.extname(item).toLowerCase())
+        ) {
           const fileNameNoExt = path.parse(item).name;
           const parentFolderName = path.basename(outputDir);
 

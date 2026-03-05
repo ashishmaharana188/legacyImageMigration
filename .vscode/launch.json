@@ -1,4 +1,57 @@
 {
+<<<<<<< HEAD
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Launch Chrome (Dev)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/frontend",
+            "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+        },
+        {
+            "name": "Launch Chrome (Prod)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/frontend",
+            "userDataDir": "${workspaceFolder}/.vscode/vscode-chrome-debug-userdatadir"
+        },
+        {
+            "name": "Launch Helium (Dev)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5173",
+            "webRoot": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "C:\\Users\\Ashish Maharana\\AppData\\Local\\imput\\Helium\\Application\\chrome.exe",
+            "runtimeArgs": [
+                "--remote-debugging-port=9222",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--user-data-dir=${workspaceFolder}/.zed/helium-debug-profile"
+            ],
+            "userDataDir": false,
+            "sourceMaps": true
+        },
+        {
+            "name": "Launch Helium (Prod)",
+            "type": "chrome",
+            "request": "launch",
+            "url": "http://localhost:5174",
+            "webRoot": "${workspaceFolder}/frontend",
+            "runtimeExecutable": "C:\\Users\\Ashish Maharana\\AppData\\Local\\imput\\Helium\\Application\\chrome.exe",
+            "runtimeArgs": [
+                "--remote-debugging-port=9222",
+                "--no-first-run",
+                "--no-default-browser-check",
+                "--user-data-dir=${workspaceFolder}/.zed/helium-debug-profile"
+            ],
+            "userDataDir": false,
+            "sourceMaps": true
+        }
+    ]
+=======
   "version": "0.2.0",
   "configurations": [
     {
@@ -29,4 +82,5 @@
       "skipFiles": ["<node_internals>/**"]
     }
   ]
+>>>>>>> switch-branch
 }

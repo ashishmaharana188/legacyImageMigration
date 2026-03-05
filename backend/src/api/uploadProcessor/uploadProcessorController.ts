@@ -1,5 +1,10 @@
 import { Request, Response } from "express";
 import { processExcelFile as wrapperProcessExcelFile } from "./uploadProcessorWrapper";
+import { runAndDownloadAthenaQuery } from "../../utils/athenaService";
+import { processAthenaDataThroughPostgres } from "./uploadProcessorUtil";
+
+import { parse as parseCsv } from "csv-parse/sync";
+import { stringify as stringifyCsv } from "csv-stringify/sync";
 
 class UploadProcessorController {
   async processExcelFile(req: Request, res: Response) {
@@ -49,6 +54,48 @@ class UploadProcessorController {
       });
     } catch (error) {
       res.status(500).json({ error: "Processing failed", details: error });
+    }
+  }
+
+  async runAthena(req: Request, res: Response): Promise<void> {
+    try {
+      const { query } = req.body;
+      if (!query) {
+        res.status(400).json({ error: "SQL Query is required" });
+        return;
+      }
+
+      // 1. Get raw CSV from Athena
+      const rawAthenaCsv = await runAndDownloadAthenaQuery(query);
+
+      // 2. Parse into JSON
+      const parsedData = parseCsv(rawAthenaCsv, {
+        columns: (headers) =>
+          headers.map((h: string) => h.trim().toLowerCase()),
+        skip_empty_lines: true,
+      });
+
+      // 3. Run through Postgres Auto-Schema & Filter Pipeline
+      const filteredJsonRows = await processAthenaDataThroughPostgres(
+        parsedData
+      );
+
+      // 4. Convert the filtered JSON back to a CSV string
+      let finalCsvString = "";
+      if (filteredJsonRows.length > 0) {
+        finalCsvString = stringifyCsv(filteredJsonRows, { header: true });
+      } else {
+        // If 0 rows are found, return headers only so the frontend doesn't crash
+        finalCsvString = Object.keys(parsedData[0] || {}).join(",") + "\n";
+      }
+
+      // 5. Send to frontend!
+      res.status(200).json({ statusCode: 200, csvData: finalCsvString });
+    } catch (error: any) {
+      console.error("Athena/DB Pipeline Error:", error);
+      res
+        .status(500)
+        .json({ error: "Pipeline failed", details: error.message });
     }
   }
 

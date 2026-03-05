@@ -1,15 +1,15 @@
 import ExcelJS from "exceljs";
 import fs from "fs/promises";
 import path from "path";
-import { ProcessedRow } from "../uploadProcessor/uploadProcessorTypes";
-// [NEW] Imports for Page Counting
+import { ProcessedRow } from "./uploadProcessorTypes";
 import { PDFDocument } from "pdf-lib";
 import sharp from "sharp";
+import { getPgPool } from "../../utils/dbConnect";
 
 const baseFolder = path.join(process.cwd(), "output");
 
 /**
- * [NEW] Calculates page count based on file extension
+ * Calculates page count based on file extension
  */
 export async function getPageCount(filePath: string): Promise<string | number> {
   const ext = path.extname(filePath).toLowerCase();
@@ -24,10 +24,8 @@ export async function getPageCount(filePath: string): Promise<string | number> {
       return pdfDoc.getPageCount();
     } else if ([".tif", ".tiff", ".jpg", ".jpeg", ".png"].includes(ext)) {
       const metadata = await sharp(fileBuffer).metadata();
-      // TIFFs can be multi-page; standard images are 1
       return metadata.pages || 1;
     }
-    // Default for text or unknown files
     return 1;
   } catch (error: any) {
     return `Error: ${error.message}`;
@@ -105,4 +103,115 @@ export async function createProcessedExcelFile(
   await fs.unlink(inputFilePath);
 
   return outputFileName;
+}
+
+/**
+ * Athena DB Staging & Filtering Pipeline
+ */
+export async function processAthenaDataThroughPostgres(
+  parsedCsvData: Record<string, any>[]
+): Promise<Record<string, any>[]> {
+  if (!parsedCsvData || parsedCsvData.length === 0) return [];
+
+  const pool = await getPgPool();
+  const client = await pool.connect();
+
+  const tableName = "public.temp_athena_csv_imagedump";
+  const headers = Object.keys(parsedCsvData[0]).map((h) =>
+    h.trim().toLowerCase()
+  );
+
+  try {
+    await client.query("BEGIN");
+
+    // 1. DYNAMIC SCHEMA: Check if table exists
+    const tableCheck = await client.query(`
+      SELECT EXISTS (
+        SELECT FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'temp_athena_csv_imagedump'
+      );
+    `);
+
+    if (!tableCheck.rows[0].exists) {
+      // AUTO-CREATE
+      const createColumns = headers
+        .map((header) => `"${header}" TEXT`)
+        .join(", ");
+      await client.query(`CREATE TABLE ${tableName} (${createColumns});`);
+    } else {
+      // AUTO-ALTER
+      const colCheck = await client.query(`
+        SELECT column_name FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = 'temp_athena_csv_imagedump';
+      `);
+      const existingColumns = colCheck.rows.map((r) =>
+        r.column_name.toLowerCase()
+      );
+      const missingColumns = headers.filter(
+        (h) => !existingColumns.includes(h)
+      );
+
+      for (const missingCol of missingColumns) {
+        await client.query(
+          `ALTER TABLE ${tableName} ADD COLUMN "${missingCol}" TEXT;`
+        );
+      }
+    }
+
+    // 2. DATA INGESTION: Truncate old data
+    await client.query(`TRUNCATE TABLE ${tableName};`);
+
+    // [FIX] BATCH INSERTION TO PREVENT PARAMETER OVERFLOW
+    if (parsedCsvData.length > 0) {
+      const insertColumns = headers.map((h) => `"${h}"`).join(", ");
+      const BATCH_SIZE = 1000; // Safe chunk size that won't hit Postgres parameter limits
+
+      for (let i = 0; i < parsedCsvData.length; i += BATCH_SIZE) {
+        const chunk = parsedCsvData.slice(i, i + BATCH_SIZE);
+        const valuePlaceholders = [];
+        const flatValues = [];
+        let paramIndex = 1;
+
+        for (const row of chunk) {
+          const rowPlaceholders = [];
+          for (const header of headers) {
+            rowPlaceholders.push(`$${paramIndex++}`);
+            flatValues.push(row[header] || null);
+          }
+          valuePlaceholders.push(`(${rowPlaceholders.join(", ")})`);
+        }
+
+        const insertQuery = `INSERT INTO ${tableName} (${insertColumns}) VALUES ${valuePlaceholders.join(
+          ", "
+        )};`;
+        await client.query(insertQuery, flatValues);
+      }
+    }
+
+    // 3. FILTER: Execute Diff Query
+    const filterQuery = `
+      SELECT tmp.*
+      FROM ${tableName} AS tmp
+      LEFT JOIN (
+          SELECT cli.client_code, doc.user_attr1
+          FROM investor.aif_document_details AS doc
+          JOIN fund.client_master AS cli ON cli.id = doc.client_id
+          WHERE doc.created_by = 'system'
+      ) AS docs
+      ON tmp.id_fund = docs.client_code AND tmp.id_ihno = docs.user_attr1
+      WHERE docs.client_code IS NULL
+      AND tmp.id_trtype in ('NEW','NCT','RED');
+    `;
+
+    const result = await client.query(filterQuery);
+
+    await client.query("COMMIT");
+    return result.rows;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("DB Staging Process Failed:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
 }

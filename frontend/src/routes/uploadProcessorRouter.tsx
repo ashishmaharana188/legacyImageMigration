@@ -1,11 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import UploadProcessorUI from "../api/uploadProcessor/uploadProcessorUI";
-// Import from the new unified context file
 import { useTaskLog } from "../contexts/TaskLogContext";
 import { useUploadProcessorHook } from "../api/uploadProcessor/uploadProcessorHook";
 
 function UploadProcessorComponent() {
   const { updateTaskLog, onClearLogs, setUploadStatuses } = useTaskLog();
+
   const {
     selectedFile,
     uploadMessage,
@@ -14,6 +14,13 @@ function UploadProcessorComponent() {
     handleFileChange,
     handleUpload,
     handleFallback,
+    // Athena Extract
+    athenaQuery,
+    athenaResults,
+    athenaError, // <-- [FIX] Added missing athenaError here
+    setAthenaQuery,
+    handleRunAthena,
+    downloadAthenaCsv,
   } = useUploadProcessorHook({
     updateTaskLog,
     clearTaskLog: onClearLogs,
@@ -29,6 +36,13 @@ function UploadProcessorComponent() {
       handleFileChange={handleFileChange}
       handleUpload={handleUpload}
       handleFallback={handleFallback}
+      // Athena Pass Down
+      athenaQuery={athenaQuery}
+      athenaResults={athenaResults}
+      athenaError={athenaError} // <-- [FIX] Passed it to the UI here
+      setAthenaQuery={setAthenaQuery}
+      handleRunAthena={handleRunAthena}
+      downloadAthenaCsv={downloadAthenaCsv}
     />
   );
 }

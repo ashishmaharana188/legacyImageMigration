@@ -15,3 +15,7 @@ export function getS3FilePrefix(clientDirName: string): string {
 export function getS3SplitPrefix(clientDirName: string): string {
   return `Data/SPLIT_APPLICATION_FORMS/${clientDirName}`;
 }
+
+export function getAthenaResultsPrefix(): string {
+  return `Data/APPLICATION_FORMS/athenresults/`;
+}
