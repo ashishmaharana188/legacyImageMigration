@@ -41,7 +41,7 @@ export class MongoUtil {
   async transferDataFromPostgres(
     clientCode: string | undefined,
     onProgress: (p: ImageDataProgress) => void,
-    useCsv: boolean = true
+    useCsv: boolean = true,
   ): Promise<void> {
     try {
       const modeStr = useCsv ? "CSV Filter" : "Direct Client Filter";
@@ -49,7 +49,7 @@ export class MongoUtil {
         `Starting PG -> Mongo Transfer [Mode: ${modeStr}] (Client: ${
           clientCode || "ALL"
         })...`,
-        { console: true }
+        { console: true },
       );
 
       onProgress({
@@ -74,9 +74,11 @@ export class MongoUtil {
       }
 
       // 2. Fetch Data from Postgres
-      const pgData = await this.sqlUtil.getAifDocumentDetails(targetClientId);
+      const pgData = await this.sqlUtil.getAifDocumentDetails(
+        targetClientId,
+        useCsv,
+      );
       const total = pgData.length;
-
       logger.info(`Fetched ${total} records from Postgres.`, { console: true });
 
       if (total === 0) {
@@ -124,7 +126,7 @@ export class MongoUtil {
 
         // Create Set for O(1) lookup
         const existingSet = new Set<string>(
-          existingDocs.map((doc) => doc.transactionNo)
+          existingDocs.map((doc) => doc.transactionNo),
         );
 
         const docsToInsert: IAifDocumentInput[] = [];
@@ -170,8 +172,8 @@ export class MongoUtil {
             totalPageCount: row.page_count
               ? String(row.page_count)
               : row.total_page_count
-              ? String(row.total_page_count)
-              : null,
+                ? String(row.total_page_count)
+                : null,
 
             mimeType: row.mime_type,
 
@@ -246,7 +248,7 @@ export class MongoUtil {
   // [DISABLED] Sync Logic
   async updateMongoTransactions(
     clientId: number | undefined,
-    onProgress: (p: ImageDataProgress) => void
+    onProgress: (p: ImageDataProgress) => void,
   ): Promise<void> {
     logger.warn("Sync disabled.", { console: true });
     onProgress({

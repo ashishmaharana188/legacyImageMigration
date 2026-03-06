@@ -6,7 +6,7 @@ import path from "path";
 import https from "https";
 import { broadcast } from "../../utils/webSocketService";
 import { S3_BUCKET_NAME } from "../../utils/s3Config";
-import { isAuthError, countTrackedDirectories } from "./s3ProcessorUtil";
+import { isAuthError } from "./s3ProcessorUtil";
 import { createFeatureLogger } from "../../utils/logger";
 
 const logger = createFeatureLogger("s3Processor");
@@ -33,7 +33,7 @@ export interface UploadOptions {
 
 export async function uploadOriginalToS3(
   localFilePath: string,
-  s3Key: string
+  s3Key: string,
 ): Promise<string> {
   logger.info(`Starting Single File Upload: ${path.basename(localFilePath)}`, {
     console: true,
@@ -50,7 +50,7 @@ export async function uploadOriginalToS3(
     await s3.send(new PutObjectCommand(uploadParams));
     logger.info(
       `Successfully uploaded ${path.basename(localFilePath)} to S3.`,
-      { console: true }
+      { console: true },
     );
     return `Successfully uploaded ${localFilePath} to ${S3_BUCKET_NAME}/${s3Key}`;
   } catch (err: unknown) {
@@ -59,7 +59,7 @@ export async function uploadOriginalToS3(
         "S3 uploadOriginalToS3 failed: Authentication token expired or invalid.";
       logger.error(msg, { console: true });
       throw new Error(
-        "S3 operation failed due to expired or invalid credentials."
+        "S3 operation failed due to expired or invalid credentials.",
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);
@@ -73,11 +73,11 @@ export async function uploadOriginalToS3(
 
 export async function uploadSplitFilesToS3(
   localFilePaths: string[],
-  s3Prefix: string
+  s3Prefix: string,
 ): Promise<string[]> {
   logger.info(
     `Starting Batch Upload of ${localFilePaths.length} split files...`,
-    { console: true }
+    { console: true },
   );
 
   const uploadedKeys: string[] = [];
@@ -102,7 +102,7 @@ export async function uploadSplitFilesToS3(
           console: true,
         });
         throw new Error(
-          "S3 operation failed due to expired or invalid credentials."
+          "S3 operation failed due to expired or invalid credentials.",
         );
       } else {
         const msg = err instanceof Error ? err.message : String(err);
@@ -123,7 +123,7 @@ export async function uploadSplitFilesToS3(
 export async function uploadFile(
   localFilePath: string,
   bucket: string,
-  key: string
+  key: string,
 ) {
   try {
     const fileStream = fs.createReadStream(localFilePath);
@@ -139,7 +139,7 @@ export async function uploadFile(
   } catch (err: unknown) {
     if (isAuthError(err)) {
       throw new Error(
-        "S3 upload failed due to expired or invalid credentials."
+        "S3 upload failed due to expired or invalid credentials.",
       );
     } else {
       const msg = err instanceof Error ? err.message : String(err);
@@ -153,7 +153,7 @@ async function performIterativeUpload(
   bucket: string,
   prefix: string,
   context: string,
-  options?: UploadOptions
+  options?: UploadOptions,
 ) {
   if (!localDir || localDir.trim() === "") {
     throw new Error("Local directory path is empty or undefined.");
@@ -163,66 +163,20 @@ async function performIterativeUpload(
     console: true,
   });
 
-  let totalDirectories = 0;
-  const directoryQueue: {
-    localPath: string;
-    s3Prefix: string;
-    isClientCodeParent: boolean;
-  }[] = [];
+  // 1. Instantly read only the top level (No deep traversal lag)
+  const topLevelEntries = await fs.promises.readdir(localDir, {
+    withFileTypes: true,
+  });
+  const subDirs = topLevelEntries.filter((e) => e.isDirectory());
+  const rootFiles = topLevelEntries.filter((e) => !e.isDirectory());
 
-  const initialDirName = path.basename(localDir);
-  const isInitialDirClientCode = /^CLIENT_CODE_\d+$/.test(initialDirName);
-
-  if (!isInitialDirClientCode) {
-    totalDirectories = countTrackedDirectories(localDir, false);
-    directoryQueue.push({
-      localPath: localDir,
-      s3Prefix: prefix,
-      isClientCodeParent: false,
-    });
-  } else {
-    const entries = fs.readdirSync(localDir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (entry.isDirectory()) {
-        const entryPath = path.join(localDir, entry.name);
-        const entryKey = `${prefix}/${entry.name}`;
-        totalDirectories += countTrackedDirectories(entryPath, true);
-        directoryQueue.push({
-          localPath: entryPath,
-          s3Prefix: entryKey,
-          isClientCodeParent: true,
-        });
-      }
-    }
-  }
-
-  if (totalDirectories === 0) {
-    broadcast(
-      JSON.stringify({
-        type: "complete",
-        fileName: prefix,
-        status: "Done",
-        isDirectory: true,
-        totalDirectories: 0,
-        successfulFilesCount: 0,
-        failedFilesCount: 0,
-      })
-    );
-    logger.warn(`[${context}] No directories found to upload.`, {
-      console: true,
-    });
-    return {
-      successfulFilesCount: 0,
-      failedFilesCount: 0,
-      failedFileDetails: [],
-    };
-  }
+  const totalDirectories = subDirs.length > 0 ? subDirs.length : 1;
 
   broadcast(
     JSON.stringify({
       type: "s3-upload-total-directories",
       totalDirectories: totalDirectories,
-    })
+    }),
   );
 
   let completedDirectories = 0;
@@ -234,106 +188,135 @@ async function performIterativeUpload(
     failedFileDetails: [] as { name: string; error: string }[],
   };
 
-  while (directoryQueue.length > 0) {
-    const { localPath, s3Prefix, isClientCodeParent } = directoryQueue.shift()!;
-    const currentDirName = path.basename(localPath);
-    const isCurrentDirClientCode = /^CLIENT_CODE_\d+$/.test(currentDirName);
+  const BATCH_SIZE = 15; // Lowered to prevent network saturation and timeouts
 
-    // Log Deduplication Set for this directory
-    const loggedBaseFiles = new Set<string>();
+  // Async helper to process files in controlled batches
+  async function processFilesBatch(
+    files: fs.Dirent[],
+    currentLocalPath: string,
+    currentS3Prefix: string,
+    loggedBaseFiles: Set<string>,
+  ) {
+    for (let i = 0; i < files.length; i += BATCH_SIZE) {
+      const batch = files.slice(i, i + BATCH_SIZE);
+      const uploadPromises = batch.map(async (file) => {
+        if (options?.excludePattern && options.excludePattern.test(file.name)) {
+          return;
+        }
 
-    try {
-      const entries = fs.readdirSync(localPath, { withFileTypes: true });
-      const batchSize = 50;
+        const entryPath = path.join(currentLocalPath, file.name);
+        const entryKey = `${currentS3Prefix}/${file.name}`;
 
-      for (let i = 0; i < entries.length; i += batchSize) {
-        const batch = entries.slice(i, i + batchSize);
-        const uploadPromises: Promise<void>[] = [];
+        try {
+          await uploadFile(entryPath, bucket, entryKey);
+          successfulFilesCount++;
 
-        for (const entry of batch) {
-          const entryPath = path.join(localPath, entry.name);
-          const entryKey = `${s3Prefix}/${entry.name}`;
-
-          if (
-            options?.excludePattern &&
-            options.excludePattern.test(entry.name)
-          ) {
-            continue;
-          }
-
-          if (entry.isDirectory()) {
-            directoryQueue.push({
-              localPath: entryPath,
-              s3Prefix: entryKey,
-              isClientCodeParent: isClientCodeParent || isCurrentDirClientCode,
-            });
+          if (context === "SPLITS") {
+            const baseName = file.name.replace(/_\d+\.pdf$/, ".pdf");
+            if (!loggedBaseFiles.has(baseName)) {
+              loggedBaseFiles.add(baseName);
+              logger.info(`[${context}] Uploaded: ${baseName}`, {
+                console: false,
+              });
+            }
           } else {
-            const fileUploadPromise = (async () => {
-              try {
-                await uploadFile(entryPath, bucket, entryKey);
-                successfulFilesCount++;
-
-                if (context === "SPLITS") {
-                  const baseName = entry.name.replace(/_\d+\.pdf$/, ".pdf");
-                  if (!loggedBaseFiles.has(baseName)) {
-                    loggedBaseFiles.add(baseName);
-                    logger.info(`[${context}] Uploaded: ${baseName}`, {
-                      console: false,
-                    });
-                  }
-                } else {
-                  logger.info(`[${context}] Uploaded: ${entry.name}`, {
-                    console: false,
-                  });
-                }
-              } catch (uploadError: unknown) {
-                failedFilesCount++;
-                const errMsg =
-                  uploadError instanceof Error
-                    ? uploadError.message
-                    : "Unknown upload error";
-                logger.error(`[${context}] Failed: ${entry.name} - ${errMsg}`, {
-                  console: true,
-                });
-                results.failedFileDetails.push({
-                  name: entry.name,
-                  error: errMsg,
-                });
-              }
-            })();
-            uploadPromises.push(fileUploadPromise);
+            logger.info(`[${context}] Uploaded: ${file.name}`, {
+              console: false,
+            });
           }
+        } catch (uploadError: unknown) {
+          failedFilesCount++;
+          const errMsg =
+            uploadError instanceof Error
+              ? uploadError.message
+              : "Unknown upload error";
+          logger.error(`[${context}] Failed: ${file.name} - ${errMsg}`, {
+            console: true,
+          });
+          results.failedFileDetails.push({ name: file.name, error: errMsg });
         }
-        await Promise.all(uploadPromises);
+      });
 
-        if (i + batchSize >= entries.length) {
-          if (isClientCodeParent || !isCurrentDirClientCode) {
-            completedDirectories++;
-            // [FIX] Broadcasting REAL-TIME file stats
-            broadcast(
-              JSON.stringify({
-                type: "s3-directory-progress",
-                completedDirectories: completedDirectories,
-                totalDirectories: totalDirectories,
-                currentDirectory: s3Prefix,
-                successfulFilesCount: successfulFilesCount, // [ADDED]
-                failedFilesCount: failedFilesCount, // [ADDED]
-              })
-            );
-          }
-        }
+      await Promise.all(uploadPromises);
+    }
+  }
+
+  // Recursive DFS helper for deep folders (waits to finish before returning)
+  async function uploadFolderContents(
+    currentLocalPath: string,
+    currentS3Prefix: string,
+    loggedBaseFiles: Set<string>,
+  ) {
+    try {
+      const entries = await fs.promises.readdir(currentLocalPath, {
+        withFileTypes: true,
+      });
+
+      const files = entries.filter((e) => !e.isDirectory());
+      const dirs = entries.filter((e) => e.isDirectory());
+
+      await processFilesBatch(
+        files,
+        currentLocalPath,
+        currentS3Prefix,
+        loggedBaseFiles,
+      );
+
+      for (const dir of dirs) {
+        await uploadFolderContents(
+          path.join(currentLocalPath, dir.name),
+          `${currentS3Prefix}/${dir.name}`,
+          loggedBaseFiles,
+        );
       }
     } catch (err: unknown) {
       if (isAuthError(err)) {
         throw new Error("S3 operation failed due to expired credentials.");
       } else {
         const msg = err instanceof Error ? err.message : String(err);
-        logger.error(`[${context}] Directory Error ${localPath}: ${msg}`, {
-          console: true,
-        });
+        logger.error(
+          `[${context}] Directory Error ${currentLocalPath}: ${msg}`,
+          { console: true },
+        );
         failedFilesCount++;
       }
     }
+  }
+
+  // 2. Execution Start
+  const globalLoggedBaseFiles = new Set<string>();
+
+  // Process stray files in the root directly
+  if (rootFiles.length > 0) {
+    await processFilesBatch(rootFiles, localDir, prefix, globalLoggedBaseFiles);
+    if (subDirs.length === 0) {
+      completedDirectories = 1;
+    }
+  }
+
+  // Process subdirectories sequentially to track parent completion exactly
+  for (const dir of subDirs) {
+    const parentLoggedBaseFiles = new Set<string>();
+
+    await uploadFolderContents(
+      path.join(localDir, dir.name),
+      `${prefix}/${dir.name}`,
+      parentLoggedBaseFiles,
+    );
+
+    completedDirectories++;
+
+    // Broadcast UI progress as each top-level folder finishes
+    broadcast(
+      JSON.stringify({
+        type: "s3-directory-progress",
+        completedDirectories: completedDirectories,
+        totalDirectories: totalDirectories,
+        currentDirectory: `${prefix}/${dir.name}`,
+        successfulFilesCount: successfulFilesCount,
+        failedFilesCount: failedFilesCount,
+      }),
+    );
   }
 
   results.successfulFilesCount = successfulFilesCount;
@@ -341,7 +324,7 @@ async function performIterativeUpload(
 
   logger.info(
     `[${context}] S3 Upload Success. Uploaded: ${successfulFilesCount}, Failed: ${failedFilesCount}`,
-    { console: true }
+    { console: true },
   );
 
   broadcast(
@@ -354,7 +337,7 @@ async function performIterativeUpload(
       completedDirectories: completedDirectories,
       successfulFilesCount: successfulFilesCount,
       failedFilesCount: failedFilesCount,
-    })
+    }),
   );
 
   return results;
@@ -365,7 +348,7 @@ export async function uploadDirectoryRecursive(
   bucket: string,
   prefix: string,
   context: string,
-  options?: UploadOptions
+  options?: UploadOptions,
 ) {
   return performIterativeUpload(localDir, bucket, prefix, context, options);
 }

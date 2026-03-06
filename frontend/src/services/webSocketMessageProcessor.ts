@@ -93,19 +93,24 @@ export const createWebSocketMessageProcessor = ({
         break;
 
       case "s3-directory-progress":
-      case "complete":
-        const { processedDirectories, totalDirectories, currentDirectory } =
+      case "complete": {
+        // [FIX] Destructure completedDirectories to match the backend payload
+        const { completedDirectories, totalDirectories, currentDirectory } =
           data;
+
+        // Fallback in case old data structure is ever passed
+        const safeProcessedDirectories =
+          completedDirectories || data.processedDirectories || 0;
 
         // 1. Update S3 Context State (for Breadcrumbs/Folder counts)
         if (data.type === "s3-directory-progress") {
           progressAccumulator.current = {
-            processedDirectories: processedDirectories || 0,
+            processedDirectories: safeProcessedDirectories,
             totalDirectories: totalDirectories || 0,
             currentDirectory: currentDirectory || "",
           };
           setS3UploadProgress({
-            processedDirectories: processedDirectories || 0,
+            processedDirectories: safeProcessedDirectories,
             totalDirectories: totalDirectories || 0,
             currentDirectory: currentDirectory || "",
           });
@@ -114,7 +119,7 @@ export const createWebSocketMessageProcessor = ({
         // 2. [FIX] Update Task Log for Global Summary Display
         const percent =
           totalDirectories > 0
-            ? Math.round((data.completedDirectories / totalDirectories) * 100)
+            ? Math.round((safeProcessedDirectories / totalDirectories) * 100)
             : 0;
 
         updateTaskLog("s3Upload", {
@@ -122,7 +127,7 @@ export const createWebSocketMessageProcessor = ({
           status: data.type === "complete" ? "Completed" : "Uploading",
           progress: data.type === "complete" ? 100 : percent,
           total: totalDirectories,
-          processedRows: data.completedDirectories, // Using processedRows to fit LogEntry interface
+          processedRows: safeProcessedDirectories, // Using processedRows to fit LogEntry interface
           message:
             data.type === "complete"
               ? "S3 Upload Completed"
@@ -152,9 +157,10 @@ export const createWebSocketMessageProcessor = ({
               };
             }
             return item;
-          })
+          }),
         );
         break;
+      }
 
       case "sqlProgressUpdate":
       case "mongoProgressUpdate": {
