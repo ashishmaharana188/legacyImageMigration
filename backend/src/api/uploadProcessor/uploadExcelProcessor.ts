@@ -14,7 +14,7 @@ export async function processDataRows(
   dataRows: Record<string, any>[],
   trxnMap: Record<string, string>,
   getFileExtension: (filePath: string) => string,
-  onProgress?: (stats: any) => void
+  onProgress?: (stats: any) => void,
 ): Promise<ProcessExcelRowsResult> {
   let totalRows = 0,
     successfulRows = 0,
@@ -100,19 +100,40 @@ export async function processDataRows(
           fund,
           ihNo,
           finalPath,
-          rowNumber
+          rowNumber,
         );
         await fs.writeFile(dest, await fs.readFile(srcPath));
         const pageCountVal = await getPageCount(dest);
-        successfulRows++;
-        processedRows.push({
-          id_fund: fund,
-          id_trtype: trnMapped,
-          id_ihno: ihNo,
-          id_path: finalPath,
-          id_acno: acNo,
-          page_count: String(pageCountVal),
-        });
+
+        // Detect corrupt files caught by the metadata parser
+        if (
+          typeof pageCountVal === "string" &&
+          pageCountVal.startsWith("Error:")
+        ) {
+          await fs.unlink(dest); // Remove the corrupt file from destination
+          errors++;
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trnMapped,
+            id_ihno: ihNo,
+            id_path: finalPath,
+            id_acno: acNo,
+            page_count: "Corrupt File",
+          });
+          logger.warn(
+            `Row ${rowNumber}: Corrupt file skipped and deleted at ${dest}`,
+          );
+        } else {
+          successfulRows++;
+          processedRows.push({
+            id_fund: fund,
+            id_trtype: trnMapped,
+            id_ihno: ihNo,
+            id_path: finalPath,
+            id_acno: acNo,
+            page_count: String(pageCountVal),
+          });
+        }
       } else {
         notFound++;
         processedRows.push({
