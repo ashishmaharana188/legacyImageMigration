@@ -1,18 +1,18 @@
 import fs from "fs/promises";
 import path from "path";
 import winston from "winston";
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import util from "util";
 import { SplitFileDetail, SplitProgressUpdate } from "./splitProcessorTypes";
 
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 
 // Helper to extract split count and paths from Python stdout
 function extractSplitPaths(
   stdout: string,
   fileName: string,
   outputFolderPath: string,
-  logger: winston.Logger
+  logger: winston.Logger,
 ): string[] {
   const match = stdout.match(/Split (\d+) pages successfully/);
   if (match && match[1]) {
@@ -31,53 +31,41 @@ function extractSplitPaths(
   }
 }
 
-export async function runPythonFallback(
-  filePath: string,
-  outputFolderPath: string,
-  fileName: string,
-  logger: winston.Logger
-): Promise<string[]> {
-  const pythonScript = path.join(__dirname, "fallBackSplit.py");
-  const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
-
-  try {
-    const { stdout, stderr } = await execPromise(
-      `${pythonExecutable} "${pythonScript}" "${filePath}" "${outputFolderPath}"`
-    );
-    return extractSplitPaths(stdout, fileName, outputFolderPath, logger);
-  } catch (error) {
-    throw error;
-  }
-}
-
+// Our single, unified high-speed Python execution function
 export async function runPythonMuPDF(
   filePath: string,
   outputFolderPath: string,
   fileName: string,
-  logger: winston.Logger
+  logger: winston.Logger,
 ): Promise<string[]> {
   const pythonScript = path.join(__dirname, "mupdf_splitter.py");
   const pythonExecutable = process.env.PYTHON_EXECUTABLE_PATH || "python";
 
   try {
-    const { stdout, stderr } = await execPromise(
-      `${pythonExecutable} "${pythonScript}" "${filePath}" "${outputFolderPath}"`
+    // execFile talks directly to python.exe. No shell means no freezing.
+    // We enforce an 8-second timeout to kill zombie loops, and removed the buffer.
+    const { stdout } = await execFilePromise(
+      pythonExecutable,
+      [pythonScript, filePath, outputFolderPath],
+      {
+        timeout: 8000,
+      },
     );
     return extractSplitPaths(stdout, fileName, outputFolderPath, logger);
-  } catch (error) {
-    throw error;
+  } catch (error: any) {
+    // Blanket throw - we do not care about the specific tracebacks anymore
+    throw new Error("Extraction failed or timed out");
   }
 }
 
 export async function performSplit(
   filePath: string,
   outputFolderPath: string,
-
   logger: winston.Logger,
   progressCallback: (update: SplitProgressUpdate) => void,
   totalSplitFilesGenerated: number,
   splitErrors: number,
-  useMuPDF: boolean = false
+  useMuPDF: boolean = true,
 ): Promise<{
   createdSplitFiles: SplitFileDetail[];
   totalSplitFilesGenerated: number;
@@ -88,15 +76,11 @@ export async function performSplit(
   let currentTotalSplitFilesGenerated = totalSplitFilesGenerated;
   let currentSplitErrors = splitErrors;
 
-  let splitSuccessful = false;
-
   const processPaths = (paths: string[]) => {
     paths.forEach((splitPath) => {
       createdSplitFiles.push({ originalPath: filePath, splitPath, page: 0 });
       currentTotalSplitFilesGenerated++;
 
-      // [CRITICAL] Reporting every single file to the callback
-      // The Wrapper will decide when to throttle/broadcast
       progressCallback({
         type: "splitProgressUpdate",
         taskKey: "splitFiles",
@@ -111,44 +95,37 @@ export async function performSplit(
   };
 
   try {
-    if (useMuPDF) {
-      const splitFilePaths = await runPythonMuPDF(
-        filePath,
-        outputFolderPath,
-        fileName,
-        logger
-      );
-      splitSuccessful = processPaths(splitFilePaths);
+    const splitFilePaths = await runPythonMuPDF(
+      filePath,
+      outputFolderPath,
+      fileName,
+      logger,
+    );
+
+    const splitSuccessful = processPaths(splitFilePaths);
+
+    if (!splitSuccessful) {
+      throw new Error("No pages extracted");
     }
-  } catch (err) {
-    logger.warn(`Primary split failed for ${fileName}, attempting fallback...`);
+  } catch (err: any) {
+    // [BULLDOZER MODE] Instantly catch, tally the error, skip, and move on.
+    currentSplitErrors++;
+
+    // Log a clean, single-line skip message instead of a giant error block
+    logger.warn(`Skipped unreadable file: ${fileName}`);
+
+    progressCallback({
+      type: "splitProgressUpdate",
+      taskKey: "splitFiles",
+      totalSplitFilesGenerated: currentTotalSplitFilesGenerated,
+      splitErrors: currentSplitErrors,
+      currentlySplittingFiles: fileName,
+      message: `Skipped: ${fileName}`,
+      status: "Error",
+    });
   }
 
-  if (!splitSuccessful) {
-    try {
-      const fallbackPaths = await runPythonFallback(
-        filePath,
-        outputFolderPath,
-        fileName,
-        logger
-      );
-      splitSuccessful = processPaths(fallbackPaths);
-    } catch (fallbackErr) {
-      currentSplitErrors++;
-      logger.error(`Total failure for ${fileName}`);
-
-      progressCallback({
-        type: "splitProgressUpdate",
-        taskKey: "splitFiles",
-        totalSplitFilesGenerated: currentTotalSplitFilesGenerated,
-        splitErrors: currentSplitErrors,
-        currentlySplittingFiles: fileName,
-        message: `Failed to split: ${fileName}`,
-        status: "Error",
-      });
-    }
-  }
-
+  // Always return so the wrapper's loop continues seamlessly
   return {
     createdSplitFiles,
     totalSplitFilesGenerated: currentTotalSplitFilesGenerated,

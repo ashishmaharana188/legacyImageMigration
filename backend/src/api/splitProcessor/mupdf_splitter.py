@@ -1,52 +1,53 @@
+import fitz  # PyMuPDF
 import sys
 import os
-import fitz  # PyMuPDF
  
-def split_document(input_path, output_folder):
+def split_document(file_path, output_dir):
     try:
-        # PyMuPDF natively opens PDFs, TIFFs, JPGs, etc.
-        doc = fitz.open(input_path)
-        base_name, ext = os.path.splitext(os.path.basename(input_path))
+        if not os.path.exists(file_path):
+            print(f"Error: File not found at {file_path}", file=sys.stderr)
+            sys.exit(1)
+ 
+        file_name = os.path.basename(file_path)
+        base_name, ext = os.path.splitext(file_name)
         ext = ext.lower()
-        
-        page_count = len(doc)
-        
-        for i in range(page_count):
-            out_filename = f"{base_name}_{i+1}{ext}"
-            out_filepath = os.path.join(output_folder, out_filename)
-            
-            if ext in ['.tif', '.tiff']:
-                # For TIFFs: Extract the page as an image (Pixmap)
-                pix = doc[i].get_pixmap()
-                
-                # PyMuPDF uses pil_save to safely encode and write TIFF formats
-                # (Requires Pillow to be installed in your Python environment)
-                pix.pil_save(out_filepath)
-                
-            else:
-                # For PDFs: Create a new PDF document and insert the single page
+        os.makedirs(output_dir, exist_ok=True)
+ 
+        # Let PyMuPDF open EVERYTHING (PDFs and TIFFs) natively
+        doc = fitz.open(file_path)
+        total_pages = len(doc)
+ 
+        if ext == '.pdf':
+            for i in range(total_pages):
                 new_doc = fitz.open()
                 new_doc.insert_pdf(doc, from_page=i, to_page=i)
-                new_doc.save(out_filepath)
+                output_path = os.path.join(output_dir, f"{base_name}_{i + 1}.pdf")
+                # [SPEED FIX]: garbage=0 and deflate=False skips re-compression 
+                # and optimization, making the save operation virtually instant.
+                new_doc.save(output_path, garbage=0, deflate=False)
                 new_doc.close()
-                
+            # Node.js exact regex match
+            print(f"Split {total_pages} pages successfully")
+ 
+        elif ext in ['.tif', '.tiff']:
+            for i in range(total_pages):
+                output_path = os.path.join(output_dir, f"{base_name}_{i + 1}{ext}")
+                # [SPEED FIX]: PyMuPDF extracts the frame via C-bindings instantly.
+                pix = doc[i].get_pixmap()
+                # pil_save safely hands the raw pixel data to Pillow for quick saving
+                pix.pil_save(output_path)
+            # Node.js exact regex match
+            print(f"Split {total_pages} pages successfully")
+        else:
+            print(f"Unsupported file type: {ext}", file=sys.stderr)
+            sys.exit(1)
         doc.close()
-        
-        # This exact string tells Node.js the extraction was successful
-        print(f"Split {page_count} pages successfully")
-        sys.stdout.flush()
-        
     except Exception as e:
-        # If anything fails, print to stderr so the Node.js logger catches it!
-        print(f"Error splitting document: {str(e)}", file=sys.stderr)
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
  
 if __name__ == "__main__":
-    if len(sys.argv) < 3:
-        print("Usage: python mupdf_splitter.py <input_file> <output_folder>", file=sys.stderr)
+    if len(sys.argv) != 3:
+        print("Usage: python mupdf_splitter.py <file_path> <output_dir>", file=sys.stderr)
         sys.exit(1)
- 
-    input_file = sys.argv[1]
-    output_folder = sys.argv[2]
-    
-    split_document(input_file, output_folder)
+    split_document(sys.argv[1], sys.argv[2])
