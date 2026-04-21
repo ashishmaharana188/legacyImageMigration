@@ -1,5 +1,5 @@
 import { PoolClient } from "pg";
-import mongoose, { PipelineStage, BulkWriteOperation } from "mongoose";
+import mongoose, { PipelineStage, AnyBulkWriteOperation } from "mongoose";
 import {
   IAifDocument,
   IAifDocumentInput,
@@ -147,35 +147,35 @@ WHERE add.created_by = 'system' %CLIENT_ID_CLAUSE%;
 
 // --- MongoDB Operations ---
 export async function mongoFindOne(
-  model: mongoose.Model<IAifDocument>,
+  model: mongoose.Model<IAifDocument>
 ): Promise<IAifDocumentInput | null> {
   return model.findOne({}).lean() as unknown as IAifDocumentInput | null;
 }
 
 export async function mongoInsertMany(
   model: mongoose.Model<IAifDocument>,
-  documents: IAifDocumentInput[],
+  documents: IAifDocumentInput[]
 ): Promise<IAifDocument[]> {
   return model.insertMany(documents);
 }
 
 export async function mongoBulkWrite(
   model: mongoose.Model<IAifDocument>,
-  operations: BulkWriteOperation<IAifDocument>[],
+  operations: AnyBulkWriteOperation<IAifDocument>[]
 ): Promise<IBulkWriteResult> {
   return model.bulkWrite(operations) as unknown as IBulkWriteResult;
 }
 
 export async function mongoFind(
   model: mongoose.Model<IAifDocument>,
-  query: Record<string, unknown>,
+  query: Record<string, unknown>
 ): Promise<IAifDocumentInput[]> {
   return model.find(query).lean() as unknown as IAifDocumentInput[];
 }
 
 export async function mongoAggregate(
   model: mongoose.Model<IAifDocument>,
-  pipeline: PipelineStage[],
+  pipeline: PipelineStage[]
 ): Promise<IAifDocumentInput[]> {
   return model.aggregate(pipeline).exec() as unknown as IAifDocumentInput[];
 }
@@ -184,7 +184,7 @@ export async function mongoAggregate(
 export async function pgQuery(
   client: PoolClient,
   query: string,
-  params: unknown[] = [],
+  params: unknown[] = []
 ): Promise<{ rows: unknown[]; rowCount?: number }> {
   return client.query(query, params);
 }

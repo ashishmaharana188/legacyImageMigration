@@ -13,6 +13,8 @@ const logger = createFeatureLogger("s3Processor");
 
 const agent = new https.Agent({
   maxSockets: 200,
+  rejectUnauthorized: false,
+
 });
 
 const s3 = new S3Client({

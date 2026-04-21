@@ -23,6 +23,7 @@ const logger = createFeatureLogger("s3Processor");
 
 const agent = new https.Agent({
   maxSockets: 200,
+  rejectUnauthorized: false,
 });
 
 if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !S3_BUCKET_NAME) {
@@ -33,6 +34,7 @@ if (!AWS_ACCESS_KEY_ID || !AWS_SECRET_ACCESS_KEY || !S3_BUCKET_NAME) {
 
 const s3 = new S3Client({
   region: AWS_DEFAULT_REGION,
+  forcePathStyle: true,
   credentials: {
     accessKeyId: AWS_ACCESS_KEY_ID,
     secretAccessKey: AWS_SECRET_ACCESS_KEY,

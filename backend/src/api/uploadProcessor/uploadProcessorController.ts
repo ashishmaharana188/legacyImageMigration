@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { processExcelFile as wrapperProcessExcelFile } from "./uploadProcessorWrapper";
 import { runAndDownloadAthenaQuery } from "../../utils/athenaService";
 import { processAthenaDataThroughPostgres } from "./uploadProcessorUtil";
+import { runFallbackProcess } from "./uploadProcessorWrapper";
 
 import { parse as parseCsv } from "csv-parse/sync";
 import { stringify as stringifyCsv } from "csv-stringify/sync";
@@ -100,7 +101,52 @@ class UploadProcessorController {
   }
 
   async runFallback(req: Request, res: Response) {
-    /* fallback logic */
+    try {
+      if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+      const onProgress = (stats: any) => {
+        const wss = req.app.get("wss");
+
+        if (!wss) {
+          console.error(
+            "[DEBUG-CRITICAL] WSS is UNDEFINED. Check server.ts/app.ts setup!"
+          );
+          return;
+        }
+
+        if (wss) {
+          const message = {
+            type: "excelProcessingUpdate",
+            totalRows: stats.totalRows,
+            processedRows: stats.processedRows,
+            successfulRows: stats.successfulRows,
+            errors: stats.errors,
+            notFound: stats.notFound,
+            status: "Running Fallback...",
+          };
+          wss.clients.forEach((client: any) => {
+            if (client.readyState === 1) client.send(JSON.stringify(message));
+          });
+        }
+      };
+
+      const result = await runFallbackProcess(req.file.path, onProgress);
+
+      res.status(200).json({
+        statusCode: 200,
+        summary: {
+          totalRows: result.totalRows,
+          successfulRows: result.successfulRows,
+          errors: result.errors,
+          notFound: result.notFound,
+        },
+        processedFile: result.outputFileName,
+      });
+    } catch (error) {
+      res
+        .status(500)
+        .json({ error: "Fallback processing failed", details: error });
+    }
   }
 }
 
