@@ -4,7 +4,6 @@ import { SqlUtil } from "./sqlUtil";
 import { createFeatureLogger } from "../../utils/logger";
 import { getMongoModel } from "../../utils/dbConnect";
 import { IAifDocument, IAifDocumentInput } from "./imageDataTransferTypes";
-import { mongoFind } from "./imageDataTransferCore";
 
 const logger = createFeatureLogger("imageDataTransfer");
 
@@ -128,25 +127,9 @@ export class MongoUtil {
       for (let i = 0; i < total; i += batchSize) {
         const chunk = pgData.slice(i, i + batchSize);
 
-        // [FIX] Sanitize IDs to prevent "Cast to string failed for value {}"
-        const chunkTxnRefs = chunk
-          .map((row) => this.safeString(row.transaction_reference_id))
-          .filter((id) => id !== ""); // Remove empties to optimize query
-
-        // Bulk Duplicate Check
-        const existingDocs = await mongoFind(this.model, {
-          transactionNo: { $in: chunkTxnRefs },
-          ...(clientCode ? { clientId: clientCode } : {}),
-        });
-
-        // Create Set for O(1) lookup
-        const existingSet = new Set<string>(
-          existingDocs.map((doc) => doc.transactionNo),
-        );
-
         const docsToInsert: IAifDocumentInput[] = [];
 
-        // 4. In-Memory Filter & Map
+        // 4. Map PG rows directly into Mongo documents.
         for (const row of chunk) {
           // [SAFETY] Sanitize key fields
           const safeTxnId = this.safeString(row.transaction_reference_id);
