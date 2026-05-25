@@ -128,14 +128,16 @@ export const SQL_SELECT_AIF_DOCUMENT_DETAILS = `
 SELECT add.*, cm.client_code
 FROM investor.aif_document_details add
 JOIN fund.client_master cm ON add.client_id = cm.id
-WHERE add.user_attr2 = ANY($1::text[]) %CLIENT_ID_CLAUSE%;
+WHERE add.created_by = 'system'
+  AND add.user_attr2 = ANY($1::text[]) %CLIENT_ID_CLAUSE%;
 `;
 
 export const SQL_SELECT_AIF_DOCUMENT_DETAILS_BY_CLIENT = `
 SELECT add.*, cm.client_code
 FROM investor.aif_document_details add
 JOIN fund.client_master cm ON add.client_id = cm.id
-WHERE add.client_id = $1;
+WHERE add.client_id = $1
+  AND add.created_by = 'system';
 `;
 
 export const SQL_STREAM_UPDATE_DETAILS = `
