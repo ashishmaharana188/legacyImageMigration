@@ -66,14 +66,15 @@ class DuplicateProcessorController {
 
   async sanityCheckMongoDuplicates(req: Request, res: Response) {
     try {
-      const { dryRun, cutoffTms, clientId } = req.body;
+      const { dryRun, cutoffTms, clientId, clientCode } = req.body;
+      const mongoClientCode = clientCode || clientId;
 
       logger.info("API: sanityCheckMongoDuplicates started", {
         category: "api-calls",
         function: "sanityCheckMongoDuplicates",
         dryRun,
         cutoffTms,
-        clientId,
+        clientCode: mongoClientCode,
         console: true,
       });
 
@@ -81,7 +82,7 @@ class DuplicateProcessorController {
         await this.duplicateProcessorWrapper.sanityCheckMongoDuplicates({
           dryRun: dryRun !== false,
           cutoffTms: cutoffTms as string,
-          clientId: clientId as string,
+          clientCode: mongoClientCode as string,
         });
 
       logger.info("API: sanityCheckMongoDuplicates completed successfully", {

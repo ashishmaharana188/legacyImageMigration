@@ -80,7 +80,11 @@ export interface MongoDuplicateGroupResult {
     sourceUser: string;
   };
   count: number;
-  documents: { _id: mongoose.Types.ObjectId; createdOnDate: Date }[];
+  documents: {
+    _id: mongoose.Types.ObjectId;
+    createdOn?: string | Date | null;
+    createdOnDate?: Date | string | null;
+  }[];
 }
 
 export interface MongoDuplicateCheckResult {

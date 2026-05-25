@@ -5,18 +5,15 @@ import {
   reconnectPgPool,
   warmupPgPool,
 } from "../../utils/dbConnect";
-import { SqlLog, SanityCheckResult, InternalDryRunRow } from "./dataCleanTypes";
+import { SqlLog, SanityCheckResult } from "./dataCleanTypes";
 import {
   pgQuery,
   pgBegin,
   pgCommit,
   pgRollback,
   SQL_SELECT_CLIENT_ID_BY_CODE,
-  SQL_DRY_RUN_DUPLICATES,
-  SQL_DELETE_IMPERFECT_DUPLICATES,
-  SQL_DELETE_OLDER_PERFECT_DUPLICATES,
-  SQL_DELETE_OLDER_IMPERFECT_DUPLICATES,
-  SQL_SELECT_IMPERFECT_DUPLICATES,
+  SQL_DRY_RUN_DUPLICATE_METRICS,
+  SQL_DELETE_DUPLICATES,
 } from "./dataCleanCore";
 
 const logger = createFeatureLogger("dataClean");
@@ -54,9 +51,9 @@ export class DuplicateProcessorSqlUtil {
     });
 
     let client: PoolClient | null = null;
+    let inTransaction = false;
     try {
       client = await (await this.getPool()).connect();
-      await pgBegin(client);
 
       let clientId: number | null = null;
       if (clientCode) {
@@ -64,7 +61,6 @@ export class DuplicateProcessorSqlUtil {
           clientCode,
         ]);
         if (clientRes.rows.length === 0) {
-          await pgRollback(client);
           logger.error("SqlUtil: Client not found", {
             clientCode,
             console: true,
@@ -87,91 +83,43 @@ export class DuplicateProcessorSqlUtil {
       };
       const clientFilter = (alias?: string) =>
         clientId
-          ? `AND ${alias ? alias + "." : ""}client_id = ${clientId}`
+          ? `AND ${alias ? alias + "." : ""}client_id = $2`
           : "";
+      const queryParams = clientId ? [cutoffTms, clientId] : [cutoffTms];
+
+      const readMetricCounts = (row: any = {}) => ({
+        imperfectVsPerfect: Number(row.imperfect_vs_perfect || 0),
+        olderVersions: Number(row.older_versions || 0),
+        olderImperfects: Number(row.older_imperfects || 0),
+      });
 
       // Prepare SQL Strings
-      const dryRunSql = SQL_DRY_RUN_DUPLICATES.replace(/%KEY_EXPR%/g, keyExpr())
+      const dryRunSql = SQL_DRY_RUN_DUPLICATE_METRICS.replace(
+        /%KEY_EXPR%/g,
+        keyExpr()
+      )
         .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
         .replace(/%CLIENT_FILTER%/g, clientFilter())
         .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
 
-      const imperfectDuplicatesSql = SQL_SELECT_IMPERFECT_DUPLICATES.replace(
-        /%KEY_EXPR%/g,
-        keyExpr()
-      )
-        .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
-        .replace(/%KEY_EXPR_P%/g, keyExpr("p"))
-        .replace(/%CLIENT_FILTER%/g, clientFilter())
-        .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
-      const deleteImperfectSql = SQL_DELETE_IMPERFECT_DUPLICATES.replace(
+      const deleteDuplicatesSql = SQL_DELETE_DUPLICATES.replace(
         /%KEY_EXPR%/g,
         keyExpr()
       )
         .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
         .replace(/%CLIENT_FILTER%/g, clientFilter())
         .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
-      const deleteOlderPerfectSql = SQL_DELETE_OLDER_PERFECT_DUPLICATES.replace(
-        /%KEY_EXPR%/g,
-        keyExpr()
-      )
-        .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
-        .replace(/%CLIENT_FILTER%/g, clientFilter())
-        .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
-      const deleteImperfectDuplicatesSql =
-        SQL_DELETE_OLDER_IMPERFECT_DUPLICATES.replace(/%KEY_EXPR%/g, keyExpr())
-          .replace(/%KEY_EXPR_D%/g, keyExpr("d"))
-          .replace(/%CLIENT_FILTER%/g, clientFilter())
-          .replace(/%CLIENT_FILTER_D%/g, clientFilter("d"));
 
       if (dryRun) {
         logger.info("SqlUtil: Executing Dry Run queries...", { console: true });
 
-        const dryRunRes = await pgQuery(client, dryRunSql, [cutoffTms]);
-        const imperfectRes = await pgQuery(client, imperfectDuplicatesSql, [
-          cutoffTms,
-        ]);
+        const dryRunRes = await pgQuery(client, dryRunSql, queryParams);
 
-        await pgRollback(client);
-
-        // [METRICS CALCULATION - FIXED TO MATCH DATABASE.TS LOGIC]
-        let countImperfectVsPerfect = 0;
-        let countOlderVersions = 0;
-        let countOlderImperfects = 0;
-
-        for (const row of dryRunRes.rows as InternalDryRunRow[]) {
-          const isPerfectRow = !!(
-            row.folio_id &&
-            row.transaction_reference_id &&
-            row.user_attr1 &&
-            row.user_attr2
-          );
-
-          // Rule 1: Group has at least one perfect row. Delete the imperfects.
-          if (row.perfect_rows_in_group > 0) {
-            if (!isPerfectRow) {
-              countImperfectVsPerfect++; // "Imperfect row in group with perfect row"
-            } else {
-              // It is a perfect row.
-              // Check if the group is ALL perfect rows (Pure Perfect Group)
-              if (row.perfect_rows_in_group === row.total_rows_in_group) {
-                // Rule 2: In an all-perfect group, keep newest, delete older.
-                if (row.rn_desc > 1) {
-                  countOlderVersions++;
-                }
-              }
-              // If group is Mixed (Perfect + Imperfect), we KEEP the perfect rows.
-              // So we do NOT increment countOlderVersions here.
-            }
-          }
-          // Rule 3: Group has NO perfect rows (All Imperfect).
-          else if (row.total_rows_in_group > 1) {
-             // Keep newest, delete older.
-             if (row.rn_desc > 1) {
-               countOlderImperfects++;
-             }
-          }
-        }
+        const {
+          imperfectVsPerfect: countImperfectVsPerfect,
+          olderVersions: countOlderVersions,
+          olderImperfects: countOlderImperfects,
+        } = readMetricCounts(dryRunRes.rows[0]);
 
         const totalDuplicates =
           countImperfectVsPerfect + countOlderVersions + countOlderImperfects;
@@ -198,16 +146,23 @@ export class DuplicateProcessorSqlUtil {
           console: true,
         });
 
-        const del1 = await pgQuery(client, deleteImperfectSql, [cutoffTms]);
-        const del2 = await pgQuery(client, deleteOlderPerfectSql, [cutoffTms]);
-        const del3 = await pgQuery(client, deleteImperfectDuplicatesSql, [
-          cutoffTms,
-        ]);
+        await pgBegin(client);
+        inTransaction = true;
+
+        const deleteRes = await pgQuery(
+          client,
+          deleteDuplicatesSql,
+          queryParams
+        );
 
         await pgCommit(client);
+        inTransaction = false;
 
+        const deleteMetrics = readMetricCounts(deleteRes.rows[0]);
         const totalDeleted =
-          (del1.rowCount || 0) + (del2.rowCount || 0) + (del3.rowCount || 0);
+          deleteMetrics.imperfectVsPerfect +
+          deleteMetrics.olderVersions +
+          deleteMetrics.olderImperfects;
 
         logger.info(`SqlUtil: Live Delete finished. Total: ${totalDeleted}`, {
           console: true,
@@ -219,16 +174,12 @@ export class DuplicateProcessorSqlUtil {
           cutoffTms,
           deletedCount: totalDeleted,
           totalDuplicatesFound: totalDeleted,
-          metrics: {
-            imperfectVsPerfect: del1.rowCount || 0,
-            olderVersions: del2.rowCount || 0,
-            olderImperfects: del3.rowCount || 0,
-          },
+          metrics: deleteMetrics,
           logs: [{ row: 0, status: "info", message: "Deletion complete" }],
         };
       }
     } catch (err) {
-      if (client) await pgRollback(client);
+      if (client && inTransaction) await pgRollback(client);
       const msg = String(err);
       logger.error("SqlUtil: Error during execution", {
         error: msg,

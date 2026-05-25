@@ -97,7 +97,7 @@ export class DuplicateProcessorWrapper {
   public async sanityCheckMongoDuplicates(params: {
     dryRun?: boolean;
     cutoffTms?: string;
-    clientId?: string;
+    clientCode?: string;
   }): Promise<{
     result: "success" | "failed";
     dryRun: boolean;
