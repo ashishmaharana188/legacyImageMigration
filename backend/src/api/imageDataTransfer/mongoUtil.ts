@@ -38,6 +38,21 @@ export class MongoUtil {
     return String(val);
   }
 
+  private parsePageCount(row: {
+    page_count?: number | string | null;
+    total_page_count?: number | string | null;
+  }): number | null {
+    const rawPageCount = row.page_count ?? row.total_page_count;
+    if (rawPageCount === null || rawPageCount === undefined) return null;
+
+    const pageCount =
+      typeof rawPageCount === "number"
+        ? rawPageCount
+        : Number(rawPageCount.toString().trim());
+
+    return Number.isFinite(pageCount) ? pageCount : null;
+  }
+
   async transferDataFromPostgres(
     clientCode: string | undefined,
     onProgress: (p: ImageDataProgress) => void,
@@ -167,13 +182,9 @@ export class MongoUtil {
             currentStage: row.current_stage || 0,
             documentFormat: row.document_format,
             documentPath: row.document_path,
-            // [FIX] Ensure Size/Pages are strings
+            // [FIX] Ensure size is string and page count is numeric for Mongo.
             documentSize: this.safeString(row.document_size || "0"),
-            totalPageCount: row.page_count
-              ? String(row.page_count)
-              : row.total_page_count
-                ? String(row.total_page_count)
-                : null,
+            totalPageCount: this.parsePageCount(row),
 
             mimeType: row.mime_type,
 

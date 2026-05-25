@@ -27,8 +27,8 @@ export interface AifDocumentDetail {
   document_process: string;
   document_activity?: string; // [Added]
   source_user?: string;
-  total_page_count?: number | null;
-  page_count?: number; // [Added] (SQL often returns this)
+  total_page_count?: number | string | null;
+  page_count?: number | string | null; // [Added] (SQL often returns this)
   transaction_reference_id: string;
   folio_id?: number | null; // [Added]
   document_status?: string; // [Added]
