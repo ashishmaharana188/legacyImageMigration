@@ -142,7 +142,12 @@ export class DuplicateProcessorMongoUtil {
       await this.connect();
 
       const pipeline: PipelineStage[] = [
-        ...(clientCode ? [{ $match: { clientId: clientCode.trim() } }] : []),
+        {
+          $match: {
+            sourceUser: "system",
+            ...(clientCode ? { clientId: clientCode.trim() } : {}),
+          },
+        },
         {
           $addFields: {
             createdOnDate: {
