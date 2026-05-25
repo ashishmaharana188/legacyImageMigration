@@ -127,7 +127,7 @@ export async function processAthenaDataThroughPostgres(
     // 1. DYNAMIC SCHEMA: Check if table exists
     const tableCheck = await client.query(`
       SELECT EXISTS (
-        SELECT FROM information_schema.tables 
+        SELECT FROM information_schema.tables
         WHERE table_schema = 'public' AND table_name = 'temp_athena_csv_imagedump'
       );
     `);
@@ -141,7 +141,7 @@ export async function processAthenaDataThroughPostgres(
     } else {
       // AUTO-ALTER
       const colCheck = await client.query(`
-        SELECT column_name FROM information_schema.columns 
+        SELECT column_name FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'temp_athena_csv_imagedump';
       `);
       const existingColumns = colCheck.rows.map((r) =>
