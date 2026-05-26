@@ -10,6 +10,7 @@ import {
   S3Item,
   S3File,
   S3ApiResponse,
+  S3UploadOptions,
   useS3BrowserProps,
   useS3UploadProps,
 } from "./s3ManagerType";
@@ -192,7 +193,7 @@ export const useS3UploadHook = ({
   const [splitLoading, setSplitLoading] = useState(false);
 
   const handleUploadToS3 = useCallback(
-    async (localDir: string, prefix: string) => {
+    async (localDir: string, prefix: string, options?: S3UploadOptions) => {
       setOriginalLoading(true);
       clearTaskLog("s3Upload");
 
@@ -207,11 +208,16 @@ export const useS3UploadHook = ({
       });
 
       setUploadStatuses((prev) => [
-        ...prev,
+        ...prev.filter(
+          (upload) =>
+            upload.fileName !== "Original File" &&
+            upload.uploadKind !== "Originals"
+        ),
         {
           fileName: "Original File",
           status: "pending",
           progress: 0,
+          uploadKind: "Originals",
           totalFiles: 0,
           processedFiles: 0,
           successfulFiles: 0,
@@ -220,7 +226,7 @@ export const useS3UploadHook = ({
       ]);
 
       try {
-        const response = await uploadOriginalToS3(localDir, prefix);
+        const response = await uploadOriginalToS3(localDir, prefix, options);
         updateTaskLog("s3Upload", {
           id: `UP_ORIG_OK_${Date.now()}`,
           message: `Original file upload successful: ${response.message}`,
@@ -272,7 +278,7 @@ export const useS3UploadHook = ({
   );
 
   const handleUploadSplitFilesToS3 = useCallback(
-    async (localDir: string, prefix: string) => {
+    async (localDir: string, prefix: string, options?: S3UploadOptions) => {
       setSplitLoading(true);
       clearTaskLog("s3Upload");
 
@@ -287,11 +293,15 @@ export const useS3UploadHook = ({
       });
 
       setUploadStatuses((prev) => [
-        ...prev,
+        ...prev.filter(
+          (upload) =>
+            upload.fileName !== "Split Files" && upload.uploadKind !== "Splits"
+        ),
         {
           fileName: "Split Files",
           status: "pending",
           progress: 0,
+          uploadKind: "Splits",
           totalFiles: 0,
           processedFiles: 0,
           successfulFiles: 0,
@@ -300,7 +310,7 @@ export const useS3UploadHook = ({
       ]);
 
       try {
-        const response = await uploadSplitFilesToS3(localDir, prefix);
+        const response = await uploadSplitFilesToS3(localDir, prefix, options);
         updateTaskLog("s3Upload", {
           id: `UP_SPLIT_OK_${Date.now()}`,
           message: `Split files upload successful: ${response.message}`,

@@ -18,8 +18,67 @@ import {
   getS3FilePrefix,
   getS3SplitPrefix,
 } from "../../utils/s3Config";
+import { broadcast } from "../../utils/webSocketService";
+
+type S3UploadResult = {
+  successfulFilesCount: number;
+  failedFilesCount: number;
+  failedFileDetails?: { name: string; error: string }[];
+};
 
 class S3ProcessorController {
+  private createUploadJobId(context: string): string {
+    return `${context}_${Date.now()}_${Math.random()
+      .toString(36)
+      .slice(2, 8)}`;
+  }
+
+  private getBoundedNumber(
+    value: unknown,
+    fallback: number,
+    min: number,
+    max: number
+  ): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) return fallback;
+    return Math.min(max, Math.max(min, Math.floor(parsed)));
+  }
+
+  private emitS3Progress(payload: Record<string, unknown>) {
+    try {
+      broadcast(JSON.stringify(payload));
+    } catch (error) {
+      logger.error({
+        category: "task-steps",
+        function: "emitS3Progress",
+        message: "Failed to broadcast S3 progress",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  private async runWithConcurrency<T, R>(
+    items: T[],
+    concurrency: number,
+    worker: (item: T, index: number) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let nextIndex = 0;
+
+    const workers = Array.from(
+      { length: Math.min(concurrency, items.length) },
+      async () => {
+        while (nextIndex < items.length) {
+          const currentIndex = nextIndex++;
+          results[currentIndex] = await worker(items[currentIndex], currentIndex);
+        }
+      }
+    );
+
+    await Promise.all(workers);
+    return results;
+  }
+
   async uploadToS3(req: Request, res: Response) {
     // [LOG] Confirming which API is hit
     logger.info("=================================================", {
@@ -88,52 +147,138 @@ class S3ProcessorController {
         });
       }
 
-      // [FIX] SEQUENTIAL PROCESSING
-      // We process folders one by one to ensure the Progress Bar reflects one folder at a time
-      // without jumping between different totals.
-      const uploadResults = [];
-      let processedCount = 0;
+      const folderConcurrency = this.getBoundedNumber(
+        req.body.folderConcurrency ?? process.env.S3_FOLDER_CONCURRENCY,
+        4,
+        1,
+        8
+      );
+      const fileBatchSize = this.getBoundedNumber(
+        req.body.fileBatchSize ?? process.env.S3_FILE_BATCH_SIZE,
+        15,
+        1,
+        50
+      );
+      const jobId = this.createUploadJobId("ORIGINALS");
+      let completedFolders = 0;
+      let aggregateSuccessfulFiles = 0;
+      let aggregateFailedFiles = 0;
 
-      for (const clientDir of clientDirs) {
-        processedCount++;
-        const clientPath = path.join(targetRoot, clientDir.name);
-        const s3Prefix = getS3FilePrefix(clientDir.name);
+      this.emitS3Progress({
+        type: "s3-upload-start",
+        jobId,
+        uploadKind: "Originals",
+        totalFolders: clientDirs.length,
+        folderConcurrency,
+        fileBatchSize,
+      });
 
-        logger.info({
-          category: "task-steps",
-          function: "uploadToS3",
-          message: `[Folder ${processedCount}/${clientDirs.length}] Processing Original: ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
-          console: true,
-        });
+      const uploadResults = await this.runWithConcurrency(
+        clientDirs,
+        folderConcurrency,
+        async (clientDir, index): Promise<S3UploadResult> => {
+          const clientPath = path.join(targetRoot, clientDir.name);
+          const s3Prefix = getS3FilePrefix(clientDir.name);
+          const folderId = `${jobId}:${clientDir.name}`;
 
-        try {
-          // Await completion BEFORE starting the next one
-          const result = await uploadDirectoryRecursive(
-            clientPath,
-            bucket,
-            s3Prefix,
-            "ORIGINALS"
-          );
-          uploadResults.push(result);
-        } catch (error) {
-          logger.error({
+          logger.info({
             category: "task-steps",
             function: "uploadToS3",
-            message: `S3 upload error for ${clientDir.name}`,
-            error: error instanceof Error ? error.message : "Unknown error",
+            message: `[Folder ${index + 1}/${clientDirs.length}] Processing Original: ${clientDir.name} -> s3://${bucket}/${s3Prefix}`,
+            console: true,
           });
-          uploadResults.push({
-            successfulFilesCount: 0,
-            failedFilesCount: 1,
-            failedFileDetails: [
+
+          this.emitS3Progress({
+            type: "s3-folder-start",
+            jobId,
+            folderId,
+            folderName: clientDir.name,
+            s3Prefix,
+            uploadKind: "Originals",
+            folderIndex: index + 1,
+            totalFolders: clientDirs.length,
+          });
+
+          try {
+            const result = await uploadDirectoryRecursive(
+              clientPath,
+              bucket,
+              s3Prefix,
+              "ORIGINALS",
               {
-                name: clientDir.name,
-                error: error instanceof Error ? error.message : "Unknown error",
-              },
-            ],
-          });
+                jobId,
+                folderId,
+                folderName: clientDir.name,
+                emitLegacyProgress: false,
+                fileBatchSize,
+              }
+            );
+
+            completedFolders++;
+            aggregateSuccessfulFiles += result.successfulFilesCount;
+            aggregateFailedFiles += result.failedFilesCount;
+
+            this.emitS3Progress({
+              type: "s3-folder-complete",
+              jobId,
+              folderId,
+              folderName: clientDir.name,
+              uploadKind: "Originals",
+              status:
+                result.failedFilesCount > 0
+                  ? "completed_with_errors"
+                  : "completed",
+              completedFolders,
+              totalFolders: clientDirs.length,
+              successfulFilesCount: result.successfulFilesCount,
+              failedFilesCount: result.failedFilesCount,
+              aggregateSuccessfulFiles,
+              aggregateFailedFiles,
+            });
+
+            return result;
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
+            logger.error({
+              category: "task-steps",
+              function: "uploadToS3",
+              message: `S3 upload error for ${clientDir.name}`,
+              error: errorMessage,
+            });
+
+            completedFolders++;
+            aggregateFailedFiles++;
+
+            this.emitS3Progress({
+              type: "s3-folder-complete",
+              jobId,
+              folderId,
+              folderName: clientDir.name,
+              uploadKind: "Originals",
+              status: "failed",
+              completedFolders,
+              totalFolders: clientDirs.length,
+              successfulFilesCount: 0,
+              failedFilesCount: 1,
+              aggregateSuccessfulFiles,
+              aggregateFailedFiles,
+              errorMessage,
+            });
+
+            return {
+              successfulFilesCount: 0,
+              failedFilesCount: 1,
+              failedFileDetails: [
+                {
+                  name: clientDir.name,
+                  error: errorMessage,
+                },
+              ],
+            };
+          }
         }
-      }
+      );
 
       const totalSuccessfulFiles = uploadResults.reduce(
         (sum, res) => sum + res.successfulFilesCount,
@@ -148,6 +293,17 @@ class S3ProcessorController {
         totalFailedFiles > 0
           ? `S3 upload completed: ${totalSuccessfulFiles} Successful - ${totalFailedFiles} Failed`
           : `S3 upload completed successfully. Total files uploaded: ${totalSuccessfulFiles}.`;
+
+      this.emitS3Progress({
+        type: "s3-upload-complete",
+        jobId,
+        uploadKind: "Originals",
+        totalFolders: clientDirs.length,
+        completedFolders: clientDirs.length,
+        successfulFilesCount: totalSuccessfulFiles,
+        failedFilesCount: totalFailedFiles,
+        status: totalFailedFiles > 0 ? "completed_with_errors" : "completed",
+      });
 
       res.status(200).json({
         statusCode: 200,
@@ -233,49 +389,138 @@ class S3ProcessorController {
         });
       }
 
-      // [FIX] SEQUENTIAL PROCESSING FOR SPLITS
-      const uploadResults = [];
-      let processedCount = 0;
+      const folderConcurrency = this.getBoundedNumber(
+        req.body.folderConcurrency ?? process.env.S3_FOLDER_CONCURRENCY,
+        4,
+        1,
+        8
+      );
+      const fileBatchSize = this.getBoundedNumber(
+        req.body.fileBatchSize ?? process.env.S3_FILE_BATCH_SIZE,
+        15,
+        1,
+        50
+      );
+      const jobId = this.createUploadJobId("SPLITS");
+      let completedFolders = 0;
+      let aggregateSuccessfulFiles = 0;
+      let aggregateFailedFiles = 0;
 
-      for (const clientDir of clientDirs) {
-        processedCount++;
-        const clientPath = path.join(splitOutputRoot, clientDir.name);
-        const s3Prefix = getS3SplitPrefix(clientDir.name);
+      this.emitS3Progress({
+        type: "s3-upload-start",
+        jobId,
+        uploadKind: "Splits",
+        totalFolders: clientDirs.length,
+        folderConcurrency,
+        fileBatchSize,
+      });
 
-        logger.info({
-          category: "task-steps",
-          function: "uploadSplitFilesToS3",
-          message: `[Folder ${processedCount}/${clientDirs.length}] Processing Splits: ${clientDir.name} → s3://${bucket}/${s3Prefix}`,
-          console: true,
-        });
+      const uploadResults = await this.runWithConcurrency(
+        clientDirs,
+        folderConcurrency,
+        async (clientDir, index): Promise<S3UploadResult> => {
+          const clientPath = path.join(splitOutputRoot, clientDir.name);
+          const s3Prefix = getS3SplitPrefix(clientDir.name);
+          const folderId = `${jobId}:${clientDir.name}`;
 
-        try {
-          const result = await uploadDirectoryRecursive(
-            clientPath,
-            bucket,
-            s3Prefix,
-            "SPLITS"
-          );
-          uploadResults.push(result);
-        } catch (error) {
-          logger.error({
+          logger.info({
             category: "task-steps",
             function: "uploadSplitFilesToS3",
-            message: `S3 upload error for ${clientDir.name}`,
-            error: error instanceof Error ? error.message : "Unknown error",
+            message: `[Folder ${index + 1}/${clientDirs.length}] Processing Splits: ${clientDir.name} -> s3://${bucket}/${s3Prefix}`,
+            console: true,
           });
-          uploadResults.push({
-            successfulFilesCount: 0,
-            failedFilesCount: 1,
-            failedFileDetails: [
+
+          this.emitS3Progress({
+            type: "s3-folder-start",
+            jobId,
+            folderId,
+            folderName: clientDir.name,
+            s3Prefix,
+            uploadKind: "Splits",
+            folderIndex: index + 1,
+            totalFolders: clientDirs.length,
+          });
+
+          try {
+            const result = await uploadDirectoryRecursive(
+              clientPath,
+              bucket,
+              s3Prefix,
+              "SPLITS",
               {
-                name: clientDir.name,
-                error: error instanceof Error ? error.message : "Unknown error",
-              },
-            ],
-          });
+                jobId,
+                folderId,
+                folderName: clientDir.name,
+                emitLegacyProgress: false,
+                fileBatchSize,
+              }
+            );
+
+            completedFolders++;
+            aggregateSuccessfulFiles += result.successfulFilesCount;
+            aggregateFailedFiles += result.failedFilesCount;
+
+            this.emitS3Progress({
+              type: "s3-folder-complete",
+              jobId,
+              folderId,
+              folderName: clientDir.name,
+              uploadKind: "Splits",
+              status:
+                result.failedFilesCount > 0
+                  ? "completed_with_errors"
+                  : "completed",
+              completedFolders,
+              totalFolders: clientDirs.length,
+              successfulFilesCount: result.successfulFilesCount,
+              failedFilesCount: result.failedFilesCount,
+              aggregateSuccessfulFiles,
+              aggregateFailedFiles,
+            });
+
+            return result;
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : "Unknown error";
+            logger.error({
+              category: "task-steps",
+              function: "uploadSplitFilesToS3",
+              message: `S3 upload error for ${clientDir.name}`,
+              error: errorMessage,
+            });
+
+            completedFolders++;
+            aggregateFailedFiles++;
+
+            this.emitS3Progress({
+              type: "s3-folder-complete",
+              jobId,
+              folderId,
+              folderName: clientDir.name,
+              uploadKind: "Splits",
+              status: "failed",
+              completedFolders,
+              totalFolders: clientDirs.length,
+              successfulFilesCount: 0,
+              failedFilesCount: 1,
+              aggregateSuccessfulFiles,
+              aggregateFailedFiles,
+              errorMessage,
+            });
+
+            return {
+              successfulFilesCount: 0,
+              failedFilesCount: 1,
+              failedFileDetails: [
+                {
+                  name: clientDir.name,
+                  error: errorMessage,
+                },
+              ],
+            };
+          }
         }
-      }
+      );
 
       const totalSuccessfulFiles = uploadResults.reduce(
         (sum, res) => sum + res.successfulFilesCount,
@@ -290,6 +535,17 @@ class S3ProcessorController {
         totalFailedFiles > 0
           ? `S3 split files upload completed: ${totalSuccessfulFiles} Successful and ${totalFailedFiles} Failed`
           : `S3 split files upload completed successfully. Total files uploaded: ${totalSuccessfulFiles}.`;
+
+      this.emitS3Progress({
+        type: "s3-upload-complete",
+        jobId,
+        uploadKind: "Splits",
+        totalFolders: clientDirs.length,
+        completedFolders: clientDirs.length,
+        successfulFilesCount: totalSuccessfulFiles,
+        failedFilesCount: totalFailedFiles,
+        status: totalFailedFiles > 0 ? "completed_with_errors" : "completed",
+      });
 
       res.status(200).json({
         statusCode: 200,

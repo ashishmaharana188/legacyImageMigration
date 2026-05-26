@@ -16,6 +16,7 @@ function S3BrowserComponent() {
     updateTaskLog,
     onClearLogs: clearTaskLog,
     setUploadStatuses,
+    uploadStatuses,
   } = useTaskLog();
   const s3BrowserUIProps = useS3BrowserHook({ updateTaskLog, clearTaskLog });
   const s3UploadUIProps = useS3UploadHook({
@@ -26,7 +27,7 @@ function S3BrowserComponent() {
   return (
     <div className="flex flex-col gap-4">
       <S3BrowserUI {...s3BrowserUIProps} />
-      <S3UploadUI {...s3UploadUIProps} />
+      <S3UploadUI {...s3UploadUIProps} uploadStatuses={uploadStatuses} />
     </div>
   );
 }

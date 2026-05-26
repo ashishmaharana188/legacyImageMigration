@@ -3,6 +3,14 @@ export interface UploadStatus {
   status: string;
   progress: number;
   id?: number;
+  jobId?: string;
+  folderId?: string;
+  uploadKind?: string;
+  currentDirectory?: string;
+  totalDirectories?: number;
+  processedDirectories?: number;
+  folderIndex?: number;
+  totalFolders?: number;
   totalFiles?: number;
   processedFiles?: number;
   successfulFiles?: number;

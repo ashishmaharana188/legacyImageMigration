@@ -1,5 +1,10 @@
 import { UploadStatus, LogEntry } from "../../types";
 
+export interface S3UploadOptions {
+  folderConcurrency?: number;
+  fileBatchSize?: number;
+}
+
 export interface S3File {
   key: string;
   lastModified?: string;
@@ -33,10 +38,16 @@ export interface useS3UploadProps {
 export interface S3UploadUIProps {
   originalLoading: boolean;
   splitLoading: boolean;
-  handleUploadToS3: (localDir: string, prefix: string) => Promise<void>;
+  uploadStatuses?: UploadStatus[];
+  handleUploadToS3: (
+    localDir: string,
+    prefix: string,
+    options?: S3UploadOptions
+  ) => Promise<void>;
   handleUploadSplitFilesToS3: (
     localDir: string,
-    prefix: string
+    prefix: string,
+    options?: S3UploadOptions
   ) => Promise<void>;
 }
 

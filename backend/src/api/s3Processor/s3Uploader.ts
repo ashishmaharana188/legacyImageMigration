@@ -31,6 +31,11 @@ const s3 = new S3Client({
 
 export interface UploadOptions {
   excludePattern?: RegExp;
+  jobId?: string;
+  folderId?: string;
+  folderName?: string;
+  emitLegacyProgress?: boolean;
+  fileBatchSize?: number;
 }
 
 export async function uploadOriginalToS3(
@@ -190,7 +195,27 @@ async function performIterativeUpload(
     failedFileDetails: [] as { name: string; error: string }[],
   };
 
-  const BATCH_SIZE = 15; // Lowered to prevent network saturation and timeouts
+  const BATCH_SIZE = options?.fileBatchSize || 15;
+  const emitLegacyProgress = options?.emitLegacyProgress !== false;
+
+  function emitFolderProgress(currentDirectory: string) {
+    if (!options?.jobId || !options.folderId) return;
+
+    broadcast(
+      JSON.stringify({
+        type: "s3-folder-progress",
+        jobId: options.jobId,
+        folderId: options.folderId,
+        folderName: options.folderName || path.basename(localDir),
+        currentDirectory,
+        completedDirectories,
+        totalDirectories,
+        successfulFilesCount,
+        failedFilesCount,
+        processedFiles: successfulFilesCount + failedFilesCount,
+      }),
+    );
+  }
 
   // Async helper to process files in controlled batches
   async function processFilesBatch(
@@ -240,6 +265,7 @@ async function performIterativeUpload(
       });
 
       await Promise.all(uploadPromises);
+      emitFolderProgress(currentS3Prefix);
     }
   }
 
@@ -294,6 +320,7 @@ async function performIterativeUpload(
     if (subDirs.length === 0) {
       completedDirectories = 1;
     }
+    emitFolderProgress(prefix);
   }
 
   // Process subdirectories sequentially to track parent completion exactly
@@ -308,17 +335,20 @@ async function performIterativeUpload(
 
     completedDirectories++;
 
-    // Broadcast UI progress as each top-level folder finishes
-    broadcast(
-      JSON.stringify({
-        type: "s3-directory-progress",
-        completedDirectories: completedDirectories,
-        totalDirectories: totalDirectories,
-        currentDirectory: `${prefix}/${dir.name}`,
-        successfulFilesCount: successfulFilesCount,
-        failedFilesCount: failedFilesCount,
-      }),
-    );
+    emitFolderProgress(`${prefix}/${dir.name}`);
+
+    if (emitLegacyProgress) {
+      broadcast(
+        JSON.stringify({
+          type: "s3-directory-progress",
+          completedDirectories: completedDirectories,
+          totalDirectories: totalDirectories,
+          currentDirectory: `${prefix}/${dir.name}`,
+          successfulFilesCount: successfulFilesCount,
+          failedFilesCount: failedFilesCount,
+        }),
+      );
+    }
   }
 
   results.successfulFilesCount = successfulFilesCount;
@@ -329,18 +359,20 @@ async function performIterativeUpload(
     { console: true },
   );
 
-  broadcast(
-    JSON.stringify({
-      type: "complete",
-      fileName: prefix,
-      status: "Done",
-      isDirectory: true,
-      totalDirectories: totalDirectories,
-      completedDirectories: completedDirectories,
-      successfulFilesCount: successfulFilesCount,
-      failedFilesCount: failedFilesCount,
-    }),
-  );
+  if (emitLegacyProgress) {
+    broadcast(
+      JSON.stringify({
+        type: "complete",
+        fileName: prefix,
+        status: "Done",
+        isDirectory: true,
+        totalDirectories: totalDirectories,
+        completedDirectories: completedDirectories,
+        successfulFilesCount: successfulFilesCount,
+        failedFilesCount: failedFilesCount,
+      }),
+    );
+  }
 
   return results;
 }

@@ -1,5 +1,5 @@
 import axios from "axios";
-import { S3ApiResponse, S3UploadResponse } from "./s3ManagerType";
+import { S3ApiResponse, S3UploadOptions, S3UploadResponse } from "./s3ManagerType";
 
 let API_BASE_URL: string = "http://localhost:3000"; // Default to backend port
 
@@ -41,20 +41,28 @@ export const deleteS3Object = async (key: string) => {
   return axios.post(`${API_BASE_URL}/s3/delete`, { keys: [key] });
 };
 
-export const uploadOriginalToS3 = async (localDir: string, prefix: string): Promise<S3UploadResponse> => {
+export const uploadOriginalToS3 = async (
+  localDir: string,
+  prefix: string,
+  options: S3UploadOptions = {}
+): Promise<S3UploadResponse> => {
   await configPromise;
   const res = await axios.post<S3UploadResponse>(
     `${API_BASE_URL}/s3/upload-directory`,
-    { localDir, prefix }
+    { localDir, prefix, ...options }
   );
   return res.data;
 };
 
-export const uploadSplitFilesToS3 = async (localDir: string, prefix: string): Promise<S3UploadResponse> => {
+export const uploadSplitFilesToS3 = async (
+  localDir: string,
+  prefix: string,
+  options: S3UploadOptions = {}
+): Promise<S3UploadResponse> => {
   await configPromise;
   const res = await axios.post<S3UploadResponse>(
     `${API_BASE_URL}/s3/upload-split-files`,
-    { localDir, prefix }
+    { localDir, prefix, ...options }
   );
   return res.data;
 };
