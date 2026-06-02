@@ -45,11 +45,13 @@ export class SqlUtil {
     IC: "IC",
     NCT: "NCT",
     RED: "RED",
+    ADD:"TU",
     FUL: "RED",
     IOBI: "IOBI",
     IOBIS: "IOBIS",
-    SWOP: "SWP",
-    SWOF: "SWP",
+    SWOP: "SWCH",
+    SWOF: "SWCH",
+    SIN:"IOBIS"
   };
 
   public async getPool(): Promise<Pool> {
@@ -203,8 +205,8 @@ export class SqlUtil {
         FUL: "Redemption Form",
         IPO: "IPO Form",
         SIN: "SIP Form",
-        SWOP: "SWP Form",
-        SWOF: "SWP Form",
+        SWOP: "Switch Form",
+        SWOF: "Switch Form",
       };
 
       const mimeType: Record<string, string> = {
