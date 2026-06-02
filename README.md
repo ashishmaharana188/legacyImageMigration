@@ -1,6 +1,4 @@
-<h1>Legacy Image Migration Architecture</h1>
 
-<h2>System Architecture Diagram</h2>
 <pre><code>
 =============================================================================
                      LEGACY IMAGE MIGRATION ARCHITECTURE
