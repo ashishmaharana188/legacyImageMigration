@@ -162,6 +162,216 @@ export const createWebSocketMessageProcessor = ({
         break;
       }
 
+      case "s3-upload-start": {
+        const totalFolders = data.totalFolders || 0;
+        const uploadKind = data.uploadKind || "S3";
+        const aggregateFileName =
+          uploadKind === "Splits" ? "Split Files" : "Original File";
+
+        updateTaskLog("s3Upload", {
+          id: `LIVE_S3_${uploadKind}_PROGRESS`,
+          status: "Uploading",
+          progress: 0,
+          total: totalFolders,
+          processedRows: 0,
+          message: `${uploadKind} upload started: ${totalFolders} folders queued`,
+          timestamp: new Date().toISOString(),
+        });
+
+        setUploadStatuses((prev) => [
+          ...prev.filter(
+            (item) =>
+              item.fileName !== aggregateFileName &&
+              item.uploadKind !== uploadKind,
+          ),
+          {
+            fileName: aggregateFileName,
+            status: "Uploading",
+            progress: 0,
+            jobId: data.jobId,
+            uploadKind,
+            totalFiles: totalFolders,
+            processedFiles: 0,
+            successfulFiles: 0,
+            errorFiles: 0,
+          },
+        ]);
+        break;
+      }
+
+      case "s3-folder-start": {
+        setUploadStatuses((prev) => [
+          ...prev.filter((item) => item.folderId !== data.folderId),
+          {
+            fileName: data.folderName || data.s3Prefix || "S3 folder",
+            status: "Uploading",
+            progress: 0,
+            jobId: data.jobId,
+            folderId: data.folderId,
+            uploadKind: data.uploadKind,
+            folderIndex: data.folderIndex,
+            totalFolders: data.totalFolders,
+            totalDirectories: 0,
+            processedDirectories: 0,
+            successfulFiles: 0,
+            errorFiles: 0,
+            currentDirectory: data.s3Prefix || "",
+          },
+        ]);
+        break;
+      }
+
+      case "s3-folder-progress": {
+        const totalDirectories = data.totalDirectories || 0;
+        const completedDirectories = data.completedDirectories || 0;
+        const progress =
+          totalDirectories > 0
+            ? Math.round((completedDirectories / totalDirectories) * 100)
+            : 0;
+
+        progressAccumulator.current = {
+          processedDirectories: completedDirectories,
+          totalDirectories,
+          currentDirectory: data.currentDirectory || "",
+        };
+        setS3UploadProgress(progressAccumulator.current);
+
+        setUploadStatuses((prev) =>
+          prev.map((item) =>
+            item.folderId === data.folderId
+              ? {
+                  ...item,
+                  status: "Uploading",
+                  progress,
+                  totalDirectories,
+                  processedDirectories: completedDirectories,
+                  currentDirectory:
+                    data.currentDirectory || item.currentDirectory,
+                  successfulFiles:
+                    data.successfulFilesCount ?? item.successfulFiles ?? 0,
+                  errorFiles: data.failedFilesCount ?? item.errorFiles ?? 0,
+                  processedFiles:
+                    data.processedFiles ??
+                    (data.successfulFilesCount || 0) +
+                      (data.failedFilesCount || 0),
+                }
+              : item,
+          ),
+        );
+        break;
+      }
+
+      case "s3-folder-complete": {
+        const completedFolders = data.completedFolders || 0;
+        const totalFolders = data.totalFolders || 0;
+        const aggregateProgress =
+          totalFolders > 0
+            ? Math.round((completedFolders / totalFolders) * 100)
+            : 0;
+        const uploadKind = data.uploadKind || "S3";
+        const aggregateFileName =
+          uploadKind === "Splits" ? "Split Files" : "Original File";
+        const failedFiles = data.failedFilesCount || 0;
+        const aggregateFailedFiles = data.aggregateFailedFiles ?? failedFiles;
+        const aggregateSuccessfulFiles =
+          data.aggregateSuccessfulFiles ?? data.successfulFilesCount ?? 0;
+
+        updateTaskLog("s3Upload", {
+          id: `LIVE_S3_${uploadKind}_PROGRESS`,
+          status: aggregateProgress >= 100 ? "Completed" : "Uploading",
+          progress: aggregateProgress,
+          total: totalFolders,
+          processedRows: completedFolders,
+          message: `${uploadKind}: ${completedFolders}/${totalFolders} folders uploaded`,
+          timestamp: new Date().toISOString(),
+        });
+
+        setUploadStatuses((prev) =>
+          prev.map((item) => {
+            if (item.folderId === data.folderId) {
+              return {
+                ...item,
+                status:
+                  data.status ||
+                  (failedFiles > 0 ? "completed_with_errors" : "completed"),
+                progress: 100,
+                processedDirectories:
+                  item.totalDirectories || item.processedDirectories || 0,
+                successfulFiles: data.successfulFilesCount || 0,
+                errorFiles: failedFiles,
+                errorMessage: data.errorMessage,
+              };
+            }
+
+            if (
+              !item.folderId &&
+              (item.fileName === aggregateFileName ||
+                item.uploadKind === uploadKind)
+            ) {
+              return {
+                ...item,
+                status:
+                  aggregateProgress >= 100
+                    ? aggregateFailedFiles > 0
+                      ? "completed_with_errors"
+                      : "completed"
+                    : "Uploading",
+                progress: aggregateProgress,
+                totalFiles: totalFolders,
+                processedFiles: completedFolders,
+                successfulFiles: aggregateSuccessfulFiles,
+                errorFiles: aggregateFailedFiles,
+              };
+            }
+
+            return item;
+          }),
+        );
+        break;
+      }
+
+      case "s3-upload-complete": {
+        const uploadKind = data.uploadKind || "S3";
+        const aggregateFileName =
+          uploadKind === "Splits" ? "Split Files" : "Original File";
+        const failedFiles = data.failedFilesCount || 0;
+
+        updateTaskLog("s3Upload", {
+          id: `LIVE_S3_${uploadKind}_PROGRESS`,
+          status: failedFiles > 0 ? "Completed with errors" : "Completed",
+          progress: 100,
+          total: data.totalFolders || 0,
+          processedRows: data.completedFolders || data.totalFolders || 0,
+          message: `${uploadKind} upload completed`,
+          timestamp: new Date().toISOString(),
+        });
+
+        setUploadStatuses((prev) =>
+          prev.map((item) =>
+            !item.folderId &&
+            (item.fileName === aggregateFileName ||
+              item.uploadKind === uploadKind)
+              ? {
+                  ...item,
+                  status:
+                    data.status ||
+                    (failedFiles > 0 ? "completed_with_errors" : "completed"),
+                  progress: 100,
+                  totalFiles: data.totalFolders || item.totalFiles || 0,
+                  processedFiles:
+                    data.completedFolders ||
+                    data.totalFolders ||
+                    item.processedFiles ||
+                    0,
+                  successfulFiles: data.successfulFilesCount || 0,
+                  errorFiles: failedFiles,
+                }
+              : item,
+          ),
+        );
+        break;
+      }
+
       case "sqlProgressUpdate":
       case "mongoProgressUpdate": {
         const isSql = data.type === "sqlProgressUpdate";
