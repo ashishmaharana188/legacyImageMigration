@@ -45,13 +45,15 @@ export class SqlUtil {
     IC: "IC",
     NCT: "NCT",
     RED: "RED",
-    ADD:"TU",
+    ADD: "TU",
+    TU: "TU",
     FUL: "RED",
     IOBI: "IOBI",
     IOBIS: "IOBIS",
+    SWP: "SWCH",
     SWOP: "SWCH",
     SWOF: "SWCH",
-    SIN:"IOBIS"
+    SIN: "IOBIS",
   };
 
   public async getPool(): Promise<Pool> {
@@ -205,6 +207,10 @@ export class SqlUtil {
         FUL: "Redemption Form",
         IPO: "IPO Form",
         SIN: "SIP Form",
+        IOBIS: "SIP Form",
+        ADD: "Top Up Form",
+        TU: "Top Up Form",
+        SWP: "Switch Form",
         SWOP: "Switch Form",
         SWOF: "Switch Form",
       };
