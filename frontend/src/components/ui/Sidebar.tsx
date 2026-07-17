@@ -102,14 +102,20 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
       </DrawerHeader>
       <Divider />
       <List>
-        <Link to="/uploadProcessorRouter" onClick={() => onSelectTask("upload-processor")}>
+        <Link
+          to="/uploadProcessorRouter"
+          onClick={() => onSelectTask("upload-processor")}
+        >
           <SidebarItem
             icon={<UploadFileIcon />}
             text="Upload Processor"
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/splitProcessorRouter" onClick={() => onSelectTask("split-processor")}>
+        <Link
+          to="/splitProcessorRouter"
+          onClick={() => onSelectTask("split-processor")}
+        >
           <SidebarItem
             icon={<CallSplitIcon />}
             text="Split Processor"
@@ -130,10 +136,23 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/dataCleanRouter" onClick={() => onSelectTask("sanity-check")}>
+        <Link
+          to="/dataCleanRouter"
+          onClick={() => onSelectTask("sanity-check")}
+        >
           <SidebarItem
             icon={<BugReportIcon />}
-            text="Sanity Checks"
+            text="Sanity Checkss"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link
+          to="/masterMigration"
+          onClick={() => onSelectTask("master-migration")}
+        >
+          <SidebarItem
+            icon={<BugReportIcon />}
+            text="Master Migration"
             isSidebarOpen={open}
           />
         </Link>

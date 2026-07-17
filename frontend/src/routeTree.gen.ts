@@ -13,6 +13,7 @@ import { Route as UploadProcessorRouterRouteImport } from './routes/uploadProces
 import { Route as SqlMongoRouterRouteImport } from './routes/sqlMongoRouter'
 import { Route as SplitProcessorRouterRouteImport } from './routes/splitProcessorRouter'
 import { Route as S3ManagerRouterRouteImport } from './routes/s3ManagerRouter'
+import { Route as MasterMigrationRouterRouteImport } from './routes/masterMigrationRouter'
 import { Route as DataCleanRouterRouteImport } from './routes/dataCleanRouter'
 import { Route as IndexRouteImport } from './routes/index'
 
@@ -36,6 +37,11 @@ const S3ManagerRouterRoute = S3ManagerRouterRouteImport.update({
   path: '/s3ManagerRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MasterMigrationRouterRoute = MasterMigrationRouterRouteImport.update({
+  id: '/masterMigrationRouter',
+  path: '/masterMigrationRouter',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DataCleanRouterRoute = DataCleanRouterRouteImport.update({
   id: '/dataCleanRouter',
   path: '/dataCleanRouter',
@@ -50,6 +56,7 @@ const IndexRoute = IndexRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dataCleanRouter': typeof DataCleanRouterRoute
+  '/masterMigrationRouter': typeof MasterMigrationRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sqlMongoRouter': typeof SqlMongoRouterRoute
@@ -58,6 +65,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dataCleanRouter': typeof DataCleanRouterRoute
+  '/masterMigrationRouter': typeof MasterMigrationRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sqlMongoRouter': typeof SqlMongoRouterRoute
@@ -67,6 +75,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dataCleanRouter': typeof DataCleanRouterRoute
+  '/masterMigrationRouter': typeof MasterMigrationRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
   '/sqlMongoRouter': typeof SqlMongoRouterRoute
@@ -77,6 +86,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dataCleanRouter'
+    | '/masterMigrationRouter'
     | '/s3ManagerRouter'
     | '/splitProcessorRouter'
     | '/sqlMongoRouter'
@@ -85,6 +95,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dataCleanRouter'
+    | '/masterMigrationRouter'
     | '/s3ManagerRouter'
     | '/splitProcessorRouter'
     | '/sqlMongoRouter'
@@ -93,6 +104,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dataCleanRouter'
+    | '/masterMigrationRouter'
     | '/s3ManagerRouter'
     | '/splitProcessorRouter'
     | '/sqlMongoRouter'
@@ -102,6 +114,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataCleanRouterRoute: typeof DataCleanRouterRoute
+  MasterMigrationRouterRoute: typeof MasterMigrationRouterRoute
   S3ManagerRouterRoute: typeof S3ManagerRouterRoute
   SplitProcessorRouterRoute: typeof SplitProcessorRouterRoute
   SqlMongoRouterRoute: typeof SqlMongoRouterRoute
@@ -138,6 +151,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof S3ManagerRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/masterMigrationRouter': {
+      id: '/masterMigrationRouter'
+      path: '/masterMigrationRouter'
+      fullPath: '/masterMigrationRouter'
+      preLoaderRoute: typeof MasterMigrationRouterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dataCleanRouter': {
       id: '/dataCleanRouter'
       path: '/dataCleanRouter'
@@ -158,6 +178,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataCleanRouterRoute: DataCleanRouterRoute,
+  MasterMigrationRouterRoute: MasterMigrationRouterRoute,
   S3ManagerRouterRoute: S3ManagerRouterRoute,
   SplitProcessorRouterRoute: SplitProcessorRouterRoute,
   SqlMongoRouterRoute: SqlMongoRouterRoute,
