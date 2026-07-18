@@ -147,7 +147,7 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
           />
         </Link>
         <Link
-          to="/masterMigration"
+          to="/masterMigrationRouter"
           onClick={() => onSelectTask("master-migration")}
         >
           <SidebarItem

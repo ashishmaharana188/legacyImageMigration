@@ -28,8 +28,11 @@ export const useMasterMigrationHook = ({
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
+      console.log(event.target.files[0]);
       setSelectedFile(event.target.files[0]);
       setUploadStatus("");
+    } else {
+      console.log("Selected file:", event.target.files?.[0]);
     }
   };
 
@@ -60,12 +63,10 @@ export const useMasterMigrationHook = ({
     }
   };
 
-  return (
-    <MasterMigrationUI
-      selectedFile={selectedFile}
-      uploadStatus={uploadStatus}
-      handleFileChange={handleFileChange}
-      handleUpload={handleUpload}
-    />
-  );
+  return {
+    selectedFile,
+    uploadStatus,
+    handleFileChange,
+    handleUpload,
+  };
 };
