@@ -4,7 +4,7 @@ import { UseMasterMigrationHookProps } from "../masterMigration/masterMigrationT
 
 async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("masterFile", file);
 
   const response = await fetch(endpoint, {
     method: "POST",
@@ -44,12 +44,9 @@ export const useMasterMigrationHook = ({
 
     setUploadStatus("Uploading and checking file integrity...");
 
-    const formData = new FormData();
-    formData.append("masterFile", selectedFile);
-
     try {
       const result = await uploadFile<{ status: string; message?: string }>(
-        "/api/check-file-integrity", // Adjusted API endpoint
+        "/master-migrate/check-file-integrity",
         selectedFile,
       );
       setUploadStatus(

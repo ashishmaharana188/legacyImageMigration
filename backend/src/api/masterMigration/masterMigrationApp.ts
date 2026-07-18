@@ -9,7 +9,7 @@ const upload = multer({
 });
 
 router.post(
-  "/check-file-integrity",
+  "/master-migrate/check-file-integrity",
   upload.single("masterFile"),
   checkFileIntegrity,
 );
