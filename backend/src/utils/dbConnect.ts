@@ -234,12 +234,12 @@ const FnxTransactionInitiationDocUploadSchema =
       transactionType: String,
       workDate: String,
     },
-    { collection: "fnxTransactionInitiationDocUpload", versionKey: false }
+    { collection: "fnxTransactionInitiationDocUpload", versionKey: false },
   );
 
 const TestImageMigrationSchema = new mongoose.Schema(
   {},
-  { strict: false, collection: "testImageMigration", versionKey: false }
+  { strict: false, collection: "testImageMigration", versionKey: false },
 );
 
 export const getMongoModel = (): mongoose.Model<IAifDocument> => {
@@ -251,14 +251,14 @@ export const getMongoModel = (): mongoose.Model<IAifDocument> => {
           .FnxTransactionInitiationDocUpload as mongoose.Model<IAifDocument>) ||
         mongoose.model<IAifDocument>(
           "FnxTransactionInitiationDocUpload",
-          FnxTransactionInitiationDocUploadSchema
+          FnxTransactionInitiationDocUploadSchema,
         );
     } else {
       mongoModel =
         (mongoose.models.TestImageMigration as mongoose.Model<IAifDocument>) ||
         (mongoose.model(
           "TestImageMigration",
-          TestImageMigrationSchema
+          TestImageMigrationSchema,
         ) as unknown as mongoose.Model<IAifDocument>);
     }
   }
@@ -335,4 +335,68 @@ export const disconnectPgPool = async (): Promise<void> => {
     pgSshTunnel.close();
     pgSshTunnel = null;
   }
+};
+
+type AppEnvironment = "development" | "uat" | "production";
+
+let currentEnvironment: AppEnvironment = "development";
+
+const ENV_FILE_MAP: Record<AppEnvironment, string> = {
+  development: ".env.development",
+  uat: ".env.uat",
+  production: ".env.production",
+};
+
+const loadEnvFile = (env: AppEnvironment) => {
+  const envFile = ENV_FILE_MAP[env];
+  if (!envFile) {
+    throw new Error(`Unsupported environment: ${env}`);
+  }
+
+  const envPath = path.join(os.homedir(), ".appConfig", envFile);
+  if (!fs.existsSync(envPath)) {
+    throw new Error(`Environment file not found: ${envPath}`);
+  }
+
+  // Reload env vars from the selected file
+  require("dotenv").config({ path: envPath, override: true });
+  logger.info({
+    category: "app-flow",
+    function: "loadEnvFile",
+    message: `Loaded environment ${env} from ${envPath}`,
+    console: true,
+  });
+};
+
+export const getCurrentEnvironment = () => currentEnvironment;
+
+export const switchEnvironment = async (env: AppEnvironment): Promise<void> => {
+  if (env === currentEnvironment) return;
+
+  logger.warn({
+    category: "app-flow",
+    function: "switchEnvironment",
+    message: `Switching environment from ${currentEnvironment} to ${env}`,
+    console: true,
+  });
+
+  // Close existing connections first
+  await disconnectMongo();
+  await disconnectPgPool();
+
+  // Load the new env file
+  loadEnvFile(env);
+
+  // Reconnect everything using the new env
+  await connectMongo();
+  await warmupPgPool();
+
+  currentEnvironment = env;
+
+  logger.info({
+    category: "app-flow",
+    function: "switchEnvironment",
+    message: `Environment switched to ${env}`,
+    console: true,
+  });
 };

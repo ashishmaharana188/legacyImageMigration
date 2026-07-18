@@ -26,6 +26,7 @@ import imageDataTransferRouter from "./src/api/imageDataTransfer/imageDataTransf
 import s3ProcessorRouter from "./src/api/s3Processor/s3ProcessorApp";
 import duplicateProcessorRouter from "./src/api/dataClean/dataCleanApp";
 import masterMigrationRouter from "./src/api/masterMigration/masterMigrationApp";
+import environmentApp from "./src/utils/environmentApp";
 import cors from "cors";
 import { startSshTunnel } from "./src/utils/tunnel";
 import { connectMongo, disconnectMongo } from "./src/utils/dbConnect";
@@ -63,6 +64,7 @@ app.use(imageDataTransferRouter);
 app.use(s3ProcessorRouter);
 app.use(duplicateProcessorRouter);
 app.use(masterMigrationRouter);
+app.use(environmentApp);
 console.log("Master Migration router mounted");
 
 const startServer = async () => {

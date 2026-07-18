@@ -1,23 +1,6 @@
-import React, { useState } from "react";
-import MasterMigrationUI from "../masterMigration/masterMigrationUI";
-import { UseMasterMigrationHookProps } from "../masterMigration/masterMigrationType";
-
-async function uploadFile<T>(endpoint: string, file: File): Promise<T> {
-  const formData = new FormData();
-  formData.append("masterFile", file);
-
-  const response = await fetch(endpoint, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json();
-    throw new Error(errorData.message || "File upload failed");
-  }
-
-  return response.json();
-}
+import { useState } from "react";
+import { UseMasterMigrationHookProps } from "./masterMigrationType";
+import { checkFileIntegrity } from "./masterMigrationService";
 
 export const useMasterMigrationHook = ({
   updateTaskLog,
@@ -28,11 +11,12 @@ export const useMasterMigrationHook = ({
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
-      console.log(event.target.files[0]);
-      setSelectedFile(event.target.files[0]);
+      const file = event.target.files[0];
+
+      setSelectedFile(file);
       setUploadStatus("");
-    } else {
-      console.log("Selected file:", event.target.files?.[0]);
+
+      console.log("Selected file:", file.name);
     }
   };
 
@@ -45,17 +29,28 @@ export const useMasterMigrationHook = ({
     setUploadStatus("Uploading and checking file integrity...");
 
     try {
-      const result = await uploadFile<{ status: string; message?: string }>(
-        "/master-migrate/check-file-integrity",
-        selectedFile,
-      );
+      const result = await checkFileIntegrity(selectedFile);
+
       setUploadStatus(
-        `File integrity check: ${result.status}. ${result.message || ""}`,
+        `File integrity check: ${result.status}. ${result.message ?? ""}`,
       );
+
+      updateTaskLog?.(`File integrity check completed: ${result.status}`);
     } catch (error: any) {
       console.error("Error uploading file:", error);
+
       setUploadStatus(
-        `Error: ${error.message || "Error uploading file. Please try again."}`,
+        `Error: ${
+          error.response?.data?.message ??
+          error.message ??
+          "File upload failed."
+        }`,
+      );
+
+      updateTaskLog?.(
+        `File integrity check failed: ${
+          error.response?.data?.message ?? error.message
+        }`,
       );
     }
   };
