@@ -3,6 +3,9 @@ import mongoose from "mongoose";
 import logger from "./logger";
 import { startMongoSshTunnel, startSshTunnel } from "./tunnel";
 import { IAifDocument } from "../api/imageDataTransfer/imageDataTransferTypes";
+import path from "path";
+import fs from "fs";
+import os from "os";
 
 // --- PostgreSQL Pool Configuration ---
 let pgPool: Pool | null = null;

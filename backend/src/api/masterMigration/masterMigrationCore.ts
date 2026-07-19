@@ -1,5 +1,5 @@
 import fs from "fs";
-import csv from "csv-parse";
+import { parse } from "csv-parse";
 import { fetchClientMapHeaders } from "../masterMigration/masterMigrationWrapper";
 
 export interface FileIntegrityCheckResult {
@@ -54,9 +54,13 @@ export const checkFileHeaders = async (
     const errors: string[] = [];
 
     fs.createReadStream(filePath)
-      .pipe(csv())
-      .on("headers", (headers: string[]) => {
-        uploadedHeaders.push(...headers);
+      .pipe(
+        parse({
+          to_line: 1,
+        }),
+      )
+      .on("data", (record: string[]) => {
+        uploadedHeaders.push(...record);
 
         const missingHeaders = expectedHeaders.filter(
           (header) => !uploadedHeaders.includes(header),

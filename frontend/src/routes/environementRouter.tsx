@@ -1,12 +1,13 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import apiClient, { configPromise } from "../../services/apiClient";
+import apiClient, { configPromise } from "../services/apiClient";
 
 type EnvironmentOption = {
   id: string;
   label: string;
 };
 
-export default function EnvironmentRoute() {
+function EnvironmentRoute() {
   const [currentEnv, setCurrentEnv] = useState("");
   const [available, setAvailable] = useState<EnvironmentOption[]>([]);
   const [message, setMessage] = useState("");
@@ -55,7 +56,7 @@ export default function EnvironmentRoute() {
     <div className="p-4 border border-gray-300 w-80 rounded-md bg-white shadow-sm mt-4">
       <p className="text-gray-700 font-medium mb-2 ml-2">
         Current Environment:{" "}
-        <span className="font-bold">{currentEnv.toUpperCase()}</span>
+        {currentEnv ? currentEnv.toUpperCase() : "Loading..."}
       </p>
       <div className="flex items-center space-x-2">
         <label htmlFor="environment-select" className="sr-only">
@@ -64,14 +65,21 @@ export default function EnvironmentRoute() {
         <select
           id="environment-select"
           value={currentEnv}
-          onChange={handleEnvironmentChange}
+          onChange={switchEnvironment}
           className="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
         >
-          <option value="development">Development</option>
-          <option value="uat">UAT</option>
+          {available.map((env) => (
+            <option key={env.id} value={env.id}>
+              {env.label}
+            </option>
+          ))}
         </select>
       </div>
       {message && <p className="mt-2 ml-2 text-sm text-gray-600">{message}</p>}
     </div>
   );
 }
+
+export const Route = createFileRoute("/environementRouter")({
+  component: EnvironmentRoute,
+});

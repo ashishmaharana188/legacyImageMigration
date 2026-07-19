@@ -1,4 +1,10 @@
-import { createTunnel, TunnelOptions, ServerOptions, SshOptions, ForwardOptions } from "tunnel-ssh";
+import {
+  createTunnel,
+  TunnelOptions,
+  ServerOptions,
+  SshOptions,
+  ForwardOptions,
+} from "tunnel-ssh";
 import fs from "fs";
 import path from "path";
 import os from "os";
@@ -15,12 +21,15 @@ export const startSshTunnel = async () => {
     port: parseInt(process.env.DB_PORT as string, 10),
   };
 
+  const sshKeyFile =
+    process.env.APP_ENV === "uat" ? "FinexBastionKey.pem" : "u2009226.pem";
+
   const sshOptions: SshOptions = {
     host: process.env.SSH_HOST as string,
     port: parseInt(process.env.SSH_PORT as string, 10),
     username: process.env.SSH_USER as string,
     privateKey: fs.readFileSync(
-      path.join(os.homedir(), ".appConfig", "u2009226.pem")
+      path.join(os.homedir(), ".appConfig", sshKeyFile),
     ),
   };
 
@@ -37,7 +46,7 @@ export const startSshTunnel = async () => {
 
       serverOptions,
       sshOptions,
-      forwardOptions
+      forwardOptions,
     );
     console.log("SSH tunnel created");
     return server;
@@ -77,12 +86,15 @@ export const startMongoSshTunnel = async () => {
     port: localPort,
   };
 
+  const sshKeyFile =
+    process.env.APP_ENV === "uat" ? "FinexBastionKey.pem" : "u2009226.pem";
+
   const sshOptions: SshOptions = {
     host: process.env.SSH_HOST as string,
-    port: parseInt(process.env.SSH_PORT || "22", 10),
+    port: parseInt(process.env.SSH_PORT as string, 10),
     username: process.env.SSH_USER as string,
     privateKey: fs.readFileSync(
-      path.join(os.homedir(), ".appConfig", "u2009226.pem")
+      path.join(os.homedir(), ".appConfig", sshKeyFile),
     ),
   };
 
@@ -99,7 +111,7 @@ export const startMongoSshTunnel = async () => {
       tunnelOptions,
       serverOptions,
       sshOptions,
-      forwardOptions
+      forwardOptions,
     );
 
     server.on("error", (err: Error) => {
@@ -138,7 +150,9 @@ export const startMongoSshTunnel = async () => {
       });
     });
 
-    console.log(`MongoDB SSH tunnel created successfully and listening on localhost:${localPort}.`);
+    console.log(
+      `MongoDB SSH tunnel created successfully and listening on localhost:${localPort}.`,
+    );
     return { server, localPort };
   } catch (error: unknown) {
     let errorMessage = "Unknown error";

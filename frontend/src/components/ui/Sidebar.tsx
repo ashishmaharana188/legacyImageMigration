@@ -5,6 +5,7 @@ import { List, Divider, IconButton } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import EmergencyIcon from "@mui/icons-material/Emergency";
 import StorageIcon from "@mui/icons-material/Storage";
 import BugReportIcon from "@mui/icons-material/BugReport";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -151,7 +152,7 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
           onClick={() => onSelectTask("master-migration")}
         >
           <SidebarItem
-            icon={<BugReportIcon />}
+            icon={<EmergencyIcon />}
             text="Master Migration"
             isSidebarOpen={open}
           />
