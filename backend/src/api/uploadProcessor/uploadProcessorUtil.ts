@@ -200,7 +200,9 @@ export async function processAthenaDataThroughPostgres(
       ) AS docs
       ON tmp.id_fund = docs.client_code AND tmp.id_ihno = docs.user_attr1
       WHERE docs.client_code IS NULL
-      AND tmp.id_trtype in ('NEW','NCT','RED','ADD','SIN','FUL','SWOF','SWOP');
+      AND tmp.id_trtype in (
+        'NEW','NCT','RED','ADD','TU','SIN','IOBIS','FUL','SWOF','SWOP','SWP'
+      );
     `;
 
     const result = await client.query(filterQuery);

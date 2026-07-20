@@ -5,6 +5,7 @@ import { List, Divider, IconButton } from "@mui/material";
 import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import EmergencyIcon from "@mui/icons-material/Emergency";
 import StorageIcon from "@mui/icons-material/Storage";
 import BugReportIcon from "@mui/icons-material/BugReport";
 import CloudUploadIcon from "@mui/icons-material/CloudUpload";
@@ -102,14 +103,20 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
       </DrawerHeader>
       <Divider />
       <List>
-        <Link to="/uploadProcessorRouter" onClick={() => onSelectTask("upload-processor")}>
+        <Link
+          to="/uploadProcessorRouter"
+          onClick={() => onSelectTask("upload-processor")}
+        >
           <SidebarItem
             icon={<UploadFileIcon />}
             text="Upload Processor"
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/splitProcessorRouter" onClick={() => onSelectTask("split-processor")}>
+        <Link
+          to="/splitProcessorRouter"
+          onClick={() => onSelectTask("split-processor")}
+        >
           <SidebarItem
             icon={<CallSplitIcon />}
             text="Split Processor"
@@ -130,10 +137,23 @@ const Sidebar: React.FC<MiniDrawerProps> = ({
             isSidebarOpen={open}
           />
         </Link>
-        <Link to="/dataCleanRouter" onClick={() => onSelectTask("sanity-check")}>
+        <Link
+          to="/dataCleanRouter"
+          onClick={() => onSelectTask("sanity-check")}
+        >
           <SidebarItem
             icon={<BugReportIcon />}
-            text="Sanity Checks"
+            text="Sanity Checkss"
+            isSidebarOpen={open}
+          />
+        </Link>
+        <Link
+          to="/masterMigrationRouter"
+          onClick={() => onSelectTask("master-migration")}
+        >
+          <SidebarItem
+            icon={<EmergencyIcon />}
+            text="Master Migration"
             isSidebarOpen={open}
           />
         </Link>
