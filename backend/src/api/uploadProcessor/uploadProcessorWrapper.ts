@@ -12,7 +12,7 @@ const logger = createFeatureLogger("uploadProcessor");
 
 export async function processExcelFile(
   inputFilePath: string,
-  onProgress?: (stats: any) => void
+  onProgress?: (stats: any) => void,
 ): Promise<ProcessExcelRowsResult & { outputFileName: string }> {
   // [CHECKPOINT] INITIATED
   logger.info(`Initiating Processing: ${path.basename(inputFilePath)}`, {
@@ -38,7 +38,7 @@ export async function processExcelFile(
 
     const headerRow = worksheet.getRow(1);
     const headers = (headerRow.values as string[]).map((h) =>
-      h ? String(h).trim().toLowerCase() : ""
+      h ? String(h).trim().toLowerCase() : "",
     );
 
     for (let i = 2; i <= worksheet.rowCount; i++) {
@@ -70,7 +70,6 @@ export async function processExcelFile(
     SIN: "IOBIS",
     SWOP: "SWP",
     SWOF: "SWP",
-    ADD:"TU"
   };
 
   const getFileExtension = (filePath: string) =>
@@ -81,13 +80,13 @@ export async function processExcelFile(
     dataRows,
     trxnMap,
     getFileExtension,
-    onProgress
+    onProgress,
   );
 
   // 4. Create the final CSV summary
   const outputFileName = await createProcessedExcelFile(
     result.processedRows,
-    inputFilePath
+    inputFilePath,
   );
 
   // [CHECKPOINT] SUCCESS
@@ -100,11 +99,14 @@ export async function processExcelFile(
 
 export async function runFallbackProcess(
   inputFilePath: string,
-  onProgress?: (stats: any) => void
+  onProgress?: (stats: any) => void,
 ): Promise<ProcessExcelRowsResult & { outputFileName: string }> {
-  logger.info(`Initiating Fallback Processing: ${path.basename(inputFilePath)}`, {
-    console: true,
-  });
+  logger.info(
+    `Initiating Fallback Processing: ${path.basename(inputFilePath)}`,
+    {
+      console: true,
+    },
+  );
 
   const ext = path.extname(inputFilePath).toLowerCase();
   let dataRows: Record<string, any>[] = [];
@@ -123,7 +125,7 @@ export async function runFallbackProcess(
 
     const headerRow = worksheet.getRow(1);
     const headers = (headerRow.values as string[]).map((h) =>
-      h ? String(h).trim().toLowerCase() : ""
+      h ? String(h).trim().toLowerCase() : "",
     );
 
     for (let i = 2; i <= worksheet.rowCount; i++) {
@@ -147,9 +149,8 @@ export async function runFallbackProcess(
   const trxnMap: Record<string, string> = {
     NEW: "IC",
     NCT: "NCT",
-    ADD:"TU",
-    RED: "RED",
     ADD: "TU",
+    RED: "RED",
     FUL: "RED",
     IPO: "IOBI",
     SIN: "IOBIS",
@@ -187,7 +188,7 @@ export async function runFallbackProcess(
       const fileFolderPath = path.join(
         baseFolder,
         `CLIENT_CODE_${fund}`,
-        `CLIENT_CODE_${fund}_TRANSACTION_NUMBER_${ihNo}`
+        `CLIENT_CODE_${fund}_TRANSACTION_NUMBER_${ihNo}`,
       );
 
       let fileExists = false;
@@ -213,10 +214,15 @@ export async function runFallbackProcess(
 
       if (fileExists) {
         pageCountVal = await getPageCount(foundFilePath);
-        if (typeof pageCountVal === "string" && pageCountVal.startsWith("Error:")) {
+        if (
+          typeof pageCountVal === "string" &&
+          pageCountVal.startsWith("Error:")
+        ) {
           errors++;
           pageCountVal = "Corrupt File";
-          logger.warn(`Fallback Row ${rowNumber}: Corrupt file found at ${foundFilePath}`);
+          logger.warn(
+            `Fallback Row ${rowNumber}: Corrupt file found at ${foundFilePath}`,
+          );
         } else {
           successfulRows++;
         }
@@ -263,12 +269,19 @@ export async function runFallbackProcess(
   // Generate the final CSV using the exact same util
   const outputFileName = await createProcessedExcelFile(
     processedRows,
-    inputFilePath
+    inputFilePath,
   );
 
   logger.info(`Fallback Processing Complete. Output: ${outputFileName}`, {
     console: true,
   });
 
-  return { totalRows, successfulRows, errors, notFound, processedRows, outputFileName };
+  return {
+    totalRows,
+    successfulRows,
+    errors,
+    notFound,
+    processedRows,
+    outputFileName,
+  };
 }

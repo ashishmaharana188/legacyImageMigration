@@ -21,7 +21,7 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      <h1 className="text-4xl font-bold mb-6">File Integrity Check</h1>
+      <h1 className="text-4xl font-bold mb-6">CHECK</h1>
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
         <input
           type="file"
