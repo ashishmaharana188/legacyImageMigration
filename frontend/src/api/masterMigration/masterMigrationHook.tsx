@@ -35,7 +35,11 @@ export const useMasterMigrationHook = ({
         `File integrity check: ${result.status}. ${result.message ?? ""}`,
       );
 
-      updateTaskLog?.(`File integrity check completed: ${result.status}`);
+      updateTaskLog?.("MasterMigration", {
+        id: crypto.randomUUID(),
+        message: `File integrity check completed: ${result.status}`,
+        timestamp: new Date().toISOString(),
+      });
     } catch (error: any) {
       console.error("Error uploading file:", error);
 
@@ -47,11 +51,11 @@ export const useMasterMigrationHook = ({
         }`,
       );
 
-      updateTaskLog?.(
-        `File integrity check failed: ${
-          error.response?.data?.message ?? error.message
-        }`,
-      );
+      updateTaskLog?.("MasterMigration", {
+        id: crypto.randomUUID(),
+        message: `File integrity check completed: ${error.response?.data?.message ?? error.message}`,
+        timestamp: new Date().toISOString(),
+      });
     }
   };
 
