@@ -200,6 +200,7 @@ export class SqlUtil {
       const trxnNameMap: Record<string, string> = {
         NEW: "Initial Contribution Form",
         IC: "Initial Contribution Form",
+        TU:"TopUp Form"
         NCT: "Non Commercial Transactions Form",
         RED: "Redemption Form",
         FUL: "Redemption Form",

@@ -69,6 +69,7 @@ export async function processExcelFile(
     SIN: "IOBIS",
     SWOP: "SWP",
     SWOF: "SWP",
+    ADD:"TU"
   };
 
   const getFileExtension = (filePath: string) =>
@@ -145,6 +146,7 @@ export async function runFallbackProcess(
   const trxnMap: Record<string, string> = {
     NEW: "IC",
     NCT: "NCT",
+    ADD:"TU",
     RED: "RED",
     FUL: "RED",
     IPO: "IOBI",
