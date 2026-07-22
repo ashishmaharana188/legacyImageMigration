@@ -5,6 +5,7 @@ interface MasterMigrationUIProps {
   uploadStatus: string;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleUpload: () => void;
+  handleETL: () => void;
 }
 
 const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
@@ -12,6 +13,7 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
   uploadStatus,
   handleFileChange,
   handleUpload,
+  handleETL,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,7 +45,10 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
           </span>
         </div>
         <button
-          onClick={handleUpload}
+          onClick={() => {
+            handleUpload();
+            handleETL();
+          }}
           disabled={!selectedFile}
           className={`mt-4 w-full bg-[#212427] text-white py-2 px-4 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed ${
             !selectedFile ? "disabled:opacity-50" : ""

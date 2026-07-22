@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { UseMasterMigrationHookProps } from "./masterMigrationType";
-import { checkFileIntegrity } from "./masterMigrationService";
+import {
+  checkFileIntegrityService,
+  runETLProcessService,
+} from "./masterMigrationService";
 
 export const useMasterMigrationHook = ({
   updateTaskLog,
@@ -8,6 +11,8 @@ export const useMasterMigrationHook = ({
 }: UseMasterMigrationHookProps) => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>("");
+  const [clientCode, setClientCode] = useState<string>("");
+  const [migrationType, setMigrationType] = useState<string>("");
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -29,7 +34,7 @@ export const useMasterMigrationHook = ({
     setUploadStatus("Uploading and checking file integrity...");
 
     try {
-      const result = await checkFileIntegrity(selectedFile);
+      const result = await checkFileIntegrityService(selectedFile);
 
       setUploadStatus(
         `File integrity check: ${result.status}. ${result.message ?? ""}`,
@@ -59,10 +64,31 @@ export const useMasterMigrationHook = ({
     }
   };
 
+  const handleETL = async () => {
+    if (!selectedFile) {
+      setUploadStatus("File not available to process");
+      return;
+    }
+    setUploadStatus("Processsing master data..");
+
+    try {
+      const result = await runETLProcessService(
+        clientCode,
+        migrationType,
+        selectedFile ?? undefined,
+      );
+    } catch {}
+  };
+
   return {
     selectedFile,
+    clientCode,
+    migrationType,
     uploadStatus,
+    setClientCode,
+    setMigrationType,
     handleFileChange,
     handleUpload,
+    handleETL,
   };
 };
