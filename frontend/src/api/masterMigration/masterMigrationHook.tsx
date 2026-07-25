@@ -13,6 +13,7 @@ export const useMasterMigrationHook = ({
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [clientCode, setClientCode] = useState<string>("");
   const [migrationType, setMigrationType] = useState<string>("");
+  const [masterType, setMasterType] = useState<string>("");
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -75,6 +76,7 @@ export const useMasterMigrationHook = ({
       const result = await runETLProcessService(
         clientCode,
         migrationType,
+        masterType,
         selectedFile ?? undefined,
       );
     } catch {}
@@ -87,6 +89,7 @@ export const useMasterMigrationHook = ({
     uploadStatus,
     setClientCode,
     setMigrationType,
+    setMasterType,
     handleFileChange,
     handleUpload,
     handleETL,

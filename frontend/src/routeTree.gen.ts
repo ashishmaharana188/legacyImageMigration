@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DataCleanRouterRouteImport } from './routes/dataCleanRouter'
-import { Route as EnvironementRouterRouteImport } from './routes/environementRouter'
+import { Route as EnvironmentRouterRouteImport } from './routes/environmentRouter'
 import { Route as MasterMigrationRouterRouteImport } from './routes/masterMigrationRouter'
 import { Route as S3ManagerRouterRouteImport } from './routes/s3ManagerRouter'
 import { Route as SplitProcessorRouterRouteImport } from './routes/splitProcessorRouter'
@@ -28,9 +28,9 @@ const DataCleanRouterRoute = DataCleanRouterRouteImport.update({
   path: '/dataCleanRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
-const EnvironementRouterRoute = EnvironementRouterRouteImport.update({
-  id: '/environementRouter',
-  path: '/environementRouter',
+const EnvironmentRouterRoute = EnvironmentRouterRouteImport.update({
+  id: '/environmentRouter',
+  path: '/environmentRouter',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MasterMigrationRouterRoute = MasterMigrationRouterRouteImport.update({
@@ -62,7 +62,7 @@ const UploadProcessorRouterRoute = UploadProcessorRouterRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dataCleanRouter': typeof DataCleanRouterRoute
-  '/environementRouter': typeof EnvironementRouterRoute
+  '/environmentRouter': typeof EnvironmentRouterRoute
   '/masterMigrationRouter': typeof MasterMigrationRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
@@ -72,7 +72,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dataCleanRouter': typeof DataCleanRouterRoute
-  '/environementRouter': typeof EnvironementRouterRoute
+  '/environmentRouter': typeof EnvironmentRouterRoute
   '/masterMigrationRouter': typeof MasterMigrationRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
@@ -83,7 +83,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dataCleanRouter': typeof DataCleanRouterRoute
-  '/environementRouter': typeof EnvironementRouterRoute
+  '/environmentRouter': typeof EnvironmentRouterRoute
   '/masterMigrationRouter': typeof MasterMigrationRouterRoute
   '/s3ManagerRouter': typeof S3ManagerRouterRoute
   '/splitProcessorRouter': typeof SplitProcessorRouterRoute
@@ -95,7 +95,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dataCleanRouter'
-    | '/environementRouter'
+    | '/environmentRouter'
     | '/masterMigrationRouter'
     | '/s3ManagerRouter'
     | '/splitProcessorRouter'
@@ -105,7 +105,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dataCleanRouter'
-    | '/environementRouter'
+    | '/environmentRouter'
     | '/masterMigrationRouter'
     | '/s3ManagerRouter'
     | '/splitProcessorRouter'
@@ -115,7 +115,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dataCleanRouter'
-    | '/environementRouter'
+    | '/environmentRouter'
     | '/masterMigrationRouter'
     | '/s3ManagerRouter'
     | '/splitProcessorRouter'
@@ -126,7 +126,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DataCleanRouterRoute: typeof DataCleanRouterRoute
-  EnvironementRouterRoute: typeof EnvironementRouterRoute
+  EnvironmentRouterRoute: typeof EnvironmentRouterRoute
   MasterMigrationRouterRoute: typeof MasterMigrationRouterRoute
   S3ManagerRouterRoute: typeof S3ManagerRouterRoute
   SplitProcessorRouterRoute: typeof SplitProcessorRouterRoute
@@ -150,11 +150,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof DataCleanRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/environementRouter': {
-      id: '/environementRouter'
-      path: '/environementRouter'
-      fullPath: '/environementRouter'
-      preLoaderRoute: typeof EnvironementRouterRouteImport
+    '/environmentRouter': {
+      id: '/environmentRouter'
+      path: '/environmentRouter'
+      fullPath: '/environmentRouter'
+      preLoaderRoute: typeof EnvironmentRouterRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/masterMigrationRouter': {
@@ -198,7 +198,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DataCleanRouterRoute: DataCleanRouterRoute,
-  EnvironementRouterRoute: EnvironementRouterRoute,
+  EnvironmentRouterRoute: EnvironmentRouterRoute,
   MasterMigrationRouterRoute: MasterMigrationRouterRoute,
   S3ManagerRouterRoute: S3ManagerRouterRoute,
   SplitProcessorRouterRoute: SplitProcessorRouterRoute,

@@ -1,6 +1,17 @@
 import fs from "fs";
+import path from "path";
+import { stringify } from "csv-stringify/sync";
 import { parse } from "csv-parse";
-import { fetchClientMapHeaders } from "../masterMigration/masterMigrationWrapper";
+import {
+  fetchStagingHeaders,
+  fetchMasterHeaders,
+  fetchMasterData,
+} from "../masterMigration/masterMigrationWrapper";
+import {
+  mapMasterToStaging,
+  fetchFundData,
+  reorderToStagingHeaders,
+} from "./masterMigrationMapper";
 
 export interface FileIntegrityCheckResult {
   status: "success" | "error";
@@ -41,7 +52,7 @@ export const checkFileHeaders = async (
   let expectedHeaders: string[];
 
   try {
-    expectedHeaders = await fetchClientMapHeaders(tableName);
+    expectedHeaders = await fetchStagingHeaders(tableName);
   } catch (error) {
     return {
       status: "error",
@@ -111,4 +122,58 @@ export const checkFileHeaders = async (
         });
       });
   });
+};
+
+export const runETLProcess = async (
+  clientCode: string,
+  masterType: string,
+  migrationType: string,
+) => {
+  const masterTable = masterType;
+
+  const stagingTableMap: Record<string, string> = {
+    client_master: "client_map",
+    fund_scheme_master: "fund_scheme_map",
+    class_plan_master: "class_map",
+    plan_master: "plan_map",
+    bank_master: "bank_map",
+    contact_master: "contact_map",
+  };
+
+  const stagingTable = stagingTableMap[masterType];
+
+  if (!stagingTable) {
+    throw new Error(`Unsupported master type: ${masterType}`);
+  }
+
+  const masterRows = await fetchMasterData(masterTable);
+
+  const fundRows = await fetchFundData(clientCode);
+
+  const stagingHeaders = await fetchStagingHeaders(stagingTable);
+
+  const mappedRows = mapMasterToStaging(
+    masterRows,
+    fundRows,
+    migrationType,
+    masterType,
+  );
+
+  const orderedRows = reorderToStagingHeaders(mappedRows, stagingHeaders);
+
+  const outputDir = path.join(process.cwd(), "output");
+
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  const csv = stringify(orderedRows, {
+    header: true,
+  });
+
+  fs.writeFileSync(path.join(outputDir, "class_map.csv"), csv);
+
+  //await bulkInsertStaging(stagingTable, orderedRows);
+
+  return orderedRows;
 };

@@ -80,6 +80,6 @@ function EnvironmentRoute() {
   );
 }
 
-export const Route = createFileRoute("/environementRouter")({
+export const Route = createFileRoute("/environmentRouter")({
   component: EnvironmentRoute,
 });

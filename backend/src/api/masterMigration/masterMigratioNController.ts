@@ -1,6 +1,9 @@
 import fs from "fs";
 import { Request, Response } from "express";
-import { checkFileHeaders } from "../masterMigration/masterMigrationCore";
+import {
+  checkFileHeaders,
+  runETLProcess,
+} from "../masterMigration/masterMigrationCore";
 
 export const checkFileIntegrity = async (
   req: Request,
@@ -34,6 +37,43 @@ export const checkFileIntegrity = async (
     fs.unlink(filePath, (err) => {
       if (err) {
         console.error("Error deleting temporary file:", err);
+      }
+    });
+  }
+};
+
+export const runETLProcessController = async (
+  req: Request,
+  res: Response,
+): Promise<void> => {
+  if (!req.file) {
+    res.status(400).json({
+      status: "error",
+      message: "No file uploaded.",
+    });
+    return;
+  }
+
+  const filePath = req.file.path;
+  const originalFileName = req.file.originalname;
+
+  const { clientCode, masterType, migrationType } = req.body;
+  console.log(req.body);
+  try {
+    const result = await runETLProcess(clientCode, masterType, migrationType);
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error("Error during ETL process:", error);
+
+    res.status(500).json({
+      status: "error",
+      message: "Error during ETL process.",
+    });
+  } finally {
+    fs.unlink(filePath, (err) => {
+      if (err) {
+        console.error(err);
       }
     });
   }
