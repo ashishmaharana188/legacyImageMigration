@@ -1,4 +1,11 @@
 import { getPgPool } from "../../utils/dbConnect";
+interface Row {
+  [key: string]: any;
+}
+import { mapClientMaster } from "../masterMigration/masterMigrationMapper/clientMasterMapper";
+import { mapFundMaster } from "../masterMigration/masterMigrationMapper/fundMasterMapper";
+import { mapClassMaster } from "../masterMigration/masterMigrationMapper/classMigrationMapper";
+import { mapBankMaster } from "../masterMigration/masterMigrationMapper/bankMasterMapper";
 
 const fetchHeaders = async (
   schema: "stg" | "fund",
@@ -104,17 +111,38 @@ export const fetchMasterData = async (
     let result;
 
     if (clientCode) {
+      if (tableName === "client_master") {
+        result = await client.query(
+          `
+          SELECT *
+          FROM fund.client_master
+          WHERE client_code = $1;
+          `,
+          [clientCode],
+        );
+      } else {
+        result = await client.query(
+          `
+          SELECT *
+          FROM fund."${tableName}"
+          WHERE client_id IN (
+            SELECT id
+            FROM fund.client_master
+            WHERE client_code = $1
+          );
+          `,
+          [clientCode],
+        );
+      }
+    } else {
       result = await client.query(
         `
         SELECT *
-        FROM fund."${tableName}"
-        WHERE client_id in (select id from fund.client_master where client_code = $1);
+        FROM fund."${tableName}";
         `,
-        [clientCode],
       );
-    } else {
-      result = await client.query(`SELECT * FROM fund."${tableName}";`);
     }
+
     return result.rows;
   } catch (error) {
     console.error(`Error fetching data from fund.${tableName}:`, error);
@@ -122,5 +150,36 @@ export const fetchMasterData = async (
     throw new Error(`Failed to fetch data from '${tableName}'.`);
   } finally {
     client?.release();
+  }
+};
+
+export const mapMasterToStaging = (
+  masterRows: Row[],
+  clientRows: Row[],
+  fundRows: Row[],
+  migrationType: string,
+  masterType: string,
+): Row[] => {
+  switch (migrationType) {
+    case "Master-Staging-Mongo":
+      switch (masterType) {
+        case "client_master":
+          return mapClientMaster(masterRows);
+
+        case "fund_scheme_master":
+          return mapFundMaster(masterRows, clientRows);
+
+        case "class_plan_master":
+          return mapClassMaster(masterRows, clientRows, fundRows);
+
+        case "bank_master":
+          return mapBankMaster(masterRows, clientRows, fundRows);
+
+        default:
+          throw new Error(`Unsupported master type ${masterType}`);
+      }
+
+    default:
+      throw new Error(`Unsupported migration type ${migrationType}`);
   }
 };

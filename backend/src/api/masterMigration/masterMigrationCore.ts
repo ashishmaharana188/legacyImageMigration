@@ -8,11 +8,9 @@ import {
   fetchMasterData,
   fetchClientData,
   fetchFundData,
-} from "../masterMigration/masterMigrationWrapper";
-import {
   mapMasterToStaging,
-  reorderToStagingHeaders,
-} from "../../api/masterMigration/masterMigrationMapper/classMigrationMapper";
+} from "../masterMigration/masterMigrationWrapper";
+import { reorderToStagingHeaders } from "../../api/masterMigration/masterMigrationMapper/classMigrationMapper";
 
 export interface FileIntegrityCheckResult {
   status: "success" | "error";
@@ -175,7 +173,9 @@ export const runETLProcess = async (
     header: true,
   });
 
-  fs.writeFileSync(path.join(outputDir, "class_map.csv"), csv);
+  const outputFile = `${stagingTable}.csv`;
+
+  fs.writeFileSync(path.join(outputDir, outputFile), csv);
 
   //await bulkInsertStaging(stagingTable, orderedRows);
 

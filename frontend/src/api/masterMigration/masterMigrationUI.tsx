@@ -28,6 +28,10 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
   handleUpload,
   handleETL,
 }) => {
+  const isUploadMigration = migrationType === "Staging-Upsert-Mongo";
+
+  const isETLMigration = migrationType === "Master-Staging-Mongo";
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleButtonClick = () => {
@@ -38,25 +42,29 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       <h1 className="text-4xl font-bold mb-6">CHECK</h1>
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-          className="hidden" // Hide the native file input
-        />
-        <div
-          onClick={handleButtonClick}
-          className="block w-full text-sm text-gray-500 cursor-pointer
+        {isUploadMigration && (
+          <>
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              className="hidden" // Hide the native file input
+            />
+            <div
+              onClick={handleButtonClick}
+              className="block w-full text-sm text-gray-500 cursor-pointer
             py-2 px-4 rounded-lg border border-gray-300 bg-gray-50
             hover:bg-gray-100 flex items-center justify-between"
-        >
-          <span className="truncate">
-            {selectedFile ? selectedFile.name : "No file chosen"}
-          </span>
-          <span className="ml-2 py-1 px-3 rounded-full bg-[#212427] text-white text-xs font-semibold">
-            Browse
-          </span>
-        </div>
+            >
+              <span className="truncate">
+                {selectedFile ? selectedFile.name : "No file chosen"}
+              </span>
+              <span className="ml-2 py-1 px-3 rounded-full bg-[#212427] text-white text-xs font-semibold">
+                Browse
+              </span>
+            </div>
+          </>
+        )}
         <div
           className="block text-sm text-gray-500 cursor-pointer
             py-2 mt-5 px-4 rounded-lg border border-gray-300 bg-gray-50
@@ -92,30 +100,38 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
             <option value="Master-Staging-Mongo">Master-Staging-Mongo</option>
           </select>
         </div>
-        <div
-          className="block text-sm text-gray-500 cursor-pointer
+        {isETLMigration && (
+          <div
+            className="block text-sm text-gray-500 cursor-pointer
             py-2 mt-5 px-4 rounded-lg border border-gray-300 bg-gray-50
             hover:bg-gray-100 flex items-center justify-between"
-        >
-          <input
-            type="text"
-            value={clientCode}
-            onChange={(e) => setClientCode(e.target.value)}
-            placeholder="Enter Client Code"
-            className="w-full bg-transparent outline-none py-2 px-3 border rounded"
-          />
-        </div>
+          >
+            <input
+              type="text"
+              value={clientCode}
+              onChange={(e) => setClientCode(e.target.value)}
+              placeholder="Enter Client Code"
+              className="w-full bg-transparent outline-none py-2 px-3 border rounded"
+            />
+          </div>
+        )}
         <button
           onClick={() => {
-            handleUpload();
-            handleETL();
+            if (isUploadMigration) {
+              handleUpload();
+            } else if (isETLMigration) {
+              handleETL();
+            }
           }}
-          disabled={!selectedFile}
+          disabled={
+            (isUploadMigration && !selectedFile) ||
+            (isETLMigration && !clientCode.trim())
+          }
           className={`mt-4 w-full bg-[#212427] text-white py-2 px-4 rounded-md hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed ${
             !selectedFile ? "disabled:opacity-50" : ""
           }`}
         >
-          Upload and Check
+          {isUploadMigration ? "Upload and Check" : "Run ETL"}
         </button>
         {uploadStatus && (
           <p

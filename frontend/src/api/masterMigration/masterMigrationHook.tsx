@@ -66,10 +66,6 @@ export const useMasterMigrationHook = ({
   };
 
   const handleETL = async () => {
-    if (!selectedFile) {
-      setUploadStatus("File not available to process");
-      return;
-    }
     setUploadStatus("Processsing master data..");
 
     try {

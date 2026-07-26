@@ -77,29 +77,7 @@ function parseAllowedSipDetails(value: any) {
   };
 }
 
-export const mapMasterToStaging = (
-  masterRows: Row[],
-  clientRows: Row[],
-  fundRows: Row[],
-  migrationType: string,
-  masterType: string,
-): Row[] => {
-  switch (migrationType) {
-    case "Master-Staging-Mongo":
-      switch (masterType) {
-        case "class_plan_master":
-          return mapClassMaster(masterRows, clientRows, fundRows);
-
-        default:
-          throw new Error(`Unsupported master type ${masterType}`);
-      }
-
-    default:
-      throw new Error(`Unsupported migration type ${migrationType}`);
-  }
-};
-
-function mapClassMaster(
+export function mapClassMaster(
   masterRows: Row[],
   clientRows: Row[],
   fundRows: Row[],
