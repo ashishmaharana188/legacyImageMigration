@@ -66,16 +66,21 @@ export const useMasterMigrationHook = ({
   };
 
   const handleETL = async () => {
-    setUploadStatus("Processsing master data..");
+    setUploadStatus("Processing master data...");
 
     try {
-      const result = await runETLProcessService(
+      await runETLProcessService(
         clientCode,
         migrationType,
         masterType,
         selectedFile ?? undefined,
       );
-    } catch {}
+
+      setUploadStatus("Master migration completed successfully.");
+    } catch (error) {
+      console.error(error);
+      setUploadStatus("Master migration failed.");
+    }
   };
 
   return {

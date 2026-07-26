@@ -131,3 +131,510 @@ export function mapFundMaster(masterRows: Row[], clientRows: Row[]): Row[] {
 
   return output;
 }
+
+//mongo mapping
+
+const date = new Date()
+  .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+  .toUpperCase();
+
+export const mapFundToMongo = (row: Row) => {
+  return {
+    clientCode: row.client_code,
+
+    clientName: row.client_name,
+
+    sapId: {
+      update: false,
+      value: row.sap_id,
+    },
+
+    currentStage: 7,
+
+    entryDate: date,
+
+    defaulterPenaltyApplicableOrNotApplicable: {
+      update: false,
+      value: row.defaulter_penalty,
+    },
+
+    distributionFrequency: {
+      update: false,
+      value: row.distribution_frequency,
+    },
+
+    dormantDate: {
+      update: false,
+      value: row.dormant_date,
+    },
+
+    forexSource: {
+      update: false,
+      value: row.forex_source,
+    },
+
+    fundAccountantContactCountryCode: {
+      update: false,
+      value: "",
+    },
+
+    revisionNo: 3,
+
+    recordStatus: 1,
+
+    status: "A",
+
+    sourceUser: "system",
+
+    auditorId: "system",
+
+    updateFlag: "0",
+
+    fundCode: row.fund_code,
+
+    fundFrom: {
+      update: false,
+      value: row.fund_from,
+    },
+
+    fundName: {
+      update: false,
+      value: row.fund_name,
+    },
+
+    fundShortName: {
+      update: false,
+      value: row.fund_short_name,
+    },
+
+    fundDomicile: {
+      update: false,
+      value: row.fund_domicile,
+    },
+
+    fundBusinessType: {
+      update: false,
+      value: row.fund_business_type,
+    },
+
+    serviceModel: {
+      update: false,
+      value: [row.service_model],
+    },
+
+    fundCategory: {
+      update: false,
+      value: row.fund_category,
+    },
+
+    fundSubCategory: {
+      update: false,
+      value: row.fund_sub_category,
+    },
+
+    fundNature: {
+      update: false,
+      value: row.fund_nature,
+    },
+
+    fundFaceValue: {
+      update: false,
+      value: row.fund_face_value,
+    },
+
+    fundCurrency: {
+      update: false,
+      value: row.fund_currency,
+    },
+
+    fundPeriodType: {
+      update: false,
+      value: row.fund_period,
+    },
+
+    fundPeriodValue: {
+      update: false,
+      value: "",
+    },
+
+    fundRegistrationNumber: {
+      update: false,
+      value: row.fund_registration_number,
+    },
+
+    fundPanOrTin: {
+      update: false,
+      value: row.pan_or_tin,
+    },
+
+    gstin: {
+      update: false,
+      value: row.gstin,
+    },
+
+    fundISINNumber: {
+      update: false,
+      value: row.fund_isin_number,
+    },
+
+    fundDepositoryType: {
+      update: false,
+      value: row.fund_depository_type,
+    },
+
+    fundDPID: {
+      update: false,
+      value: row.fund_dp_id,
+    },
+
+    fundClientID: {
+      update: false,
+      value: row.fund_client_id,
+    },
+    fundSpecificStartDate: {
+      update: false,
+      value: row.fund_start_date1,
+    },
+
+    fundInitialContributionStartDate: {
+      update: false,
+      value: row.fund_initial_contribution_start_date,
+    },
+
+    fundInitialContributionCloseDate: {
+      update: false,
+      value: row.fund_initial_contribution_close_date,
+    },
+
+    fundEndDate: {
+      update: false,
+      value: row.fund_end_date,
+    },
+
+    fundMaturityDate: {
+      update: false,
+      value: row.fund_maturity_date,
+    },
+
+    fundMaxInvestors: {
+      update: false,
+      value: row.fund_max_investors,
+    },
+
+    fundInitialContributionAmount: {
+      update: false,
+      value: row.fund_initial_contribution_amount,
+    },
+
+    fundInitialContributionPercentage: {
+      update: false,
+      value: row.fund_initial_contribution_percentage,
+    },
+
+    fundSizeCorpus: {
+      update: false,
+      value: row.fund_size,
+    },
+
+    fundSponsorName: {
+      update: false,
+      value: row.fund_sponsor_name,
+    },
+
+    fundInvestmentManager: {
+      update: false,
+      value: row.fund_investment_manager,
+    },
+
+    fundTrusteeName: {
+      update: false,
+      value: row.fund_trustee_name,
+    },
+
+    taxAdvisorName: {
+      update: false,
+      value: row.tax_advisor_name,
+    },
+
+    legalAdvisorName: {
+      update: false,
+      value: row.legal_advisor_name,
+    },
+
+    fundCustodianCode: {
+      update: false,
+      value: row.fund_custodian_code,
+    },
+
+    fundAccountantName: {
+      update: false,
+      value: row.fund_accountant_name,
+    },
+
+    fundAccountantEmail: {
+      update: false,
+      value: row.fund_accountant_email,
+    },
+
+    fundAccountantContactNumber: {
+      update: false,
+      value: row.fund_accountant_contact_number,
+    },
+
+    transferAgentName: {
+      update: false,
+      value: row.transfer_agent_name,
+    },
+
+    transferAgentAccountantEmail: {
+      update: false,
+      value: row.transfer_agent_accountant_email,
+    },
+
+    transferAgentContactCountryCode: {
+      update: false,
+      value: "",
+    },
+
+    transferAgentContactNumber: {
+      update: false,
+      value: row.transfer_agent_contact_number,
+    },
+
+    fundRTACode: {
+      update: false,
+      value: row.fund_rta_code,
+    },
+
+    fundPreviousDate: {
+      update: false,
+      value: row.fund_previous_date,
+    },
+
+    fundCurrentDate: {
+      update: false,
+      value: row.fund_current_date,
+    },
+
+    fundNextDate: {
+      update: false,
+      value: row.fund_next_date,
+    },
+
+    fundPreviousYearEnd: {
+      update: false,
+      value: row.fund_previous_year_end,
+    },
+
+    fundCurrentYearEnd: {
+      update: false,
+      value: row.fund_current_year_end,
+    },
+
+    prevNAVDate: {
+      update: false,
+      value: row.prev_nav_date_,
+    },
+
+    navFrequency: {
+      update: false,
+      value: row.nav_frequency,
+    },
+
+    nextNAVDate: {
+      update: false,
+      value: row.next_nav_date,
+    },
+
+    navPubFrequency: {
+      update: false,
+      value: row.nav_publish_type,
+    },
+
+    prevNAVPubDate: {
+      update: false,
+      value: row.prev_nav_pub_date,
+    },
+
+    prevNAVPubFrequency: {
+      update: false,
+      value: row.nav_pub_frequency,
+    },
+
+    nextNAVPubDate: {
+      update: false,
+      value: row.next_nav_pub_date,
+    },
+    fundPLCompMethod: {
+      update: false,
+      value: row.fund_pl_comp_method,
+    },
+
+    valuationSequence: {
+      update: false,
+      value: row.valuation_sequence,
+    },
+
+    unitDecimals: {
+      update: false,
+      value: row.unit_decimals,
+    },
+
+    roundMethod: {
+      update: false,
+      value: row.round_method_,
+    },
+
+    roundDecimals: {
+      update: false,
+      value: row.round_decimals,
+    },
+
+    fundDDNoticePeriod: {
+      update: false,
+      value: row.fund_dd_notice_period,
+    },
+
+    fundDDPenaltyCharges: {
+      update: false,
+      value: row.fund_dd_penalty_charges,
+    },
+
+    fundTopupTreatment: {
+      update: false,
+      value: row.fund_topup_treatment,
+    },
+
+    fundDDTreatment: {
+      update: false,
+      value: row.fund_dd_treatment,
+    },
+
+    fundManagementFee: {
+      update: false,
+      value: row.fund_management_fee,
+    },
+
+    fundAdditionalFee: {
+      update: false,
+      value: row.fund_additional_fee,
+    },
+
+    setupFee: {
+      update: false,
+      value: row.setup_fee_percentage,
+    },
+
+    fundTrusteeFee: {
+      update: false,
+      value: row.fund_trustee_fee,
+    },
+
+    operatingExpensesApplicableOrNotApplicable: {
+      update: false,
+      value: row.operating_expenses,
+    },
+
+    goodsAndServiceTax: {
+      update: false,
+      value: row.gst_percentage,
+    },
+
+    fundCommitmentApplicability: {
+      update: false,
+      value: row.fund_commitment_applicability_,
+    },
+
+    preferredRateOfReturnApplicableOrNotApplicable: {
+      update: false,
+      value: row.preferred_rate_of_return,
+    },
+
+    hurdleRate: {
+      update: false,
+      value: row.hurdle_rate_,
+    },
+
+    highWaterMark: {
+      update: false,
+      value: row.high_water_mark,
+    },
+
+    hurdleStartDate: {
+      update: false,
+      value: row.hurdle_start_date,
+    },
+
+    gpSharingRation: {
+      update: false,
+      value: row.gp_sharing_ration,
+    },
+
+    navRatioMethod: {
+      update: false,
+      value: row.nav_ratio_method,
+    },
+
+    isActive: {
+      update: false,
+      value: row.is_active,
+    },
+
+    isDormant: {
+      update: false,
+      value: row.dormant_flag,
+    },
+
+    fundStampDutyBourne: {
+      update: false,
+      value: row.fund_stamp_duty_bourne,
+    },
+
+    navApplicableMethod: {
+      update: false,
+      value: row.nav_applicable_method,
+    },
+
+    navApplicableTransactions: {
+      update: false,
+      value: row.nav_applicable_transactions,
+    },
+
+    amountDecimals: {
+      update: false,
+      value: row.amount_decimals,
+    },
+
+    navDecimals: {
+      update: false,
+      value: row.nav_decimals,
+    },
+
+    ppmCopyApproval: {
+      update: false,
+      value: [
+        {
+          format: "",
+          name: "",
+          path: "",
+          size: "",
+        },
+      ],
+    },
+
+    autoSwitchFlag: {
+      update: false,
+      value: row.auto_switch_flag || false,
+    },
+
+    leiCode: {
+      update: false,
+      value: row.lei_code,
+    },
+
+    leiExpiryDate: {
+      update: false,
+      value: row.lei_expiry_date,
+    },
+  };
+};

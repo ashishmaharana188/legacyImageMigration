@@ -9,6 +9,9 @@ import {
   fetchClientData,
   fetchFundData,
   mapMasterToStaging,
+  insertCSVToStaging,
+  fetchStagingData,
+  mapStagingToMongo,
 } from "../masterMigration/masterMigrationWrapper";
 
 import { validateStagingData } from "./masterMigrationMapper/stagingValidator";
@@ -119,8 +122,6 @@ export const checkFileHeaders = async (
           });
           return;
         }
-
-        // Read entire CSV for staging validation
         const rows: Row[] = [];
 
         fs.createReadStream(filePath)
@@ -133,10 +134,22 @@ export const checkFileHeaders = async (
           .on("data", (row: Row) => {
             rows.push(row);
           })
-          .on("end", () => {
+          .on("end", async () => {
             const validationResult = validateStagingData(tableName, rows);
 
-            resolve(validationResult);
+            if (validationResult.status === "error") {
+              resolve(validationResult);
+              return;
+            }
+
+            const clientCode = rows[0]?.client_code;
+
+            await insertCSVToStaging(filePath, tableName, clientCode);
+
+            resolve({
+              status: "success",
+              message: "File validated and staging updated successfully.",
+            });
           });
       })
       .on("error", (err) => {
@@ -222,10 +235,31 @@ export const runETLProcess = async (
   });
 
   const outputFile = `${stagingTable}.csv`;
+  const outputPath = path.join(outputDir, outputFile);
 
-  fs.writeFileSync(path.join(outputDir, outputFile), csv);
+  console.log(`Saving mapped CSV to: ${outputPath}`);
+  fs.writeFileSync(outputPath, csv);
+  console.log("CSV generated successfully.");
 
-  //await bulkInsertStaging(stagingTable, orderedRows);
+  console.log("Start PG Staging Insert");
+
+  const insertPgStaging = await insertCSVToStaging(
+    outputPath,
+    stagingTable,
+    clientCode,
+  );
+
+  console.log("End PG Staging Insert");
+
+  console.log(`Fetching data from stg.${stagingTable}...`);
+
+  const stagingRows = await fetchStagingData(stagingTable, clientCode);
+
+  console.log(`Fetched ${stagingRows.length} row(s).`);
+
+  console.log("Mapping staging data to Mongo documents...");
+  const mongoDocuments = mapStagingToMongo(stagingRows, masterType, clientCode);
+  console.log("Mongo transfer completed.");
 
   return orderedRows;
 };

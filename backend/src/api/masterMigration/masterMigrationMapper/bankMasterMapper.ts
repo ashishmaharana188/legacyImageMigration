@@ -78,3 +78,129 @@ export const mapBankMaster = (
 
   return output;
 };
+
+//mapping mongo
+
+const date = new Date()
+  .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+  .toUpperCase();
+
+export const mapBankToMongo = (row: Row) => {
+  return {
+    currentStage: 4,
+    entryDate: date,
+    revisionNo: 2,
+    recordStatus: 1,
+    role: "C",
+    status: "A",
+    sourceUser: "system",
+    checkerId: "system",
+    updateFlag: "0",
+
+    verificationMethod: "",
+    verificationStatus: "",
+    verifiedOn: "",
+
+    clientCode: row.client_code,
+    clientName: row.client_name,
+
+    fundCode: row.fund_code,
+    fundName: row.fund_name,
+
+    bankAccountName: {
+      updated: false,
+      value: row.bank_account_name,
+    },
+
+    bankName: {
+      updated: false,
+      value: row.bank_name,
+    },
+
+    bankCode: {
+      updated: false,
+      value: row.bank_code,
+    },
+
+    ifscOrRtgsCode: {
+      updated: false,
+      value: row.ifsc_code,
+    },
+
+    currency: {
+      updated: false,
+      value: row.currency,
+    },
+
+    bicOrSwiftCode: {
+      updated: false,
+      value: row.swift_code,
+    },
+
+    corporateId: {
+      updated: false,
+      value: row.corporate_id,
+    },
+
+    branchName: {
+      updated: false,
+      value: row.branch_name,
+    },
+
+    city: {
+      updated: false,
+      value: row.city,
+    },
+
+    isActive: {
+      updated: false,
+      value: row.is_active,
+    },
+
+    bankAccountNumber: {
+      updated: false,
+      value: row.bank_account_number,
+    },
+
+    accountType: {
+      updated: false,
+      value: row.account_type,
+    },
+
+    ownershipType: {
+      updated: false,
+      value: row.ownership_type,
+    },
+
+    dormant: {
+      updated: false,
+      value: row.dormant_flag,
+    },
+
+    dormantDate: {
+      updated: false,
+      value: row.dormant_date,
+    },
+
+    remarks: {
+      updated: false,
+      value: row.remarks,
+    },
+
+    defaultAccount: {
+      updated: false,
+      value: "",
+    },
+
+    pennyDropStatus: {
+      updated: false,
+      value: false,
+    },
+
+    chequeUpload: {
+      format: "",
+      path: "",
+      size: "",
+    },
+  };
+};

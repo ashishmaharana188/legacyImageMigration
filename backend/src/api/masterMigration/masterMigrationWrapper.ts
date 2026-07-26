@@ -1,11 +1,25 @@
 import { getPgPool } from "../../utils/dbConnect";
-interface Row {
-  [key: string]: any;
-}
+import fs from "fs";
+import { parse } from "csv-parse";
 import { mapClientMaster } from "../masterMigration/masterMigrationMapper/clientMasterMapper";
 import { mapFundMaster } from "../masterMigration/masterMigrationMapper/fundMasterMapper";
 import { mapClassMaster } from "../masterMigration/masterMigrationMapper/classMigrationMapper";
 import { mapBankMaster } from "../masterMigration/masterMigrationMapper/bankMasterMapper";
+
+import { mapClientToMongo } from "./masterMigrationMapper/clientMasterMapper";
+import { mapFundToMongo } from "./masterMigrationMapper/fundMasterMapper";
+import { mapClassToMongo } from "./masterMigrationMapper/classMigrationMapper";
+import { mapBankToMongo } from "./masterMigrationMapper/bankMasterMapper";
+
+import {
+  connectMongo,
+  disconnectMongo,
+  getMongoDb,
+} from "../../utils/dbConnect";
+
+interface Row {
+  [key: string]: any;
+}
 
 const fetchHeaders = async (
   schema: "stg" | "fund",
@@ -182,4 +196,319 @@ export const mapMasterToStaging = (
     default:
       throw new Error(`Unsupported migration type ${migrationType}`);
   }
+};
+
+export const insertCSVToStaging = async (
+  csvPath: string,
+  stagingTable: string,
+  clientCode: string,
+): Promise<void> => {
+  const rows: Record<string, any>[] = [];
+
+  await new Promise<void>((resolve, reject) => {
+    fs.createReadStream(csvPath)
+      .pipe(
+        parse({
+          columns: true,
+          trim: true,
+          skip_empty_lines: true,
+        }),
+      )
+      .on("data", (row) => rows.push(row))
+      .on("end", resolve)
+      .on("error", reject);
+  });
+
+  if (rows.length === 0) {
+    console.log("CSV contains no rows.");
+    return;
+  }
+
+  const client = await (await getPgPool()).connect();
+
+  try {
+    console.log(`Starting PG staging insert into stg.${stagingTable}...`);
+
+    await client.query("BEGIN");
+
+    const result = await client.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'stg'
+        AND table_name = $1
+      ORDER BY ordinal_position;
+      `,
+      [stagingTable],
+    );
+
+    const columns = result.rows.map((r) => r.column_name);
+
+    if (!columns.length) {
+      throw new Error(`No columns found for stg.${stagingTable}`);
+    }
+
+    const filteredRows = rows.map((row) => {
+      const filtered: Record<string, any> = {};
+
+      for (const column of columns) {
+        const value = row[column];
+
+        if (value === undefined || value === null) {
+          filtered[column] = null;
+        } else if (typeof value === "string") {
+          const trimmed = value.trim();
+          filtered[column] = trimmed === "" ? null : trimmed;
+        } else {
+          filtered[column] = value;
+        }
+      }
+
+      return filtered;
+    });
+
+    let uniqueRows = filteredRows;
+
+    if (stagingTable === "class_map") {
+      const seen = new Set<string>();
+
+      uniqueRows = [];
+
+      for (const row of filteredRows) {
+        const key = [
+          row.client_code?.toString().trim() ?? "",
+          row.fund_code?.toString().trim() ?? "",
+          row.class_code?.toString().trim() ?? "",
+        ].join("|");
+
+        if (seen.has(key)) {
+          console.warn(`Duplicate class skipped: ${key}`);
+          continue;
+        }
+
+        seen.add(key);
+        uniqueRows.push(row);
+      }
+
+      console.log(
+        `Removed ${filteredRows.length - uniqueRows.length} duplicate class record(s).`,
+      );
+    }
+
+    console.log(`Deleting existing staging data for client ${clientCode}...`);
+
+    await client.query(
+      `
+      DELETE FROM stg."${stagingTable}"
+      WHERE client_code = $1;
+      `,
+      [clientCode],
+    );
+
+    console.log("Existing staging data removed.");
+
+    const BATCH_SIZE = 250;
+
+    for (let start = 0; start < filteredRows.length; start += BATCH_SIZE) {
+      const batch = uniqueRows.slice(start, start + BATCH_SIZE);
+
+      const values: any[] = [];
+      const placeholders: string[] = [];
+
+      batch.forEach((row, rowIndex) => {
+        const rowPlaceholders: string[] = [];
+
+        columns.forEach((column, columnIndex) => {
+          values.push(row[column]);
+
+          rowPlaceholders.push(
+            `$${rowIndex * columns.length + columnIndex + 1}`,
+          );
+        });
+
+        placeholders.push(`(${rowPlaceholders.join(",")})`);
+      });
+
+      const sql = `
+        INSERT INTO stg."${stagingTable}"
+        (${columns.map((c) => `"${c}"`).join(",")})
+        VALUES
+        ${placeholders.join(",")}
+      `;
+
+      await client.query(sql, values);
+
+      console.log(
+        `Inserted ${Math.min(start + BATCH_SIZE, uniqueRows.length)} / ${uniqueRows.length} rows.`,
+      );
+    }
+
+    await client.query("COMMIT");
+
+    console.log(
+      `Successfully inserted ${uniqueRows.length} rows into stg.${stagingTable}.`,
+    );
+  } catch (error) {
+    await client.query("ROLLBACK");
+    console.error("PG staging insert failed:", error);
+    throw error;
+  } finally {
+    client.release();
+  }
+};
+
+const mongoCollectionMap: Record<string, string> = {
+  client_master: "client_master",
+  fund_scheme_master: "fund_master",
+  class_plan_master: "class_master",
+  bank_master: "bank_master",
+};
+
+export const fetchStagingData = async (
+  tableName: string,
+  clientCode?: string,
+): Promise<Record<string, any>[]> => {
+  let client;
+
+  try {
+    const pool = await getPgPool();
+    client = await pool.connect();
+
+    let result;
+
+    if (clientCode) {
+      result = await client.query(
+        `
+        SELECT *
+        FROM stg."${tableName}"
+        WHERE client_code = $1;
+        `,
+        [clientCode],
+      );
+    } else {
+      result = await client.query(
+        `
+        SELECT *
+        FROM stg."${tableName}";
+        `,
+      );
+    }
+
+    return result.rows;
+  } catch (error) {
+    console.error(`Error fetching data from stg.${tableName}:`, error);
+
+    throw new Error(`Failed to fetch data from staging table '${tableName}'.`);
+  } finally {
+    client?.release();
+  }
+};
+
+//mongo deletion
+const deleteMongoRecords = async (
+  collectionName: string,
+  clientCode: string,
+): Promise<void> => {
+  if (!clientCode) {
+    throw new Error("Client code is required to delete Mongo records.");
+  }
+
+  try {
+    await connectMongo();
+    const db = getMongoDb();
+
+    const collection = db.collection(collectionName);
+
+    const result = await collection.deleteMany({
+      clientCode,
+    });
+
+    console.log(
+      `Deleted ${result.deletedCount} document(s) from ${collectionName} for client ${clientCode}.`,
+    );
+  } catch (error) {
+    console.error(
+      `Failed deleting Mongo records from ${collectionName}:`,
+      error,
+    );
+    throw error;
+  } finally {
+    await disconnectMongo();
+  }
+};
+
+//mongo insert
+const insertMongoRecords = async (
+  collectionName: string,
+  documents: any[],
+): Promise<void> => {
+  if (!documents.length) {
+    console.log("No Mongo documents to insert.");
+    return;
+  }
+
+  try {
+    await connectMongo();
+
+    const db = getMongoDb();
+
+    const collection = db.collection(collectionName);
+
+    const result = await collection.insertMany(documents);
+
+    console.log(
+      `Inserted ${result.insertedCount} document(s) into ${collectionName}.`,
+    );
+  } catch (error) {
+    console.error(
+      `Failed inserting Mongo records into ${collectionName}:`,
+      error,
+    );
+    throw error;
+  } finally {
+    await disconnectMongo();
+  }
+};
+
+//mongo mapping and insert/delete
+export const mapStagingToMongo = async (
+  stagingRows: Row[],
+  masterType: string,
+  clientCode: string,
+): Promise<void> => {
+  let mongoDocuments: any[];
+
+  switch (masterType) {
+    case "class_plan_master":
+      mongoDocuments = stagingRows.map(mapClassToMongo);
+      break;
+
+    case "client_master":
+      mongoDocuments = stagingRows.map(mapClientToMongo);
+      break;
+
+    case "fund_scheme_master":
+      mongoDocuments = stagingRows.map(mapFundToMongo);
+      break;
+
+    case "bank_master":
+      mongoDocuments = stagingRows.map(mapBankToMongo);
+      break;
+
+    default:
+      throw new Error(`Unsupported master type: ${masterType}`);
+  }
+
+  if (!mongoDocuments.length) {
+    throw new Error("No Mongo documents generated.");
+  }
+
+  const collectionName = mongoCollectionMap[masterType];
+  console.log(`Deleting Mongo documents for client ${clientCode}...`);
+  await deleteMongoRecords(collectionName, clientCode);
+  console.log("Mongo cleanup completed.");
+
+  console.log(`Inserting ${mongoDocuments.length} Mongo documents...`);
+  await insertMongoRecords(collectionName, mongoDocuments);
+  console.log("Mongo insert completed.");
 };

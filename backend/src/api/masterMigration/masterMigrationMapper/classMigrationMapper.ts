@@ -176,3 +176,223 @@ export function mapClassMaster(
 
   return output;
 }
+
+//Mongo Mapping
+
+const date = new Date()
+  .toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })
+  .toUpperCase();
+
+export const mapClassToMongo = (row: Row) => ({
+  currentStage: 7,
+  revisionNo: 3,
+  recordStatus: 1,
+  status: "A",
+  sourceUser: "system",
+  auditorId: "system",
+  role: "A",
+  updateFlag: "0",
+
+  amcPlan: {
+    update: false,
+    value: row.amc_plan,
+  },
+
+  faPlan: {
+    update: false,
+    value: row.fa_plan,
+  },
+
+  escrowAccount: {
+    update: false,
+    value: row.repository_type ? "Yes" : "No",
+  },
+
+  repositoryType: {
+    update: false,
+    value: row.repository_type,
+  },
+
+  dpClientId: {
+    update: false,
+    value: row.dp_client_id,
+  },
+
+  dpId: {
+    update: false,
+    value: row.dp_id,
+  },
+
+  parentClass: {
+    update: false,
+    value: row.parent_class_code,
+  },
+
+  clientCode: row.client_code,
+  clientName: row.client_name,
+
+  entryDate: date,
+
+  fundCode: row.fund_code,
+  fundName: row.fund_name,
+
+  planCode: row.plan_code,
+  planName: row.plan_name,
+
+  fundClassAdditionalFee: {
+    update: false,
+    value: row.additional_fee,
+  },
+
+  fundClassCarryPercentage: {
+    update: false,
+    value: row.carry_percentage,
+  },
+
+  fundClassCatchupPercentage: {
+    update: false,
+    value: row.catchup_percentage,
+  },
+
+  subClass: {
+    update: false,
+    value: row.sub_class,
+  },
+
+  fundSponsorPercentage: {
+    update: false,
+    value: row.sponsor_class_percent,
+  },
+
+  fundClassCategory: {
+    update: false,
+    value: row.class_category,
+  },
+
+  classCode: {
+    update: false,
+    value: row.class_code,
+  },
+
+  fundClassCurrency: {
+    update: false,
+    value: row.currency,
+  },
+
+  fundClassDescription: {
+    update: false,
+    value: row.class_desc,
+  },
+
+  fundClassFaceValue: {
+    update: false,
+    value: row.face_value,
+  },
+
+  fundClassGstRate: {
+    update: false,
+    value: row.gst_rate,
+  },
+
+  fundClassHurdleRate: {
+    update: false,
+    value: row.hurdle_rate,
+  },
+
+  fundClassManagementFee: {
+    update: false,
+    value: row.management_fee,
+  },
+
+  fundClassMaxAmount: {
+    update: false,
+    value: row.max_amt,
+  },
+
+  fundClassMinAmount: {
+    update: false,
+    value: row.min_amt,
+  },
+
+  fundClassOrgFee: {
+    update: false,
+    value: row.org_fee,
+  },
+
+  fundClassPerFeePercentage: {
+    update: false,
+    value: row.performance_fee_percentage,
+  },
+
+  fundClassPerformanceFee: {
+    update: false,
+    value: row.performance_fee,
+  },
+
+  fundClassPreferredReturn: {
+    update: false,
+    value: row.preferred_return,
+  },
+
+  fundClassShareRatio: {
+    update: false,
+    value: row.share_ratio,
+  },
+
+  fundSponsorClass: {
+    update: false,
+    value: row.sponsor,
+  },
+
+  highWaterMark: {
+    update: false,
+    value: row.high_water_mark,
+  },
+
+  incomeDistFrequency: {
+    update: false,
+    value: row.frequency,
+  },
+
+  isActive: {
+    update: false,
+    value: row.is_active,
+  },
+
+  setupFee: {
+    update: false,
+    value: row.setup_fee_percentage,
+  },
+
+  isinCode: {
+    update: false,
+    value: row.isin_code,
+  },
+
+  fundClassMaxReturn: {
+    update: false,
+    value: row.max_return,
+  },
+
+  minContributionPercentage: {
+    update: false,
+    value: row.class_contribution_percentage,
+  },
+
+  seriesClass: {
+    update: false,
+    value: row.parent_class_code ? "Yes" : null,
+  },
+
+  sipDetails: {
+    update: false,
+    value: [
+      {
+        cycleDate: row.sip_cycle_date,
+        frequency: row.sip_frequency,
+        noOfInstallments:
+          row.sip_installment === "0" ? null : row.sip_installment,
+      },
+    ],
+  },
+});
