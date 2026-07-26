@@ -129,6 +129,12 @@ export function mapClassMaster(
     mappedRow.parent_class_code =
       classLookup.get(String(row.parent_class_id ?? "")) ?? null;
 
+    mappedRow.is_series_class =
+      mappedRow.parent_class_code &&
+      String(mappedRow.parent_class_code).trim() !== ""
+        ? "Y"
+        : "N";
+
     if (fund) {
       mappedRow.fund_code = fund.fund_code;
       mappedRow.fund_name = fund.fund_name;
@@ -170,22 +176,3 @@ export function mapClassMaster(
 
   return output;
 }
-
-export const reorderToStagingHeaders = (
-  mappedRows: Row[],
-  stagingHeaders: string[],
-): Row[] => {
-  return mappedRows.map((row) => {
-    const orderedRow: Row = {};
-
-    for (const header of stagingHeaders) {
-      if (Object.prototype.hasOwnProperty.call(row, header)) {
-        orderedRow[header] = row[header];
-      } else {
-        orderedRow[header] = null;
-      }
-    }
-
-    return orderedRow;
-  });
-};

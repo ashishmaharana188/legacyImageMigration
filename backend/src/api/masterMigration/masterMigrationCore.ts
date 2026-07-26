@@ -10,7 +10,12 @@ import {
   fetchFundData,
   mapMasterToStaging,
 } from "../masterMigration/masterMigrationWrapper";
-import { reorderToStagingHeaders } from "../../api/masterMigration/masterMigrationMapper/classMigrationMapper";
+
+import { validateStagingData } from "./masterMigrationMapper/stagingValidator";
+
+interface Row {
+  [key: string]: any;
+}
 
 export interface FileIntegrityCheckResult {
   status: "success" | "error";
@@ -72,18 +77,22 @@ export const checkFileHeaders = async (
       .on("data", (record: string[]) => {
         uploadedHeaders.push(...record);
 
+        const headersForValidation =
+          tableName === "class_map"
+            ? uploadedHeaders.filter((header) => header !== "is_series_class")
+            : uploadedHeaders;
+
         const missingHeaders = expectedHeaders.filter(
-          (header) => !uploadedHeaders.includes(header),
+          (header) => !headersForValidation.includes(header),
         );
 
         if (missingHeaders.length > 0) {
           errors.push(`Missing expected headers: ${missingHeaders.join(", ")}`);
         }
 
-        const unexpectedHeaders = uploadedHeaders.filter(
+        const unexpectedHeaders = headersForValidation.filter(
           (header) => !expectedHeaders.includes(header),
         );
-
         if (unexpectedHeaders.length > 0) {
           errors.push(
             `Unexpected headers found: ${unexpectedHeaders.join(", ")}`,
@@ -99,27 +108,66 @@ export const checkFileHeaders = async (
             status: "error",
             message: errors.join("\n\n"),
           });
-        } else if (uploadedHeaders.length === 0) {
+          return;
+        }
+
+        if (uploadedHeaders.length === 0) {
           resolve({
             status: "error",
             message:
               "Could not extract headers from the file. Is it a valid CSV?",
           });
-        } else {
-          resolve({
-            status: "success",
-            message: "File integrity check passed.",
-          });
+          return;
         }
+
+        // Read entire CSV for staging validation
+        const rows: Row[] = [];
+
+        fs.createReadStream(filePath)
+          .pipe(
+            parse({
+              columns: true,
+              trim: true,
+            }),
+          )
+          .on("data", (row: Row) => {
+            rows.push(row);
+          })
+          .on("end", () => {
+            const validationResult = validateStagingData(tableName, rows);
+
+            resolve(validationResult);
+          });
       })
       .on("error", (err) => {
-        console.error("Error parsing CSV:", err);
-
         reject({
           status: "error",
-          message: "Error processing file.",
+          message: err.message,
         });
       });
+  });
+};
+
+export const reorderToStagingHeaders = (
+  mappedRows: Row[],
+  stagingHeaders: string[],
+): Row[] => {
+  return mappedRows.map((row) => {
+    const orderedRow: Row = {};
+
+    for (const header of stagingHeaders) {
+      orderedRow[header] = Object.prototype.hasOwnProperty.call(row, header)
+        ? row[header]
+        : null;
+    }
+
+    for (const [key, value] of Object.entries(row)) {
+      if (!(key in orderedRow)) {
+        orderedRow[key] = value;
+      }
+    }
+
+    return orderedRow;
   });
 };
 
