@@ -35,12 +35,8 @@ export const fetchStagingHeaders = (tableName: string): Promise<string[]> => {
   return fetchHeaders("stg", tableName);
 };
 
-export const fetchMasterHeaders = (tableName: string): Promise<string[]> => {
-  return fetchHeaders("fund", tableName);
-};
-
-export const fetchMasterData = async (
-  tableName: string,
+export const fetchClientData = async (
+  clientCode: string,
 ): Promise<Record<string, any>[]> => {
   let client;
 
@@ -48,8 +44,77 @@ export const fetchMasterData = async (
     const pool = await getPgPool();
     client = await pool.connect();
 
-    const result = await client.query(`SELECT * FROM fund."${tableName}";`);
+    const result = await client.query(
+      `
+      SELECT id,
+             client_code,
+             client_name
+      FROM fund.client_master
+      WHERE client_code = $1;
+      `,
+      [clientCode],
+    );
 
+    return result.rows;
+  } finally {
+    client?.release();
+  }
+};
+
+export const fetchFundData = async (
+  clientCode: string,
+): Promise<Record<string, any>[]> => {
+  let client;
+
+  try {
+    const pool = await getPgPool();
+    client = await pool.connect();
+
+    const result = await client.query(
+      `
+      SELECT id,
+             fund_code,
+             fund_name
+      FROM fund.fund_scheme_master
+      WHERE client_id in (select id from fund.client_master where client_code = $1);
+      `,
+      [clientCode],
+    );
+
+    return result.rows;
+  } finally {
+    client?.release();
+  }
+};
+
+export const fetchMasterHeaders = (tableName: string): Promise<string[]> => {
+  return fetchHeaders("fund", tableName);
+};
+
+export const fetchMasterData = async (
+  tableName: string,
+  clientCode?: string,
+): Promise<Record<string, any>[]> => {
+  let client;
+
+  try {
+    const pool = await getPgPool();
+    client = await pool.connect();
+
+    let result;
+
+    if (clientCode) {
+      result = await client.query(
+        `
+        SELECT *
+        FROM fund."${tableName}"
+        WHERE client_id in (select id from fund.client_master where client_code = $1);
+        `,
+        [clientCode],
+      );
+    } else {
+      result = await client.query(`SELECT * FROM fund."${tableName}";`);
+    }
     return result.rows;
   } catch (error) {
     console.error(`Error fetching data from fund.${tableName}:`, error);

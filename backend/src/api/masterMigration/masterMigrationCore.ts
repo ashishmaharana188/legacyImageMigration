@@ -6,12 +6,13 @@ import {
   fetchStagingHeaders,
   fetchMasterHeaders,
   fetchMasterData,
+  fetchClientData,
+  fetchFundData,
 } from "../masterMigration/masterMigrationWrapper";
 import {
   mapMasterToStaging,
-  fetchFundData,
   reorderToStagingHeaders,
-} from "./masterMigrationMapper";
+} from "../../api/masterMigration/masterMigrationMapper/classMigrationMapper";
 
 export interface FileIntegrityCheckResult {
   status: "success" | "error";
@@ -146,7 +147,9 @@ export const runETLProcess = async (
     throw new Error(`Unsupported master type: ${masterType}`);
   }
 
-  const masterRows = await fetchMasterData(masterTable);
+  const masterRows = await fetchMasterData(masterTable, clientCode);
+
+  const clientRows = await fetchClientData(clientCode);
 
   const fundRows = await fetchFundData(clientCode);
 
@@ -154,6 +157,7 @@ export const runETLProcess = async (
 
   const mappedRows = mapMasterToStaging(
     masterRows,
+    clientRows,
     fundRows,
     migrationType,
     masterType,
