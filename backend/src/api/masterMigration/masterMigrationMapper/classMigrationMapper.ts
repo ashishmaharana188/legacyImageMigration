@@ -129,7 +129,7 @@ export function mapClassMaster(
     mappedRow.parent_class_code =
       classLookup.get(String(row.parent_class_id ?? "")) ?? null;
 
-    mappedRow.is_series_class =
+    mappedRow.series_class =
       mappedRow.parent_class_code &&
       String(mappedRow.parent_class_code).trim() !== ""
         ? "Y"

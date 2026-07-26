@@ -79,7 +79,7 @@ export const checkFileHeaders = async (
 
         const headersForValidation =
           tableName === "class_map"
-            ? uploadedHeaders.filter((header) => header !== "is_series_class")
+            ? uploadedHeaders.filter((header) => header !== "series_class")
             : uploadedHeaders;
 
         const missingHeaders = expectedHeaders.filter(

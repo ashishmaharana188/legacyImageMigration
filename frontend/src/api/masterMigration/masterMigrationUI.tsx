@@ -41,6 +41,21 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <div
+          className="block text-sm text-gray-500 cursor-pointer
+            py-2 mt-5 px-4 rounded-lg border border-gray-300 bg-gray-50
+            hover:bg-gray-100 flex items-center justify-between"
+        >
+          <select
+            value={migrationType}
+            onChange={(e) => setMigrationType(e.target.value)}
+            className="w-full bg-transparent outline-none"
+          >
+            <option value="">Select Migration Type</option>
+            <option value="Staging-Upsert-Mongo">Staging-Upsert-Mongo</option>
+            <option value="Master-Staging-Mongo">Master-Staging-Mongo</option>
+          </select>
+        </div>
         {isUploadMigration && (
           <>
             <input
@@ -52,7 +67,7 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
             <div
               onClick={handleButtonClick}
               className="block w-full text-sm text-gray-500 cursor-pointer
-            py-2 px-4 rounded-lg border border-gray-300 bg-gray-50
+            py-2 px-4 rounded-lg border border-gray-300 mt-5 bg-gray-50
             hover:bg-gray-100 flex items-center justify-between"
             >
               <span className="truncate">
@@ -84,21 +99,7 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
             <option value="load_master">Load Master</option>
           </select>
         </div>
-        <div
-          className="block text-sm text-gray-500 cursor-pointer
-            py-2 mt-5 px-4 rounded-lg border border-gray-300 bg-gray-50
-            hover:bg-gray-100 flex items-center justify-between"
-        >
-          <select
-            value={migrationType}
-            onChange={(e) => setMigrationType(e.target.value)}
-            className="w-full bg-transparent outline-none"
-          >
-            <option value="">Select Migration Type</option>
-            <option value="Staging-Upsert-Mongo">Staging-Upsert-Mongo</option>
-            <option value="Master-Staging-Mongo">Master-Staging-Mongo</option>
-          </select>
-        </div>
+
         {isETLMigration && (
           <div
             className="block text-sm text-gray-500 cursor-pointer

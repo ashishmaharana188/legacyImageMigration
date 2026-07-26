@@ -23,7 +23,7 @@ const MANDATORY_FIELDS: Record<string, string[]> = {
     "min_amt",
     "max_amt",
     "is_active",
-    "is_series_class",
+    "series_class",
   ],
 
   client_map: ["client_code", "client_name", "is_active"],
