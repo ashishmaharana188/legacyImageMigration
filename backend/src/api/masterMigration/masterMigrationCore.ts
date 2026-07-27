@@ -144,7 +144,7 @@ export const checkFileHeaders = async (
 
             const clientCode = rows[0]?.client_code;
 
-            const fundCode = rows[0]?.client_code;
+            const fundCode = rows[0]?.fundCode;
 
             await insertCSVToStaging(filePath, tableName, clientCode, fundCode);
 
@@ -261,7 +261,12 @@ export const runETLProcess = async (
   console.log(`Fetched ${stagingRows.length} row(s).`);
 
   console.log("Mapping staging data to Mongo documents...");
-  const mongoDocuments = mapStagingToMongo(stagingRows, masterType, clientCode);
+  const mongoDocuments = mapStagingToMongo(
+    stagingRows,
+    masterType,
+    clientCode,
+    fundCode,
+  );
   console.log("Mongo transfer completed.");
 
   return orderedRows;

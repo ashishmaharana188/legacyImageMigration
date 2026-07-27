@@ -118,7 +118,11 @@ export const fetchMasterData = async (
   fundCode?: string,
 ): Promise<Record<string, any>[]> => {
   let client;
-
+  console.log({
+    clientCode,
+    fundCode,
+    type: typeof fundCode,
+  });
   try {
     const pool = await getPgPool();
     client = await pool.connect();
@@ -320,8 +324,10 @@ export const insertCSVToStaging = async (
 
     console.log(`Deleting existing staging data for client ${clientCode}...`);
 
+    let deleteResult;
+
     if (stagingTable === "client_map") {
-      await client.query(
+      deleteResult = await client.query(
         `
     DELETE FROM stg.client_map
     WHERE client_code = $1;
@@ -329,15 +335,19 @@ export const insertCSVToStaging = async (
         [clientCode],
       );
     } else {
-      await client.query(
+      deleteResult = await client.query(
         `
     DELETE FROM stg."${stagingTable}"
     WHERE client_code = $1
-    AND ($2::text IS NULL OR fund_code = $2::text);
+      AND ($2::text IS NULL OR fund_code = $2::text);
     `,
         [clientCode, fundCode ?? null],
       );
     }
+
+    console.log(
+      `Deleted ${deleteResult.rowCount} row(s) from stg.${stagingTable}.`,
+    );
 
     console.log("Existing staging data removed.");
 
@@ -450,6 +460,7 @@ export const fetchStagingData = async (
 const deleteMongoRecords = async (
   collectionName: string,
   clientCode: string,
+  fundCode: string,
 ): Promise<void> => {
   if (!clientCode) {
     throw new Error("Client code is required to delete Mongo records.");
@@ -461,8 +472,16 @@ const deleteMongoRecords = async (
 
     const collection = db.collection(collectionName);
 
-    const result = await collection.deleteMany({
+    const filter: Record<string, any> = {
       clientCode,
+    };
+
+    if (fundCode) {
+      filter.fundCode = fundCode;
+    }
+
+    const result = await collection.deleteMany({
+      filter,
     });
 
     console.log(
@@ -517,6 +536,7 @@ export const mapStagingToMongo = async (
   stagingRows: Row[],
   masterType: string,
   clientCode: string,
+  fundCode: string,
 ): Promise<void> => {
   let mongoDocuments: any[];
 
@@ -547,7 +567,7 @@ export const mapStagingToMongo = async (
 
   const collectionName = mongoCollectionMap[masterType];
   console.log(`Deleting Mongo documents for client ${clientCode}...`);
-  await deleteMongoRecords(collectionName, clientCode);
+  await deleteMongoRecords(collectionName, clientCode, fundCode);
   console.log("Mongo cleanup completed.");
 
   console.log(`Inserting ${mongoDocuments.length} Mongo documents...`);

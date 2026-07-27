@@ -43,14 +43,17 @@ export const runETLProcessService = async (
 ): Promise<ETLProcessResponse> => {
   const payload: ETLProcessPayload = {
     clientCode,
-    fundCode,
+    fundCode: fundCode.trim() === "" ? undefined : fundCode,
     migrationType,
     masterType,
   };
 
   const formData = new FormData();
+
   Object.entries(payload).forEach(([key, value]) => {
-    formData.append(key, value);
+    if (value !== undefined) {
+      formData.append(key, value);
+    }
   });
 
   if (file) {
