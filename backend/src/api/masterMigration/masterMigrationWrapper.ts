@@ -480,9 +480,7 @@ const deleteMongoRecords = async (
       filter.fundCode = fundCode;
     }
 
-    const result = await collection.deleteMany({
-      filter,
-    });
+    const result = await collection.deleteMany(filter);
 
     console.log(
       `Deleted ${result.deletedCount} document(s) from ${collectionName} for client ${clientCode}.`,
@@ -536,7 +534,7 @@ export const mapStagingToMongo = async (
   stagingRows: Row[],
   masterType: string,
   clientCode: string,
-  fundCode: string,
+  fundCode?: string,
 ): Promise<void> => {
   let mongoDocuments: any[];
 
