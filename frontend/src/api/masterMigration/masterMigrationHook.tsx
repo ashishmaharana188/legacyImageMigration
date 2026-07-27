@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { UseMasterMigrationHookProps } from "./masterMigrationType";
 import {
-  checkFileIntegrityService,
-  runETLProcessService,
+  stagingValidationUpsert,
+  masterStagingMongo,
 } from "./masterMigrationService";
 
 export const useMasterMigrationHook = ({
@@ -36,7 +36,7 @@ export const useMasterMigrationHook = ({
     setUploadStatus("Uploading and checking file integrity...");
 
     try {
-      const result = await checkFileIntegrityService(selectedFile);
+      const result = await stagingValidationUpsert(selectedFile);
 
       setUploadStatus(
         `File integrity check: ${result.status}. ${result.message ?? ""}`,
@@ -70,7 +70,7 @@ export const useMasterMigrationHook = ({
     setUploadStatus("Processing master data...");
 
     try {
-      await runETLProcessService(
+      await masterStagingMongo(
         clientCode,
         fundCode,
         migrationType,

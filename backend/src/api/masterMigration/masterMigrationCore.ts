@@ -12,24 +12,38 @@ import {
   insertCSVToStaging,
   fetchStagingData,
   mapStagingToMongo,
+  runStagingUpsert,
 } from "../masterMigration/masterMigrationWrapper";
 
 import { validateStagingData } from "./masterMigrationMapper/stagingValidator";
+import { upsertQueryMap } from "./masterMigrationMapper/upsertQueryMap";
 
 interface Row {
   [key: string]: any;
 }
 
-export interface FileIntegrityCheckResult {
+export interface StagingValidateUpsertResult {
   status: "success" | "error";
   message: string;
 }
 
-export const checkFileHeaders = async (
+const stagingTableMap: Record<string, string> = {
+  client_master: "client_map",
+  fund_scheme_master: "fund_scheme_map",
+  class_plan_master: "class_map",
+  plan_master: "plan_map",
+  bank_master: "bank_map",
+  contact_master: "contact_map",
+};
+
+export const stagingValidateUpsert = async (
   filePath: string,
   originalFileName: string,
-): Promise<FileIntegrityCheckResult> => {
+  masterType: string,
+): Promise<StagingValidateUpsertResult> => {
   const tableName = originalFileName.split(".").shift();
+
+  const stagingTable = stagingTableMap[masterType];
 
   if (!tableName) {
     return {
@@ -67,7 +81,7 @@ export const checkFileHeaders = async (
     };
   }
 
-  return new Promise<FileIntegrityCheckResult>((resolve, reject) => {
+  return new Promise<StagingValidateUpsertResult>((resolve, reject) => {
     const uploadedHeaders: string[] = [];
     const errors: string[] = [];
 
@@ -144,9 +158,15 @@ export const checkFileHeaders = async (
 
             const clientCode = rows[0]?.client_code;
 
-            const fundCode = rows[0]?.fundCode;
+            const fundCode = rows[0]?.fund_code;
 
             await insertCSVToStaging(filePath, tableName, clientCode, fundCode);
+
+            await runStagingUpsert(
+              tableName as keyof typeof upsertQueryMap,
+              clientCode,
+              fundCode,
+            );
 
             resolve({
               status: "success",
@@ -186,22 +206,13 @@ export const reorderToStagingHeaders = (
   });
 };
 
-export const runETLProcess = async (
+export const masterMigrateMongo = async (
   clientCode: string,
   fundCode: string | undefined,
   masterType: string,
   migrationType: string,
 ) => {
   const masterTable = masterType;
-
-  const stagingTableMap: Record<string, string> = {
-    client_master: "client_map",
-    fund_scheme_master: "fund_scheme_map",
-    class_plan_master: "class_map",
-    plan_master: "plan_map",
-    bank_master: "bank_map",
-    contact_master: "contact_map",
-  };
 
   const stagingTable = stagingTableMap[masterType];
 
@@ -256,7 +267,11 @@ export const runETLProcess = async (
 
   console.log(`Fetching data from stg.${stagingTable}...`);
 
-  const stagingRows = await fetchStagingData(stagingTable, clientCode);
+  const stagingRows = await fetchStagingData(
+    stagingTable,
+    clientCode,
+    fundCode,
+  );
 
   console.log(`Fetched ${stagingRows.length} row(s).`);
 

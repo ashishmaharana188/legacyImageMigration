@@ -26,7 +26,7 @@ const MANDATORY_FIELDS: Record<string, string[]> = {
     "series_class",
   ],
 
-  client_map: ["client_code", "client_name", "is_active"],
+  client_map: ["client_code", "client_name"],
 
   fund_scheme_map: [
     "fund_business_type",

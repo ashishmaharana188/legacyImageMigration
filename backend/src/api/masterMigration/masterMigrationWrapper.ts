@@ -11,6 +11,8 @@ import { mapFundToMongo } from "./masterMigrationMapper/fundMasterMapper";
 import { mapClassToMongo } from "./masterMigrationMapper/classMigrationMapper";
 import { mapBankToMongo } from "./masterMigrationMapper/bankMasterMapper";
 
+import { upsertQueryMap } from "../masterMigration/masterMigrationMapper/upsertQueryMap";
+
 import {
   connectMongo,
   disconnectMongo,
@@ -460,7 +462,7 @@ export const fetchStagingData = async (
 const deleteMongoRecords = async (
   collectionName: string,
   clientCode: string,
-  fundCode: string,
+  fundCode?: string,
 ): Promise<void> => {
   if (!clientCode) {
     throw new Error("Client code is required to delete Mongo records.");
@@ -571,4 +573,41 @@ export const mapStagingToMongo = async (
   console.log(`Inserting ${mongoDocuments.length} Mongo documents...`);
   await insertMongoRecords(collectionName, mongoDocuments);
   console.log("Mongo insert completed.");
+};
+
+export const runStagingUpsert = async (
+  stagingTable: keyof typeof upsertQueryMap,
+  clientCode: string,
+  fundCode?: string,
+): Promise<void> => {
+  let client;
+
+  try {
+    const pool = await getPgPool();
+    client = await pool.connect();
+
+    const query = upsertQueryMap[stagingTable];
+
+    if (!query) {
+      throw new Error(`No upsert query found for ${stagingTable}`);
+    }
+
+    const params =
+      stagingTable === "client_map"
+        ? [clientCode]
+        : [clientCode, fundCode ?? null];
+
+    await client.query("BEGIN");
+
+    await client.query(query, params);
+
+    await client.query("COMMIT");
+
+    console.log(`${stagingTable} upsert completed successfully.`);
+  } catch (error) {
+    await client?.query("ROLLBACK");
+    throw error;
+  } finally {
+    client?.release();
+  }
 };

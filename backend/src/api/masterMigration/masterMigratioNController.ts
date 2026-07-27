@@ -1,8 +1,11 @@
 import fs from "fs";
 import { Request, Response } from "express";
-import { checkFileHeaders, runETLProcess } from "./masterMigrationCore";
+import {
+  stagingValidateUpsert,
+  masterMigrateMongo,
+} from "./masterMigrationCore";
 
-export const checkFileIntegrity = async (
+export const stagingValidateUpsertController = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -16,22 +19,22 @@ export const checkFileIntegrity = async (
     return;
   }
 
-  const filePath = req.file.path;
-  const originalFileName = req.file.originalname;
+  const { masterType } = req.body;
+  const { path, originalname } = req.file;
 
   try {
-    const result = await checkFileHeaders(filePath, originalFileName);
+    const result = await stagingValidateUpsert(path, originalname, masterType);
 
     res.status(result.status === "success" ? 200 : 400).json(result);
   } catch (error) {
-    console.error("Error during file integrity check:", error);
+    console.error("Error during staging validation:", error);
 
     res.status(500).json({
       status: "error",
       message: "Error processing file.",
     });
   } finally {
-    fs.unlink(filePath, (err) => {
+    fs.unlink(path, (err) => {
       if (err) {
         console.error("Error deleting temporary file:", err);
       }
@@ -39,7 +42,7 @@ export const checkFileIntegrity = async (
   }
 };
 
-export const runETLProcessController = async (
+export const masterMigrateMongoController = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
@@ -47,32 +50,23 @@ export const runETLProcessController = async (
 
   console.log(req.body);
 
-  // File is only mandatory for upload migration
-  if (migrationType === "Staging-Upsert-Mongo" && !req.file) {
-    res.status(400).json({
-      status: "error",
-      message: "No file uploaded.",
-    });
-    return;
-  }
-
   try {
-    if (migrationType === "Master-Staging-Mongo") {
-      const result = await runETLProcess(
-        clientCode,
-        fundCode,
-        masterType,
-        migrationType,
-      );
-
-      res.status(200).json(result);
+    if (migrationType !== "Master-Staging-Mongo") {
+      res.status(400).json({
+        status: "error",
+        message: `Unsupported migration type: ${migrationType}`,
+      });
       return;
     }
 
-    res.status(400).json({
-      status: "error",
-      message: `Unsupported migration type: ${migrationType}`,
-    });
+    const result = await masterMigrateMongo(
+      clientCode,
+      fundCode,
+      masterType,
+      migrationType,
+    );
+
+    res.status(200).json(result);
   } catch (error) {
     console.error("Error during ETL process:", error);
 
@@ -80,13 +74,5 @@ export const runETLProcessController = async (
       status: "error",
       message: "Error during ETL process.",
     });
-  } finally {
-    if (req.file) {
-      fs.unlink(req.file.path, (err) => {
-        if (err) {
-          console.error("Error deleting temporary file:", err);
-        }
-      });
-    }
   }
 };

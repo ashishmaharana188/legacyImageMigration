@@ -10,7 +10,7 @@ const CLASS_FIELD_MAPPING: Record<string, string> = {
   fund_code: "fund_scheme_id",
   fund_name: "fund_scheme_id",
   plan_code: "plan_code",
-  plan_name: "plan_name",
+  plan_name: "plan_desc",
   class_code: "class_code",
   class_name: "class_name",
   class_category: "sip_category",

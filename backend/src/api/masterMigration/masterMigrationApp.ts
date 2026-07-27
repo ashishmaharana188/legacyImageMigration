@@ -1,8 +1,8 @@
 import { Router } from "express";
 import multer from "multer";
 import {
-  checkFileIntegrity,
-  runETLProcessController,
+  stagingValidateUpsertController,
+  masterMigrateMongoController,
 } from "../masterMigration/masterMigratioNController";
 
 console.log("masterMigrationApp loaded");
@@ -14,14 +14,14 @@ const upload = multer({
 });
 
 router.post(
-  "/master-migrate/check-file-integrity",
+  "/master-migrate/stagingUpsertMongo",
   upload.single("masterFile"),
-  checkFileIntegrity,
+  stagingValidateUpsertController,
 );
 
 router.post(
-  "/master-migrate/ETLProcess",
+  "/master-migrate/masterStagingMongo",
   upload.single("masterFile"),
-  runETLProcessController,
+  masterMigrateMongoController,
 );
 export default router;

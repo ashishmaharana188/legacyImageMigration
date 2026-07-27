@@ -1,28 +1,41 @@
 import apiClient from "../../services/apiClient";
 
-export interface FileIntegrityResponse {
+export interface stagingUpsertValidate {
   status: string;
   message?: string;
 }
-export interface ETLProcessResponse {
+export interface masterMigrateMongo {
   status: string;
   message?: string;
 }
 
-interface ETLProcessPayload {
+interface masterMigrateMongoPayload {
   clientCode: string;
   fundCode?: string;
   migrationType: string;
   masterType: string;
 }
-export const checkFileIntegrityService = async (
-  file: File,
-): Promise<FileIntegrityResponse> => {
-  const formData = new FormData();
-  formData.append("masterFile", file);
 
-  const response = await apiClient.post<FileIntegrityResponse>(
-    "/master-migrate/check-file-integrity",
+//staging upsert request
+export const stagingValidationUpsert = async (
+  file: File,
+  clientCode: string,
+  fundCode: string,
+  masterType: string,
+  migrationType: string,
+): Promise<stagingUpsertValidate> => {
+  const formData = new FormData();
+
+  formData.append("masterFile", file);
+  formData.append("clientCode", clientCode);
+  if (fundCode) {
+    formData.append("fundCode", fundCode);
+  }
+  formData.append("masterType", masterType);
+  formData.append("migrationType", migrationType);
+
+  const response = await apiClient.post<stagingUpsertValidate>(
+    "/master-migrate/stagingUpsertMongo",
     formData,
     {
       headers: {
@@ -34,14 +47,15 @@ export const checkFileIntegrityService = async (
   return response.data;
 };
 
-export const runETLProcessService = async (
+//masterMigration request
+export const masterStagingMongo = async (
   clientCode: string,
   fundCode: string,
   migrationType: string,
   masterType: string,
   file?: File,
-): Promise<ETLProcessResponse> => {
-  const payload: ETLProcessPayload = {
+): Promise<masterMigrateMongo> => {
+  const payload: masterMigrateMongoPayload = {
     clientCode,
     fundCode: fundCode.trim() === "" ? undefined : fundCode,
     migrationType,
@@ -60,8 +74,8 @@ export const runETLProcessService = async (
     formData.append("masterFile", file);
   }
 
-  const response = await apiClient.post<ETLProcessResponse>(
-    "/master-migrate/ETLProcess",
+  const response = await apiClient.post<masterMigrateMongo>(
+    "/master-migrate/masterStagingMongo",
     formData,
   );
 

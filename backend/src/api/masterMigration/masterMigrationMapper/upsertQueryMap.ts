@@ -5,8 +5,6 @@ id,
 client_code,
 client_name,
 client_type,
-client_pan,
-client_tin,
 client_address,
 pin,
 city,
@@ -25,15 +23,14 @@ kra_pos_code,
 ckyc_userid,
 ckyc_username,
 ckyc_password,
-ckyc_institution_code
+ckyc_institution_code,
+pan_or_tin
 ) 
 select
 coalesce(cm.id, case when length(tt.client_code)=3 then (ASCII(substring(tt.client_code,1,1))::text||ASCII(substring(tt.client_code,2,1))::text||ASCII(substring(tt.client_code,3,1))::text)::bigint else nextval('fund.client_master_id_seq'::regclass) end),
 coalesce(cm.client_code, tt.client_code),
 tt.client_name,
 coalesce(tt.type,'Limited Company'),
-tt.pan,
-tt.tin,
 tt.address,
 tt.pin,
 tt.city,
@@ -52,11 +49,12 @@ tt.kra_pos_code,
 tt.ckyc_userid,
 tt.ckyc_username,
 tt.ckyc_password,
-tt.ckyc_institution_code
+tt.ckyc_institution_code,
+tt.pan
 from
 fund.client_master cm
 right join stg.client_map tt on cm.client_code = tt.client_code
-WHERE cm.client_code = $1 
+WHERE tt.client_code = $1 
 AND(cm.created_by not in ('finexdistsvc','xaltssvc') or cm.last_updated_by not in ('finexdistsvc','xaltssvc'))
 ON CONFLICT(id) DO
 UPDATE
@@ -64,8 +62,6 @@ set
 (
 client_name,
 client_type,
-client_pan,
-client_tin,
 client_address,
 pin,
 city,
@@ -84,12 +80,11 @@ kra_pos_code,
 ckyc_userid,
 ckyc_username,
 ckyc_password,
-ckyc_institution_code
+ckyc_institution_code,
+pan_or_tin
 ) =(
 EXCLUDED.client_name,
 EXCLUDED.client_type,
-EXCLUDED.client_pan,
-EXCLUDED.client_tin,
 EXCLUDED.client_address,
 EXCLUDED.pin,
 EXCLUDED.city,
@@ -108,7 +103,8 @@ EXCLUDED.kra_pos_code,
 EXCLUDED.ckyc_userid,
 EXCLUDED.ckyc_username,
 EXCLUDED.ckyc_password,
-EXCLUDED.ckyc_institution_code
+EXCLUDED.ckyc_institution_code,
+EXCLUDED.pan_or_tin
 );`,
   fund_scheme_map: `INSERT INTO
 FUND.FUND_SCHEME_MASTER(
@@ -554,8 +550,8 @@ JOIN fund.fund_scheme_master sf ON cp.fund_scheme_id = sf.id and cp.client_id = 
 JOIN fund.client_master cc ON cp.client_id = cc.id
 RIGHT JOIN stg.class_map tt ON upper(cc.client_code) = upper(tt.client_code) AND upper(sf.fund_code) = upper(tt.fund_code) AND upper(cp.class_code) = upper(tt.class_code)
 WHERE tt.client_code = $1
-AND ($2 IS NULL OR tt.fund_code = $2)
-upper(tt.class_name) != upper(tt.fund_name)
+AND ($2::text IS NULL OR tt.fund_code = $2::text)
+AND upper(tt.class_name) != upper(tt.fund_name)
 and exists(select 1 from stg.client_map cm where cm.client_code=tt.client_code)
 and exists(select 1 from STG.FUND_SCHEME_MAP fm where fm.client_code=tt.client_code and fm.fund_code=tt.fund_code)
 and (cp.created_by not in ('finexdistsvc','xaltssvc') or cp.last_updated_by not in ('finexdistsvc','xaltssvc'))
@@ -563,6 +559,7 @@ and (sf.created_by not in ('finexdistsvc','xaltssvc') or sf.last_updated_by not 
 and (cc.created_by not in ('finexdistsvc','xaltssvc') or cc.last_updated_by not in ('finexdistsvc','xaltssvc'))
 ON CONFLICT(id) DO
 UPDATE set (plan_code,plan_name,plan_desc,class_code,class_name,class_desc,sip_category,min_amount,max_amount,management_fee,performance_fee, hurdle_rate, performance_fee_percent, share_ratio, additional_fee, org_fee, gst_rate, preferred_return, carry_percent, catchup_percent, currency, face_value, isin_code, high_water_mark, is_active, amc_plan, fa_plan, setup_fees_percent,class_contribution_percentage, sub_class, sponsor_class_percent)=(EXCLUDED.plan_code,EXCLUDED.plan_name,EXCLUDED.plan_desc,EXCLUDED.class_code,EXCLUDED.class_name,EXCLUDED.class_desc,EXCLUDED.sip_category,EXCLUDED.min_amount,EXCLUDED.max_amount,EXCLUDED.management_fee, EXCLUDED.performance_fee, EXCLUDED.hurdle_rate, EXCLUDED.performance_fee_percent, EXCLUDED.share_ratio, EXCLUDED.additional_fee, EXCLUDED.org_fee, EXCLUDED.gst_rate, EXCLUDED.preferred_return, EXCLUDED.carry_percent, EXCLUDED.catchup_percent, EXCLUDED.currency, EXCLUDED.face_value, EXCLUDED.isin_code, EXCLUDED.high_water_mark, EXCLUDED.is_active, EXCLUDED.amc_plan, EXCLUDED.fa_plan, EXCLUDED.setup_fees_percent,EXCLUDED.class_contribution_percentage, EXCLUDED.sub_class, EXCLUDED.sponsor_class_percent);`,
+
   //  contact_map: ``,
   bank_map: `INSERT INTO fund.bank_master (
     id,
