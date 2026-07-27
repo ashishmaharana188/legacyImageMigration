@@ -7,7 +7,9 @@ interface MasterMigrationUIProps {
   migrationType: string;
   masterType: string;
   clientCode: string;
+  fundCode: string;
   setClientCode: React.Dispatch<React.SetStateAction<string>>;
+  setFundCode: React.Dispatch<React.SetStateAction<string>>;
   setMigrationType: React.Dispatch<React.SetStateAction<string>>;
   setMasterType: React.Dispatch<React.SetStateAction<string>>;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
@@ -21,7 +23,9 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
   migrationType,
   masterType,
   clientCode,
+  fundCode,
   setClientCode,
+  setFundCode,
   setMigrationType,
   setMasterType,
   handleFileChange,
@@ -113,8 +117,16 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
               placeholder="Enter Client Code"
               className="w-full bg-transparent outline-none py-2 px-3 border rounded"
             />
+            <input
+              type="text"
+              value={fundCode}
+              onChange={(e) => setFundCode(e.target.value)}
+              placeholder="Enter Fund Code"
+              className="w-full ml-5 bg-transparent outline-none py-2 px-3 border rounded"
+            />
           </div>
         )}
+
         <button
           onClick={() => {
             if (isUploadMigration) {

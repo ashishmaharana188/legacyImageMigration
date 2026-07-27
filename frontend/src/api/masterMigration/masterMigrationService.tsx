@@ -11,6 +11,7 @@ export interface ETLProcessResponse {
 
 interface ETLProcessPayload {
   clientCode: string;
+  fundCode?: string;
   migrationType: string;
   masterType: string;
 }
@@ -35,11 +36,17 @@ export const checkFileIntegrityService = async (
 
 export const runETLProcessService = async (
   clientCode: string,
+  fundCode: string,
   migrationType: string,
   masterType: string,
   file?: File,
 ): Promise<ETLProcessResponse> => {
-  const payload: ETLProcessPayload = { clientCode, migrationType, masterType };
+  const payload: ETLProcessPayload = {
+    clientCode,
+    fundCode,
+    migrationType,
+    masterType,
+  };
 
   const formData = new FormData();
   Object.entries(payload).forEach(([key, value]) => {

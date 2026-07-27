@@ -114,7 +114,8 @@ export const fetchMasterHeaders = (tableName: string): Promise<string[]> => {
 
 export const fetchMasterData = async (
   tableName: string,
-  clientCode?: string,
+  clientCode: string,
+  fundCode?: string,
 ): Promise<Record<string, any>[]> => {
   let client;
 
@@ -124,43 +125,64 @@ export const fetchMasterData = async (
 
     let result;
 
-    if (clientCode) {
-      if (tableName === "client_master") {
-        result = await client.query(
-          `
-          SELECT *
+    // Client Master
+    if (tableName === "client_master") {
+      result = await client.query(
+        `
+        SELECT *
+        FROM fund.client_master
+        WHERE client_code = $1;
+        `,
+        [clientCode],
+      );
+    }
+
+    // Fund Master
+    else if (tableName === "fund_scheme_master") {
+      result = await client.query(
+        `
+        SELECT *
+        FROM fund.fund_scheme_master
+        WHERE client_id IN (
+          SELECT id
           FROM fund.client_master
-          WHERE client_code = $1;
-          `,
-          [clientCode],
-        );
-      } else {
-        result = await client.query(
-          `
-          SELECT *
-          FROM fund."${tableName}"
-          WHERE client_id IN (
-            SELECT id
-            FROM fund.client_master
-            WHERE client_code = $1
-          );
-          `,
-          [clientCode],
-        );
-      }
+          WHERE client_code = $1
+        )
+        AND ($2::text IS NULL OR fund_code = $2);
+        `,
+        [clientCode, fundCode ?? null],
+      );
     } else {
       result = await client.query(
         `
         SELECT *
-        FROM fund."${tableName}";
+        FROM fund."${tableName}"
+        WHERE client_id IN (
+          SELECT id
+          FROM fund.client_master
+          WHERE client_code = $1
+        )
+        AND (
+          $2::text IS NULL
+          OR fund_scheme_id IN (
+            SELECT id
+            FROM fund.fund_scheme_master
+            WHERE client_id IN (
+              SELECT id
+              FROM fund.client_master
+              WHERE client_code = $1
+            )
+            AND fund_code = $2
+          )
+        );
         `,
+        [clientCode, fundCode ?? null],
       );
     }
 
     return result.rows;
   } catch (error) {
     console.error(`Error fetching data from fund.${tableName}:`, error);
-
     throw new Error(`Failed to fetch data from '${tableName}'.`);
   } finally {
     client?.release();
@@ -202,6 +224,7 @@ export const insertCSVToStaging = async (
   csvPath: string,
   stagingTable: string,
   clientCode: string,
+  fundCode?: string,
 ): Promise<void> => {
   const rows: Record<string, any>[] = [];
 
@@ -297,19 +320,30 @@ export const insertCSVToStaging = async (
 
     console.log(`Deleting existing staging data for client ${clientCode}...`);
 
-    await client.query(
-      `
-      DELETE FROM stg."${stagingTable}"
-      WHERE client_code = $1;
-      `,
-      [clientCode],
-    );
+    if (stagingTable === "client_map") {
+      await client.query(
+        `
+    DELETE FROM stg.client_map
+    WHERE client_code = $1;
+    `,
+        [clientCode],
+      );
+    } else {
+      await client.query(
+        `
+    DELETE FROM stg."${stagingTable}"
+    WHERE client_code = $1
+    AND ($2::text IS NULL OR fund_code = $2::text);
+    `,
+        [clientCode, fundCode ?? null],
+      );
+    }
 
     console.log("Existing staging data removed.");
 
     const BATCH_SIZE = 250;
 
-    for (let start = 0; start < filteredRows.length; start += BATCH_SIZE) {
+    for (let start = 0; start < uniqueRows.length; start += BATCH_SIZE) {
       const batch = uniqueRows.slice(start, start + BATCH_SIZE);
 
       const values: any[] = [];
@@ -366,7 +400,8 @@ const mongoCollectionMap: Record<string, string> = {
 
 export const fetchStagingData = async (
   tableName: string,
-  clientCode?: string,
+  clientCode: string,
+  fundCode?: string,
 ): Promise<Record<string, any>[]> => {
   let client;
 
@@ -376,21 +411,28 @@ export const fetchStagingData = async (
 
     let result;
 
-    if (clientCode) {
+    // Client map
+    if (tableName === "client_map") {
       result = await client.query(
         `
         SELECT *
-        FROM stg."${tableName}"
+        FROM stg.client_map
         WHERE client_code = $1;
         `,
         [clientCode],
       );
-    } else {
+    }
+
+    // Fund / Class / Plan / Bank / Contact / etc.
+    else {
       result = await client.query(
         `
         SELECT *
-        FROM stg."${tableName}";
+        FROM stg."${tableName}"
+        WHERE client_code = $1
+        AND ($2::text IS NULL OR fund_code = $2);
         `,
+        [clientCode, fundCode ?? null],
       );
     }
 

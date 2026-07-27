@@ -43,7 +43,7 @@ export const runETLProcessController = async (
   req: Request,
   res: Response,
 ): Promise<void> => {
-  const { clientCode, masterType, migrationType } = req.body;
+  const { clientCode, fundCode, masterType, migrationType } = req.body;
 
   console.log(req.body);
 
@@ -58,7 +58,12 @@ export const runETLProcessController = async (
 
   try {
     if (migrationType === "Master-Staging-Mongo") {
-      const result = await runETLProcess(clientCode, masterType, migrationType);
+      const result = await runETLProcess(
+        clientCode,
+        fundCode,
+        masterType,
+        migrationType,
+      );
 
       res.status(200).json(result);
       return;

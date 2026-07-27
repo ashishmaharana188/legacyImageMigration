@@ -144,7 +144,9 @@ export const checkFileHeaders = async (
 
             const clientCode = rows[0]?.client_code;
 
-            await insertCSVToStaging(filePath, tableName, clientCode);
+            const fundCode = rows[0]?.client_code;
+
+            await insertCSVToStaging(filePath, tableName, clientCode, fundCode);
 
             resolve({
               status: "success",
@@ -186,6 +188,7 @@ export const reorderToStagingHeaders = (
 
 export const runETLProcess = async (
   clientCode: string,
+  fundCode: string | undefined,
   masterType: string,
   migrationType: string,
 ) => {
@@ -206,7 +209,7 @@ export const runETLProcess = async (
     throw new Error(`Unsupported master type: ${masterType}`);
   }
 
-  const masterRows = await fetchMasterData(masterTable, clientCode);
+  const masterRows = await fetchMasterData(masterTable, clientCode, fundCode);
 
   const clientRows = await fetchClientData(clientCode);
 

@@ -12,6 +12,7 @@ export const useMasterMigrationHook = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState<string>("");
   const [clientCode, setClientCode] = useState<string>("");
+  const [fundCode, setFundCode] = useState<string>("");
   const [migrationType, setMigrationType] = useState<string>("");
   const [masterType, setMasterType] = useState<string>("");
 
@@ -71,6 +72,7 @@ export const useMasterMigrationHook = ({
     try {
       await runETLProcessService(
         clientCode,
+        fundCode,
         migrationType,
         masterType,
         selectedFile ?? undefined,
@@ -86,9 +88,12 @@ export const useMasterMigrationHook = ({
   return {
     selectedFile,
     clientCode,
-    migrationType,
-    uploadStatus,
     setClientCode,
+    migrationType,
+    masterType,
+    uploadStatus,
+    fundCode,
+    setFundCode,
     setMigrationType,
     setMasterType,
     handleFileChange,
