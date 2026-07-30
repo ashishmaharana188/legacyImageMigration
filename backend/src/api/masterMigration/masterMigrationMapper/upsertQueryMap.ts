@@ -624,4 +624,4 @@ SET
     ownership_type = EXCLUDED.ownership_type,
     dormant_date = EXCLUDED.dormant_date;`,
   drawdown_map: `...`,
-} as const;
+};

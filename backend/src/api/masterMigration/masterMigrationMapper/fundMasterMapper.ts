@@ -131,7 +131,7 @@ export function mapFundMaster(masterRows: Row[], clientRows: Row[]): Row[] {
     } else if (String(row.is_active).toLowerCase() === "false") {
       mappedRow.is_active = "N";
     } else {
-      mappedRow.is_active = null;
+      mappedRow.is_active = "N";
     }
 
     output.push(mappedRow);

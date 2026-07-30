@@ -12,9 +12,8 @@ import {
   insertCSVToStaging,
   transferToMongo,
   runStagingUpsert,
-  fetchMasterDateColumns,
+  updateParentClassIds,
   normalizeDates,
-  FIELD_MAPPINGS,
   stagingTableMap,
 } from "../masterMigration/masterMigrationWrapper";
 
@@ -167,6 +166,11 @@ export const stagingValidateUpsert = async (
               clientCode,
               fundCode,
             );
+
+            if (masterType === "class_plan_master") {
+              await updateParentClassIds(clientCode, fundCode);
+            }
+
             console.log("pushToMongo =", pushToMongo);
             if (pushToMongo) {
               await transferToMongo(clientCode, fundCode, masterType);

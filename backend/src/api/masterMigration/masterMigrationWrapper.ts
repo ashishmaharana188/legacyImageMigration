@@ -329,6 +329,75 @@ export const mapMasterToStaging = (
   }
 };
 
+export const updateParentClassIds = async (
+  clientCode: string,
+  fundCode: string,
+): Promise<Record<string, any>[]> => {
+  let client;
+
+  try {
+    const pool = await getPgPool();
+    client = await pool.connect();
+
+    console.log(
+      `[updateParentClassIds] Starting | clientCode=${clientCode}, fundCode=${fundCode ?? "ALL"}`,
+    );
+
+    const result = await client.query(
+      `WITH ctechild AS (
+   SELECT cpm_sub.id AS class_plan_id_1, cm.id AS client_master_id, 
+          fsm.id AS fund_scheme_id_1, cpm_sub.plan_code AS plan_code_1, 
+          cpm_sub.class_name, cpm_sub.class_desc
+   FROM fund.class_plan_master cpm_sub
+   JOIN fund.client_master cm ON cpm_sub.client_id = cm.id
+   JOIN fund.fund_scheme_master fsm ON fsm.client_id = cm.id
+       AND cpm_sub.fund_scheme_id = fsm.id
+   WHERE cpm_sub.class_name != cpm_sub.class_desc
+),
+cteparent AS (
+   SELECT id AS cteparent_id, fund_scheme_id, plan_code, client_id, class_desc
+   FROM fund.class_plan_master 
+   WHERE client_id IN (SELECT client_master_id FROM ctechild) 
+     AND fund_scheme_id IN (SELECT fund_scheme_id_1 FROM ctechild) 
+     AND plan_code IN (SELECT plan_code_1 FROM ctechild) 
+     AND class_desc IN (SELECT class_name FROM ctechild)
+     AND class_name = class_desc
+)
+UPDATE fund.class_plan_master
+SET parent_class_id = cteparent.cteparent_id
+FROM ctechild
+JOIN cteparent ON ctechild.class_name = cteparent.class_desc
+    AND ctechild.client_master_id = cteparent.client_id
+    AND ctechild.fund_scheme_id_1 = cteparent.fund_scheme_id
+    AND ctechild.plan_code_1 = cteparent.plan_code
+WHERE fund.class_plan_master.id = ctechild.class_plan_id_1
+  AND fund.class_plan_master.client_id = ctechild.client_master_id
+  AND fund.class_plan_master.fund_scheme_id = ctechild.fund_scheme_id_1
+  AND fund.class_plan_master.plan_code = ctechild.plan_code_1
+  AND fund.class_plan_master.client_id in (select id from fund.client_master where client_code=$1)
+  AND fund.class_plan_master.fund_scheme_id IN (
+        SELECT id
+        FROM fund.fund_scheme_master
+        WHERE ($2::text IS NULL OR fund_code = $2::text)
+          AND client_id IN (
+              SELECT id
+              FROM fund.client_master
+              WHERE client_code = $1
+      )
+);`,
+      [clientCode, fundCode ?? null],
+    );
+
+    console.log(
+      `[updateParentClassIds] Updated ${result.rowCount} class record(s).`,
+    );
+
+    return result.rows;
+  } finally {
+    client?.release();
+  }
+};
+
 export const insertCSVToStaging = async (
   csvPath: string,
   stagingTable: string,
