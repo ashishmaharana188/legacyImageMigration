@@ -289,6 +289,7 @@ export const connectMongo = async (): Promise<void> => {
         if (process.env.MONGO_AUTH_SOURCE)
           opts.authSource = process.env.MONGO_AUTH_SOURCE;
       }
+
       await mongoose.connect(uri, opts);
     } else {
       uri = process.env.LOCAL_URI || "";

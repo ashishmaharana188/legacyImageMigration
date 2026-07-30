@@ -38,9 +38,9 @@ tt.state,
 tt.country,
 tt.contact_number,
 tt.company_logo,
-to_date(tt.agreement_date, 'DD-MM-YYYY') agreement_date,
+to_date(tt.agreement_date, 'YYYY-MM-DD') agreement_date,
 tt.lei_code,
-to_date(tt.lei_code_validity, 'DD-MM-YYYY') lei_code_validity,
+to_date(tt.lei_code_validity, 'YYYY-MM-DD') lei_code_validity,
 tt.kra_type,
 tt.kra_login_id,
 tt.kra_username,
@@ -55,7 +55,7 @@ from
 fund.client_master cm
 right join stg.client_map tt on cm.client_code = tt.client_code
 WHERE tt.client_code = $1 
-AND(cm.created_by not in ('finexdistsvc','xaltssvc') or cm.last_updated_by not in ('finexdistsvc','xaltssvc'))
+-- AND(cm.created_by not in ('finexdistsvc','xaltssvc') or cm.last_updated_by not in ('finexdistsvc','xaltssvc'))
 ON CONFLICT(id) DO
 UPDATE
 set
@@ -214,17 +214,17 @@ tt.FUND_REGISTRATION_NUMBER,
 tt.FUND_ISIN_NUMBER,
 tt.FUND_DEPOSITORY_TYPE,
 tt.FUND_DP_ID,
-TO_DATE(tt.FUND_START_DATE1,'DD-MM-YYYY'),
+TO_DATE(tt.FUND_START_DATE1,'YYYY-MM-DD'),
 TO_DATE(
 tt.FUND_INITIAL_CONTRIBUTION_START_DATE,
-'DD-MM-YYYY'
+'YYYY-MM-DD'
 ),
 TO_DATE(
 tt.FUND_INITIAL_CONTRIBUTION_CLOSE_DATE,
-'DD-MM-YYYY'
+'YYYY-MM-DD'
 ),
-TO_DATE(tt.FUND_END_DATE, 'DD-MM-YYYY'),
-TO_DATE(tt.FUND_MATURITY_DATE, 'DD-MM-YYYY'),
+TO_DATE(tt.FUND_END_DATE, 'YYYY-MM-DD'),
+TO_DATE(tt.FUND_MATURITY_DATE, 'YYYY-MM-DD'),
 tt.FUND_MAX_INVESTORS,
 tt.FUND_INITIAL_CONTRIBUTION_AMOUNT :: numeric,
 tt.FUND_INITIAL_CONTRIBUTION_PERCENTAGE :: numeric,
@@ -242,18 +242,18 @@ tt.TRANSFER_AGENT_NAME,
 tt.TRANSFER_AGENT_ACCOUNTANT_EMAIL,
 tt.TRANSFER_AGENT_CONTACT_NUMBER,
 tt.FUND_RTA_CODE,
-TO_DATE(tt.FUND_PREVIOUS_DATE, 'DD-MM-YYYY'),
-TO_DATE(tt.FUND_CURRENT_DATE, 'DD-MM-YYYY'),
-TO_DATE(tt.FUND_NEXT_DATE, 'DD-MM-YYYY'),
+TO_DATE(tt.FUND_PREVIOUS_DATE, 'YYYY-MM-DD'),
+TO_DATE(tt.FUND_CURRENT_DATE, 'YYYY-MM-DD'),
+TO_DATE(tt.FUND_NEXT_DATE, 'YYYY-MM-DD'),
 tt.FUND_PREVIOUS_YEAR_END,
 tt.FUND_CURRENT_YEAR_END,
-TO_DATE(tt.PREV_NAV_DATE_, 'DD-MM-YYYY'),
+TO_DATE(tt.PREV_NAV_DATE_, 'YYYY-MM-DD'),
 tt.NAV_FREQUENCY,
-TO_DATE(tt.NEXT_NAV_DATE, 'DD-MM-YYYY'),
+TO_DATE(tt.NEXT_NAV_DATE, 'YYYY-MM-DD'),
 tt.NAV_PUBLISH_TYPE,
-TO_DATE(tt.PREV_NAV_PUB_DATE, 'DD-MM-YYYY'),
+TO_DATE(tt.PREV_NAV_PUB_DATE, 'YYYY-MM-DD'),
 tt.NAV_PUB_FREQUENCY,
-TO_DATE(tt.NEXT_NAV_PUB_DATE, 'DD-MM-YYYY'),
+TO_DATE(tt.NEXT_NAV_PUB_DATE, 'YYYY-MM-DD'),
 tt.FUND_PL_COMP_METHOD,
 tt.VALUATION_SEQUENCE,
 tt.UNIT_DECIMALS,
@@ -283,7 +283,7 @@ tt.FOREX_SOURCE,
 tt.NAV_RATIO_METHOD,
 tt.IS_ACTIVE :: boolean,
 tt.DORMANT_FLAG :: boolean,
-TO_DATE(tt.DORMANT_DATE, 'DD-MM-YYYY'),
+TO_DATE(tt.DORMANT_DATE, 'YYYY-MM-DD'),
 tt.FUND_STAMP_DUTY_BOURNE,
 tt.pan_or_tin,
 tt.fund_domicile
@@ -294,10 +294,10 @@ RIGHT JOIN STG.FUND_SCHEME_MAP tt ON tt.CLIENT_CODE = CM1.CLIENT_CODE
 and tt.fund_code = FS.fund_code
 JOIN FUND.CLIENT_MASTER CM2 ON tt.CLIENT_CODE = CM2.CLIENT_CODE
 WHERE tt.client_code = $1
-AND ($2 IS NULL OR tt.fund_code = $2) 
-AND (cm1.created_by  not  in ('finexdistsvc','xaltssvc') or cm1.last_updated_by  not in ('finexdistsvc','xaltssvc'))
-and (cm2.created_by  not in ('finexdistsvc','xaltssvc') or cm2.last_updated_by  not in ('finexdistsvc','xaltssvc'))
-and (fs.created_by not in ('finexdistsvc','xaltssvc') or fs.last_updated_by not in ('finexdistsvc','xaltssvc'))
+AND ($2::text IS NULL OR tt.fund_code = $2::text)
+-- AND (cm1.created_by  not  in ('finexdistsvc','xaltssvc') or cm1.last_updated_by  not in ('finexdistsvc','xaltssvc'))
+-- AND (cm2.created_by  not in ('finexdistsvc','xaltssvc') or cm2.last_updated_by  not in ('finexdistsvc','xaltssvc'))
+-- AND (fs.created_by not in ('finexdistsvc','xaltssvc') or fs.last_updated_by not in ('finexdistsvc','xaltssvc'))
 ON CONFLICT(ID) DO
 UPDATE
 SET
@@ -552,11 +552,11 @@ RIGHT JOIN stg.class_map tt ON upper(cc.client_code) = upper(tt.client_code) AND
 WHERE tt.client_code = $1
 AND ($2::text IS NULL OR tt.fund_code = $2::text)
 AND upper(tt.class_name) != upper(tt.fund_name)
-and exists(select 1 from stg.client_map cm where cm.client_code=tt.client_code)
-and exists(select 1 from STG.FUND_SCHEME_MAP fm where fm.client_code=tt.client_code and fm.fund_code=tt.fund_code)
-and (cp.created_by not in ('finexdistsvc','xaltssvc') or cp.last_updated_by not in ('finexdistsvc','xaltssvc'))
-and (sf.created_by not in ('finexdistsvc','xaltssvc') or sf.last_updated_by not in ('finexdistsvc','xaltssvc'))
-and (cc.created_by not in ('finexdistsvc','xaltssvc') or cc.last_updated_by not in ('finexdistsvc','xaltssvc'))
+AND exists(select 1 from stg.client_map cm where cm.client_code=tt.client_code)
+AND exists(select 1 from STG.FUND_SCHEME_MAP fm where fm.client_code=tt.client_code and fm.fund_code=tt.fund_code)
+-- AND (cp.created_by not in ('finexdistsvc','xaltssvc') or cp.last_updated_by not in ('finexdistsvc','xaltssvc'))
+-- AND (sf.created_by not in ('finexdistsvc','xaltssvc') or sf.last_updated_by not in ('finexdistsvc','xaltssvc'))
+-- AND (cc.created_by not in ('finexdistsvc','xaltssvc') or cc.last_updated_by not in ('finexdistsvc','xaltssvc'))
 ON CONFLICT(id) DO
 UPDATE set (plan_code,plan_name,plan_desc,class_code,class_name,class_desc,sip_category,min_amount,max_amount,management_fee,performance_fee, hurdle_rate, performance_fee_percent, share_ratio, additional_fee, org_fee, gst_rate, preferred_return, carry_percent, catchup_percent, currency, face_value, isin_code, high_water_mark, is_active, amc_plan, fa_plan, setup_fees_percent,class_contribution_percentage, sub_class, sponsor_class_percent)=(EXCLUDED.plan_code,EXCLUDED.plan_name,EXCLUDED.plan_desc,EXCLUDED.class_code,EXCLUDED.class_name,EXCLUDED.class_desc,EXCLUDED.sip_category,EXCLUDED.min_amount,EXCLUDED.max_amount,EXCLUDED.management_fee, EXCLUDED.performance_fee, EXCLUDED.hurdle_rate, EXCLUDED.performance_fee_percent, EXCLUDED.share_ratio, EXCLUDED.additional_fee, EXCLUDED.org_fee, EXCLUDED.gst_rate, EXCLUDED.preferred_return, EXCLUDED.carry_percent, EXCLUDED.catchup_percent, EXCLUDED.currency, EXCLUDED.face_value, EXCLUDED.isin_code, EXCLUDED.high_water_mark, EXCLUDED.is_active, EXCLUDED.amc_plan, EXCLUDED.fa_plan, EXCLUDED.setup_fees_percent,EXCLUDED.class_contribution_percentage, EXCLUDED.sub_class, EXCLUDED.sponsor_class_percent);`,
 
@@ -595,7 +595,7 @@ SELECT
     bm.bank_account_number,
     bm.account_type,
     bm.ownership_type,
-    to_date(bm.dormant_date, 'DD-MM-YYYY')
+    to_date(bm.dormant_date, 'YYYY-MM-DD')
 FROM
     stg.bank_map bm
 LEFT JOIN fund.client_master cm ON bm.client_code = cm.client_code
@@ -603,6 +603,7 @@ LEFT JOIN fund.fund_scheme_master sf ON bm.fund_code = sf.fund_code AND cm.id = 
 LEFT JOIN fund.client_master cm1 ON bm.client_code = cm1.client_code
 LEFT JOIN fund.fund_scheme_master sf1 ON cm1.id = sf1.client_id AND sf1.fund_code = bm.fund_code
 WHERE cm.client_code = $1
+AND ($2::text IS NULL OR sf.fund_code = $2::text)
 AND (cm.created_by not in ('finexdistsvc','xaltssvc') or cm.last_updated_by not in ('finexdistsvc','xaltssvc'))
 and (sf.created_by not in ('finexdistsvc','xaltssvc') or sf.last_updated_by not in ('finexdistsvc','xaltssvc'))
 and (cm1.created_by not  in ('finexdistsvc','xaltssvc') or cm1.last_updated_by not in ('finexdistsvc','xaltssvc'))

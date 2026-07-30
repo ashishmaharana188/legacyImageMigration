@@ -8,10 +8,12 @@ interface MasterMigrationUIProps {
   masterType: string;
   clientCode: string;
   fundCode: string;
+  pushToMongo: boolean;
   setClientCode: React.Dispatch<React.SetStateAction<string>>;
   setFundCode: React.Dispatch<React.SetStateAction<string>>;
   setMigrationType: React.Dispatch<React.SetStateAction<string>>;
   setMasterType: React.Dispatch<React.SetStateAction<string>>;
+  setPushToMongo: React.Dispatch<React.SetStateAction<boolean>>;
   handleFileChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
   handleUpload: () => void;
   handleETL: () => void;
@@ -28,6 +30,8 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
   setFundCode,
   setMigrationType,
   setMasterType,
+  pushToMongo,
+  setPushToMongo,
   handleFileChange,
   handleUpload,
   handleETL,
@@ -60,6 +64,17 @@ const MasterMigrationUI: React.FC<MasterMigrationUIProps> = ({
             <option value="Master-Staging-Mongo">Master-Staging-Mongo</option>
           </select>
         </div>
+
+        {(isUploadMigration || isETLMigration) && (
+          <label className="flex items-center mt-5">
+            <input
+              type="checkbox"
+              checked={pushToMongo}
+              onChange={(e) => setPushToMongo(e.target.checked)}
+            />
+            <span className="ml-2">Transfer to Mongo</span>
+          </label>
+        )}
         {isUploadMigration && (
           <>
             <input

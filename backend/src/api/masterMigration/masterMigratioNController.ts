@@ -21,9 +21,15 @@ export const stagingValidateUpsertController = async (
 
   const { masterType } = req.body;
   const { path, originalname } = req.file;
+  const pushToMongo = req.body.pushToMongo === "true";
 
   try {
-    const result = await stagingValidateUpsert(path, originalname, masterType);
+    const result = await stagingValidateUpsert(
+      path,
+      originalname,
+      masterType,
+      pushToMongo,
+    );
 
     res.status(result.status === "success" ? 200 : 400).json(result);
   } catch (error) {
@@ -48,6 +54,8 @@ export const masterMigrateMongoController = async (
 ): Promise<void> => {
   const { clientCode, fundCode, masterType, migrationType } = req.body;
 
+  const pushToMongo = req.body.pushToMongo === "true";
+
   console.log(req.body);
 
   try {
@@ -64,6 +72,7 @@ export const masterMigrateMongoController = async (
       fundCode,
       masterType,
       migrationType,
+      pushToMongo,
     );
 
     res.status(200).json(result);

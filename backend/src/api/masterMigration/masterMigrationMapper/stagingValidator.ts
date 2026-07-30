@@ -9,7 +9,7 @@ interface Row {
   [key: string]: any;
 }
 
-const MANDATORY_FIELDS: Record<string, string[]> = {
+export const MANDATORY_FIELDS: Record<string, string[]> = {
   class_map: [
     "client_code",
     "client_name",
@@ -49,8 +49,6 @@ const MANDATORY_FIELDS: Record<string, string[]> = {
     "bank_code",
     "ifsc_code",
     "currency",
-    "swift_code",
-    "corporate_id",
     "branch_name",
     "city",
     "fund_code",

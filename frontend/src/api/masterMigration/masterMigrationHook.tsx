@@ -15,6 +15,7 @@ export const useMasterMigrationHook = ({
   const [fundCode, setFundCode] = useState<string>("");
   const [migrationType, setMigrationType] = useState<string>("");
   const [masterType, setMasterType] = useState<string>("");
+  const [pushToMongo, setPushToMongo] = useState(true);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files.length > 0) {
@@ -36,7 +37,12 @@ export const useMasterMigrationHook = ({
     setUploadStatus("Uploading and checking file integrity...");
 
     try {
-      const result = await stagingValidationUpsert(selectedFile);
+      const result = await stagingValidationUpsert(
+        selectedFile,
+        masterType,
+        migrationType,
+        pushToMongo,
+      );
 
       setUploadStatus(
         `File integrity check: ${result.status}. ${result.message ?? ""}`,
@@ -75,6 +81,7 @@ export const useMasterMigrationHook = ({
         fundCode,
         migrationType,
         masterType,
+        pushToMongo,
         selectedFile ?? undefined,
       );
 
@@ -96,6 +103,8 @@ export const useMasterMigrationHook = ({
     setFundCode,
     setMigrationType,
     setMasterType,
+    pushToMongo,
+    setPushToMongo,
     handleFileChange,
     handleUpload,
     handleETL,

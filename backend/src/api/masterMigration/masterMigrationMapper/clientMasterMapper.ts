@@ -2,7 +2,7 @@ interface Row {
   [key: string]: any;
 }
 
-const CLIENT_FIELD_MAPPING: Record<string, string> = {
+export const CLIENT_FIELD_MAPPING: Record<string, string> = {
   client_code: "client_code",
   client_name: "client_name",
   domicile: "domicile",

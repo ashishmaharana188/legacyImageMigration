@@ -2,7 +2,7 @@ interface Row {
   [key: string]: any;
 }
 
-const BANK_FIELD_MAPPING: Record<string, string> = {
+export const BANK_FIELD_MAPPING: Record<string, string> = {
   client_code: "client_id",
   client_name: "client_id",
   bank_name: "bank_name",
@@ -71,6 +71,14 @@ export const mapBankMaster = (
     } else {
       mappedRow.fund_code = null;
       mappedRow.fund_name = null;
+    }
+
+    if (String(row.is_active).toLowerCase() === "true") {
+      mappedRow.is_active = "Y";
+    } else if (String(row.is_active).toLowerCase() === "false") {
+      mappedRow.is_active = "N";
+    } else {
+      mappedRow.is_active = null;
     }
 
     output.push(mappedRow);

@@ -4,7 +4,7 @@ interface Row {
   [key: string]: any;
 }
 
-const CLASS_FIELD_MAPPING: Record<string, string> = {
+export const CLASS_FIELD_MAPPING: Record<string, string> = {
   client_code: "client_id",
   client_name: "client_id",
   fund_code: "fund_scheme_id",

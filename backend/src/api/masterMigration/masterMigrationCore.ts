@@ -10,9 +10,12 @@ import {
   fetchFundData,
   mapMasterToStaging,
   insertCSVToStaging,
-  fetchStagingData,
-  mapStagingToMongo,
+  transferToMongo,
   runStagingUpsert,
+  fetchMasterDateColumns,
+  normalizeDates,
+  FIELD_MAPPINGS,
+  stagingTableMap,
 } from "../masterMigration/masterMigrationWrapper";
 
 import { validateStagingData } from "./masterMigrationMapper/stagingValidator";
@@ -27,19 +30,11 @@ export interface StagingValidateUpsertResult {
   message: string;
 }
 
-const stagingTableMap: Record<string, string> = {
-  client_master: "client_map",
-  fund_scheme_master: "fund_scheme_map",
-  class_plan_master: "class_map",
-  plan_master: "plan_map",
-  bank_master: "bank_map",
-  contact_master: "contact_map",
-};
-
 export const stagingValidateUpsert = async (
   filePath: string,
   originalFileName: string,
   masterType: string,
+  pushToMongo: boolean,
 ): Promise<StagingValidateUpsertResult> => {
   const tableName = originalFileName.split(".").shift();
 
@@ -158,7 +153,12 @@ export const stagingValidateUpsert = async (
 
             const clientCode = rows[0]?.client_code;
 
-            const fundCode = rows[0]?.fund_code;
+            const uniqueFundCodes = new Set(
+              rows.map((row) => row.fund_code).filter(Boolean),
+            );
+
+            const fundCode =
+              uniqueFundCodes.size === 1 ? rows[0]?.fund_code : undefined;
 
             await insertCSVToStaging(filePath, tableName, clientCode, fundCode);
 
@@ -167,6 +167,10 @@ export const stagingValidateUpsert = async (
               clientCode,
               fundCode,
             );
+            console.log("pushToMongo =", pushToMongo);
+            if (pushToMongo) {
+              await transferToMongo(clientCode, fundCode, masterType);
+            }
 
             resolve({
               status: "success",
@@ -211,6 +215,7 @@ export const masterMigrateMongo = async (
   fundCode: string | undefined,
   masterType: string,
   migrationType: string,
+  pushToMongo: boolean,
 ) => {
   const masterTable = masterType;
 
@@ -236,7 +241,9 @@ export const masterMigrateMongo = async (
     masterType,
   );
 
-  const orderedRows = reorderToStagingHeaders(mappedRows, stagingHeaders);
+  const normalizedRows = await normalizeDates(mappedRows, masterType);
+
+  const orderedRows = reorderToStagingHeaders(normalizedRows, stagingHeaders);
 
   const outputDir = path.join(process.cwd(), "output");
 
@@ -265,24 +272,9 @@ export const masterMigrateMongo = async (
 
   console.log("End PG Staging Insert");
 
-  console.log(`Fetching data from stg.${stagingTable}...`);
-
-  const stagingRows = await fetchStagingData(
-    stagingTable,
-    clientCode,
-    fundCode,
-  );
-
-  console.log(`Fetched ${stagingRows.length} row(s).`);
-
-  console.log("Mapping staging data to Mongo documents...");
-  const mongoDocuments = mapStagingToMongo(
-    stagingRows,
-    masterType,
-    clientCode,
-    fundCode,
-  );
-  console.log("Mongo transfer completed.");
+  if (pushToMongo) {
+    await transferToMongo(clientCode, fundCode, masterType);
+  }
 
   return orderedRows;
 };

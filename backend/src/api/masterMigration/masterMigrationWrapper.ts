@@ -11,6 +11,14 @@ import { mapFundToMongo } from "./masterMigrationMapper/fundMasterMapper";
 import { mapClassToMongo } from "./masterMigrationMapper/classMigrationMapper";
 import { mapBankToMongo } from "./masterMigrationMapper/bankMasterMapper";
 
+import { CLIENT_FIELD_MAPPING } from "../masterMigration/masterMigrationMapper/clientMasterMapper";
+
+import { FUND_FIELD_MAPPING } from "../masterMigration/masterMigrationMapper/fundMasterMapper";
+
+import { CLASS_FIELD_MAPPING } from "../masterMigration/masterMigrationMapper/classMigrationMapper";
+
+import { BANK_FIELD_MAPPING } from "../masterMigration/masterMigrationMapper/bankMasterMapper";
+
 import { upsertQueryMap } from "../masterMigration/masterMigrationMapper/upsertQueryMap";
 
 import {
@@ -22,6 +30,15 @@ import {
 interface Row {
   [key: string]: any;
 }
+
+export const stagingTableMap: Record<string, string> = {
+  client_master: "client_map",
+  fund_scheme_master: "fund_scheme_map",
+  class_plan_master: "class_map",
+  plan_master: "plan_map",
+  bank_master: "bank_map",
+  contact_master: "contact_map",
+};
 
 const fetchHeaders = async (
   schema: "stg" | "fund",
@@ -193,6 +210,92 @@ export const fetchMasterData = async (
   } finally {
     client?.release();
   }
+};
+
+export const FIELD_MAPPINGS: Record<string, Record<string, string>> = {
+  client_master: CLIENT_FIELD_MAPPING,
+  fund_scheme_master: FUND_FIELD_MAPPING,
+  class_plan_master: CLASS_FIELD_MAPPING,
+  bank_master: BANK_FIELD_MAPPING,
+};
+
+export const fetchMasterDateColumns = async (
+  tableName: string,
+): Promise<Set<string>> => {
+  let client;
+
+  try {
+    const pool = await getPgPool();
+    client = await pool.connect();
+
+    const result = await client.query(
+      `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = 'fund'
+        AND table_name = $1
+        AND data_type = 'date';
+      `,
+      [tableName],
+    );
+
+    return new Set(result.rows.map((r) => r.column_name));
+  } finally {
+    client?.release();
+  }
+};
+
+const formatDate = (value: any): string | null => {
+  if (value == null || value === "") {
+    return null;
+  }
+
+  if (value instanceof Date) {
+    const dd = String(value.getDate()).padStart(2, "0");
+    const mm = String(value.getMonth() + 1).padStart(2, "0");
+    const yyyy = value.getFullYear();
+
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  const d = new Date(value);
+
+  if (isNaN(d.getTime())) {
+    throw new Error(`Invalid date: ${value}`);
+  }
+
+  const dd = String(d.getDate()).padStart(2, "0");
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const yyyy = d.getFullYear();
+
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+export const normalizeDates = async (
+  rows: Row[],
+  masterType: string,
+): Promise<Row[]> => {
+  const mapper = FIELD_MAPPINGS[masterType];
+
+  if (!mapper) {
+    throw new Error(`Unsupported master type: ${masterType}`);
+  }
+
+  const masterDateColumns = await fetchMasterDateColumns(masterType);
+
+  return rows.map((row) => {
+    const normalized = { ...row };
+
+    for (const [mappedColumn, masterColumn] of Object.entries(mapper)) {
+      if (!masterDateColumns.has(masterColumn)) {
+        continue;
+      }
+
+      normalized[mappedColumn] = formatDate(normalized[mappedColumn]);
+    }
+
+    return normalized;
+  });
 };
 
 export const mapMasterToStaging = (
@@ -575,6 +678,29 @@ export const mapStagingToMongo = async (
   console.log("Mongo insert completed.");
 };
 
+export const transferToMongo = async (
+  clientCode: string,
+  fundCode: string | undefined,
+  masterType: string,
+) => {
+  const stagingTable = stagingTableMap[masterType];
+
+  console.log(`Fetching data from stg.${stagingTable}...`);
+
+  const stagingRows = await fetchStagingData(
+    stagingTable,
+    clientCode,
+    fundCode,
+  );
+
+  console.log(`Fetched ${stagingRows.length} row(s).`);
+
+  console.log("Mapping staging data to Mongo documents...");
+  await mapStagingToMongo(stagingRows, masterType, clientCode, fundCode);
+
+  console.log("Mongo transfer completed.");
+};
+
 export const runStagingUpsert = async (
   stagingTable: keyof typeof upsertQueryMap,
   clientCode: string,
@@ -599,7 +725,11 @@ export const runStagingUpsert = async (
 
     await client.query("BEGIN");
 
-    await client.query(query, params);
+    const result = await client.query(query, params);
+    console.log({
+      command: result.command,
+      rowCount: result.rowCount,
+    });
 
     await client.query("COMMIT");
 

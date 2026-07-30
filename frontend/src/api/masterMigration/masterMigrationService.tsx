@@ -14,25 +14,23 @@ interface masterMigrateMongoPayload {
   fundCode?: string;
   migrationType: string;
   masterType: string;
+  pushToMongo: boolean;
 }
 
 //staging upsert request
 export const stagingValidationUpsert = async (
   file: File,
-  clientCode: string,
-  fundCode: string,
   masterType: string,
   migrationType: string,
+  pushToMongo: boolean,
 ): Promise<stagingUpsertValidate> => {
   const formData = new FormData();
 
   formData.append("masterFile", file);
-  formData.append("clientCode", clientCode);
-  if (fundCode) {
-    formData.append("fundCode", fundCode);
-  }
+
   formData.append("masterType", masterType);
   formData.append("migrationType", migrationType);
+  formData.append("pushToMongo", pushToMongo.toString());
 
   const response = await apiClient.post<stagingUpsertValidate>(
     "/master-migrate/stagingUpsertMongo",
@@ -53,6 +51,7 @@ export const masterStagingMongo = async (
   fundCode: string,
   migrationType: string,
   masterType: string,
+  pushToMongo: boolean,
   file?: File,
 ): Promise<masterMigrateMongo> => {
   const payload: masterMigrateMongoPayload = {
@@ -60,6 +59,7 @@ export const masterStagingMongo = async (
     fundCode: fundCode.trim() === "" ? undefined : fundCode,
     migrationType,
     masterType,
+    pushToMongo,
   };
 
   const formData = new FormData();
