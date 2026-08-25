@@ -85,8 +85,7 @@ export interface IAifDocumentInput {
 
 // Mongoose Document Interface
 export interface IAifDocument
-  extends Document,
-    Omit<IAifDocumentInput, "_id"> {}
+  extends Document, Omit<IAifDocumentInput, "_id"> {}
 
 export interface IUpdatedDocumentSummary {
   clientId: string;
@@ -125,4 +124,10 @@ export interface ImageDataProgress {
     synced?: number;
     failed?: number;
   };
+}
+
+export interface MongoTransferResult {
+  insertedCount: number;
+  transactionNumbers: string[];
+  excelPath?: string;
 }

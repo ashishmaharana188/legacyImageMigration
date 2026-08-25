@@ -3,7 +3,7 @@ import multer from "multer";
 import {
   stagingValidateUpsertController,
   masterMigrateMongoController,
-} from "../masterMigration/masterMigratioNController";
+} from "../masterMigration/masterMigrationController";
 
 console.log("masterMigrationApp loaded");
 

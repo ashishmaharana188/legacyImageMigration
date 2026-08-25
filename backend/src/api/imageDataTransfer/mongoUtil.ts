@@ -3,7 +3,15 @@ import { ImageDataProgress } from "./imageDataTransferTypes";
 import { SqlUtil } from "./sqlUtil";
 import { createFeatureLogger } from "../../utils/logger";
 import { getMongoModel } from "../../utils/dbConnect";
-import { IAifDocument, IAifDocumentInput } from "./imageDataTransferTypes";
+import {
+  IAifDocument,
+  IAifDocumentInput,
+  MongoTransferResult,
+} from "./imageDataTransferTypes";
+
+import ExcelJS from "exceljs";
+import path from "path";
+import fs from "fs/promises";
 
 const logger = createFeatureLogger("imageDataTransfer");
 
@@ -50,6 +58,51 @@ export class MongoUtil {
         : Number(rawPageCount.toString().trim());
 
     return Number.isFinite(pageCount) ? pageCount : null;
+  }
+
+  private async saveTransferredTransactionNumbers(
+    transactionNumbers: string[],
+  ): Promise<string> {
+    const uniqueTransactionNumbers = [...new Set(transactionNumbers)];
+
+    const outputDir = path.join(__dirname, "../../../../output");
+
+    await fs.mkdir(outputDir, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+
+    const filePath = path.join(
+      outputDir,
+      `mongo_transferred_transactions_${timestamp}.xlsx`,
+    );
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Transferred Transactions");
+
+    worksheet.columns = [
+      {
+        header: "Transaction Number",
+        key: "transactionNo",
+        width: 30,
+      },
+    ];
+
+    for (const transactionNo of uniqueTransactionNumbers) {
+      worksheet.addRow({
+        transactionNo,
+      });
+    }
+
+    await workbook.xlsx.writeFile(filePath);
+
+    logger.info(
+      `Excel generated successfully. ${uniqueTransactionNumbers.length} transaction numbers saved.`,
+      {
+        console: true,
+      },
+    );
+
+    return filePath;
   }
 
   async transferDataFromPostgres(
@@ -121,6 +174,7 @@ export class MongoUtil {
       });
 
       let insertedCount = 0;
+      const transferredTransactionNumbers: string[] = [];
       const batchSize = 1000;
 
       // 3. Process in Batches (DIRECT INSERT MODE)
@@ -187,10 +241,35 @@ export class MongoUtil {
           } as unknown as IAifDocumentInput);
         }
 
-        // 4. Bulk Insert (No Lookup)
-        if (docsToInsert.length > 0) {
-          await this.model.insertMany(docsToInsert, { ordered: false });
-          insertedCount += docsToInsert.length;
+        try {
+          const insertedDocs = await this.model.insertMany(docsToInsert, {
+            ordered: false,
+          });
+
+          insertedCount += insertedDocs.length;
+
+          for (const doc of insertedDocs) {
+            if (doc.transactionNo) {
+              transferredTransactionNumbers.push(String(doc.transactionNo));
+            }
+          }
+        } catch (err: any) {
+          logger.error("Mongo batch insert encountered errors", {
+            error: err.message,
+            console: true,
+          });
+
+          // insertMany with ordered:false can still return information
+          // about successfully inserted documents depending on the error.
+          if (Array.isArray(err.insertedDocs)) {
+            insertedCount += err.insertedDocs.length;
+
+            for (const doc of err.insertedDocs) {
+              if (doc.transactionNo) {
+                transferredTransactionNumbers.push(String(doc.transactionNo));
+              }
+            }
+          }
         }
 
         const currentProcessed = Math.min(i + batchSize, total);
@@ -207,13 +286,34 @@ export class MongoUtil {
           total,
           processed: currentProcessed,
           status: "Running",
-          metrics: { inserted: insertedCount },
+          metrics: {
+            inserted: insertedCount,
+          },
         });
       }
 
       logger.info(`Transfer Completed. Total Inserted: ${insertedCount}`, {
         console: true,
       });
+
+      if (transferredTransactionNumbers.length > 0) {
+        try {
+          const excelPath = await this.saveTransferredTransactionNumbers(
+            transferredTransactionNumbers,
+          );
+          logger.info(`Transaction numbers saved to: ${excelPath}`, {
+            console: true,
+          });
+        } catch (excelError: any) {
+          logger.error(
+            "Failed to generate Excel file for transferred transactions",
+            {
+              error: excelError.message,
+              console: true,
+            },
+          );
+        }
+      }
 
       onProgress({
         type: "mongoProgressUpdate",
